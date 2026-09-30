@@ -1,0 +1,28 @@
+# Security policy
+
+Kontrol handles evidence, control results and approval records. Treat deployments as security-sensitive systems of record.
+
+## Supported configuration
+
+- Disable `KONTROL_AUTH_MODE=demo` outside isolated evaluation environments.
+- Supply unique high-entropy authentication, signing and cron secrets through a secret manager.
+- Use least-privilege GitHub, AWS and Okta service identities; never expose connector tokens to the browser.
+- Put evidence objects in versioned, retention-locked object storage and encrypt data in transit and at rest.
+- Use the PostgreSQL profile with row-level security for multi-tenant production deployments.
+
+## Built-in protections
+
+- Production startup fails closed on missing, short, placeholder or duplicated signing and session secrets.
+- Session tokens are pinned to HS256 with issuer, audience and role validation; cookie sessions reject cross-origin mutations.
+- Decision signatures are compared in constant time; the cron bearer token likewise.
+- Approvals enforce separation of duties: the requester of a workflow cannot approve it.
+- Outbound regulatory fetches are HTTPS-only, refuse credentials, private and internal addresses, and do not follow redirects.
+- OIDC-provisioned users default to `viewer` unless `OIDC_TRUST_ROLE_CLAIM=true`.
+
+## Trust boundaries
+
+AI analysis is advisory and read-only. It cannot approve decisions, change mappings or close findings. Human approval and a signed decision record are required for material actions. External evidence is untrusted until hashed, normalized and evaluated.
+
+## Reporting
+
+Do not open a public issue for a suspected vulnerability. Send a minimal reproduction, affected version and impact to the private security contact configured by the deploying organization.

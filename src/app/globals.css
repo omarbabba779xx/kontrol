@@ -1,0 +1,84 @@
+@import "tailwindcss";
+@import "tw-animate-css";
+@import "shadcn/tailwind.css";
+
+@custom-variant dark (&:is(.dark *));
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --font-sans: "Geist", "Geist Fallback", ui-sans-serif, system-ui, sans-serif;
+  --font-mono: "Geist Mono", "Geist Mono Fallback", ui-monospace, monospace;
+  --font-heading: "Geist", "Geist Fallback", ui-sans-serif, system-ui, sans-serif;
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-destructive: var(--destructive);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+  --radius-sm: 0;
+  --radius-md: 0;
+  --radius-lg: 0;
+  --radius-xl: 0;
+}
+
+:root {
+  --background: #f4f1e9;
+  --foreground: #1c1c18;
+  --card: #f8f5ed;
+  --card-foreground: #1c1c18;
+  --popover: #fbf9f3;
+  --popover-foreground: #1c1c18;
+  --primary: #171713;
+  --primary-foreground: #f8f5ed;
+  --secondary: #e7e3d9;
+  --secondary-foreground: #34332e;
+  --muted: #ebe7de;
+  --muted-foreground: #716e66;
+  --accent: #ded9ce;
+  --accent-foreground: #171713;
+  --destructive: #b8322a;
+  --border: #cbc7bd;
+  --input: #cbc7bd;
+  --ring: #1d4ed8;
+  --radius: 0;
+}
+
+@layer base {
+  * { @apply border-border outline-ring/50; }
+  html { @apply font-sans; }
+  body { @apply bg-background text-foreground; }
+  button, a { -webkit-tap-highlight-color: transparent; }
+}
+
+html, body { width: 100%; max-width: 100vw; overflow-x: hidden; }
+body { background: #f4f1e9; }
+::selection { background: #171713; color: #f4f1e9; }
+* { scrollbar-width: thin; scrollbar-color: #aaa69d transparent; }
+
+.paper-grid {
+  background-image: linear-gradient(#dcd8ce 1px, transparent 1px), linear-gradient(90deg, #dcd8ce 1px, transparent 1px);
+  background-size: 22px 22px;
+}
+
+.dot-grid {
+  background-image: radial-gradient(#bbb7ad .75px, transparent .75px);
+  background-size: 12px 12px;
+}
+
+.ledger-row { content-visibility: auto; contain-intrinsic-size: 48px; }
+
+@media print {
+  aside, header, button { display: none !important; }
+  main { margin: 0 !important; }
+}

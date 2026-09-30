@@ -1,0 +1,151 @@
+"use client";
+
+import Link from "next/link";
+import { usePathname } from "next/navigation";
+import {
+  Archive,
+  ArrowUpRight,
+  Boxes,
+  Braces,
+  ChevronDown,
+  CircleDot,
+  Command,
+  FileClock,
+  FlaskConical,
+  GitFork,
+  Menu,
+  Search,
+  Shield,
+  Activity,
+  ScanSearch,
+  Landmark,
+} from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Sheet, SheetContent, SheetTitle, SheetTrigger } from "@/components/ui/sheet";
+import { TooltipProvider } from "@/components/ui/tooltip";
+import { cn } from "@/lib/utils";
+
+const navigation = [
+  { name: "Decision room", code: "01", href: "/", icon: CircleDot },
+  { name: "Scenario lab", code: "02", href: "/risks", icon: FlaskConical },
+  { name: "Control graph", code: "03", href: "/controls", icon: GitFork },
+  { name: "Model registry", code: "04", href: "/ai-systems", icon: Braces },
+  { name: "Evidence ledger", code: "05", href: "/evidence", icon: Archive },
+  { name: "Dependencies", code: "06", href: "/vendors", icon: Boxes },
+  { name: "Reviews", code: "07", href: "/audits", icon: Shield },
+  { name: "Change log", code: "08", href: "/intelligence", icon: FileClock },
+  { name: "Control plane", code: "09", href: "/operations", icon: Activity },
+  { name: "Assurance studio", code: "10", href: "/assurance", icon: ScanSearch },
+  { name: "Enterprise platform", code: "11", href: "/enterprise", icon: Landmark },
+];
+
+function Mark() {
+  return (
+    <Link href="/" className="group flex items-center gap-2.5" aria-label="Kontrol home">
+      <span className="grid h-8 w-8 place-items-center border border-[#171713] bg-[#171713] text-[#f2efe7] transition-transform group-hover:-rotate-3">
+        <span className="font-mono text-[11px] font-bold">K/</span>
+      </span>
+      <span>
+        <span className="block text-[13px] font-semibold tracking-[-.03em] text-[#171713]">KONTROL</span>
+        <span className="block font-mono text-[8px] uppercase tracking-[.18em] text-[#79776f]">Decision assurance</span>
+      </span>
+    </Link>
+  );
+}
+
+function Navigation({ onNavigate }: { onNavigate?: () => void }) {
+  const pathname = usePathname();
+  return (
+    <nav aria-label="Primary navigation" className="mt-10">
+      <div className="mb-3 flex items-center justify-between px-2 font-mono text-[8px] uppercase tracking-[.16em] text-[#96938b]">
+        <span>Workspace</span><span>Acme / EU</span>
+      </div>
+      <div className="border-t border-[#d7d3c9]">
+        {navigation.map((item) => {
+          const active = item.href === "/" ? pathname === "/" : pathname.startsWith(item.href);
+          return (
+            <Link
+              key={item.href}
+              href={item.href}
+              onClick={onNavigate}
+              className={cn(
+                "group grid min-h-11 grid-cols-[24px_1fr_16px] items-center gap-2 border-b border-[#d7d3c9] px-2 text-[11px] transition-colors",
+                active ? "bg-[#171713] text-[#f7f4ed]" : "text-[#5f5d56] hover:bg-[#e8e4da] hover:text-[#171713]",
+              )}
+            >
+              <span className={cn("font-mono text-[8px]", active ? "text-[#f4673b]" : "text-[#a4a198]")}>{item.code}</span>
+              <span className="font-medium">{item.name}</span>
+              <item.icon className={cn("h-3.5 w-3.5", active ? "text-[#f7f4ed]" : "text-[#aaa79f] group-hover:text-[#171713]")} strokeWidth={1.6} />
+            </Link>
+          );
+        })}
+      </div>
+    </nav>
+  );
+}
+
+function Sidebar() {
+  return (
+    <aside className="fixed inset-y-0 start-0 z-30 hidden w-[224px] border-e border-[#cbc7bd] bg-[#efebe2] lg:flex lg:flex-col">
+      <div className="px-5 pt-5"><Mark /><Navigation /></div>
+      <div className="mt-auto border-t border-[#cbc7bd] p-4">
+        <div className="mb-4 flex items-center justify-between font-mono text-[8px] uppercase tracking-wider text-[#8c8981]"><span>Data state</span><span className="flex items-center gap-1.5 text-[#2d6a4f]"><span className="h-1.5 w-1.5 rounded-full bg-[#2d6a4f]" />Current</span></div>
+        <button className="flex w-full items-center gap-3 border-t border-[#d7d3c9] pt-3 text-start">
+          <span className="grid h-7 w-7 place-items-center rounded-full bg-[#d9d4c8] font-mono text-[9px] text-[#34332e]">LM</span>
+          <span className="min-w-0"><span className="block truncate text-[10px] font-semibold text-[#34332e]">Leila Mansour</span><span className="block truncate text-[8px] text-[#8f8c84]">AI Risk Owner</span></span>
+          <ChevronDown className="ms-auto h-3 w-3 text-[#9c9990]" />
+        </button>
+      </div>
+    </aside>
+  );
+}
+
+export function PlatformShell({ children }: { children: React.ReactNode }) {
+  return (
+    <TooltipProvider>
+      <div className="min-h-screen w-full bg-[#f4f1e9] text-[#1c1c18]">
+        <Sidebar />
+        <div className="min-w-0 lg:ps-[224px]">
+          <header className="sticky top-0 z-20 flex h-14 items-center border-b border-[#cbc7bd] bg-[#f4f1e9]/95 px-4 backdrop-blur-sm sm:px-6 lg:px-8">
+            <Sheet>
+              <SheetTrigger render={<Button variant="ghost" size="icon" className="me-3 h-8 w-8 rounded-none lg:hidden" />}><Menu className="h-4 w-4" /></SheetTrigger>
+              <SheetContent side="left" className="w-[278px] border-[#cbc7bd] bg-[#efebe2] p-5 text-[#171713]"><SheetTitle className="sr-only">Navigation</SheetTitle><Mark /><Navigation /></SheetContent>
+            </Sheet>
+            <div className="hidden items-center gap-3 sm:flex">
+              <span className="font-mono text-[8px] uppercase tracking-[.16em] text-[#8e8b83]">Portfolio</span>
+              <span className="text-[10px] font-medium text-[#2d2c28]">EU Consumer Lending</span>
+              <span className="h-3 w-px bg-[#cbc7bd]" />
+              <span className="font-mono text-[8px] text-[#8e8b83]">AS OF 30 SEP 2026 · 18:42 CET</span>
+            </div>
+            <div className="ms-auto flex items-center gap-2">
+              <div className="relative hidden md:block">
+                <Search className="absolute start-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-[#96938b]" />
+                <Input placeholder="Trace any object…" className="h-8 w-[220px] rounded-none border-[#cbc7bd] bg-transparent ps-8 pe-9 text-[10px] shadow-none placeholder:text-[#9d9a92]" />
+                <span className="absolute end-2 top-1/2 flex -translate-y-1/2 items-center gap-1 font-mono text-[8px] text-[#aaa79e]"><Command className="h-2.5 w-2.5" />K</span>
+              </div>
+              <Button variant="outline" className="h-8 rounded-none border-[#171713] bg-transparent px-3 text-[9px] font-semibold text-[#171713] shadow-none hover:bg-[#171713] hover:text-white">Export brief <ArrowUpRight className="ms-1.5 h-3 w-3" /></Button>
+            </div>
+          </header>
+          <main className="min-h-[calc(100vh-56px)] min-w-0 overflow-x-hidden">{children}</main>
+        </div>
+      </div>
+    </TooltipProvider>
+  );
+}
+
+export function PageHeading({ index, title, description, meta, action }: { index: string; title: string; description: string; meta?: string; action?: React.ReactNode }) {
+  return (
+    <div className="grid gap-5 border-b border-[#cbc7bd] px-5 py-7 sm:px-7 lg:grid-cols-[1fr_auto] lg:px-9">
+      <div className="flex gap-4">
+        <span className="mt-1 font-mono text-[9px] text-[#f05a32]">{index}</span>
+        <div><h1 className="text-[28px] font-medium leading-none tracking-[-.045em] text-[#171713] sm:text-[36px]">{title}</h1><p className="mt-3 max-w-2xl text-[11px] leading-5 text-[#6f6c64]">{description}</p></div>
+      </div>
+      <div className="flex items-end gap-3">{meta ? <span className="font-mono text-[8px] uppercase tracking-[.13em] text-[#918e86]">{meta}</span> : null}{action}</div>
+    </div>
+  );
+}
+
+export function MicroLabel({ children, className }: { children: React.ReactNode; className?: string }) {
+  return <span className={cn("font-mono text-[8px] uppercase tracking-[.14em] text-[#85827a]", className)}>{children}</span>;
+}
