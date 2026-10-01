@@ -8,8 +8,17 @@ on:
 permissions:
   contents: read
 
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  NEXT_TELEMETRY_DISABLED: "1"
+  OPA_VERSION: "1.4.2"
+
 jobs:
   check:
+    name: Lint, types, unit and integration tests, build
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -17,14 +26,67 @@ jobs:
         with:
           node-version: 24
           cache: npm
+      - uses: open-policy-agent/setup-opa@v2
+        with:
+          version: ${{ env.OPA_VERSION }}
       - run: npm ci
       - run: npm run lint
       - run: npm run typecheck
-      - name: Tests (SQLite)
+      - name: Rego policies (syntax, strict check and unit tests)
+        run: npm run test:opa
+      - name: Tests (SQLite) including TypeScript/Rego parity against a real OPA
         run: npm test
       - name: Tests (PostgreSQL with row-level security)
         run: npm run test:postgres
       - run: npm run build
-        env:
-          NEXT_TELEMETRY_DISABLED: "1"
       - run: npm audit --omit=dev --audit-level=high
+
+  e2e:
+    name: End-to-end (Playwright, axe)
+    runs-on: ubuntu-latest
+    needs: check
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
+      - run: npx playwright install --with-deps chromium
+      - run: npm run test:e2e
+      - uses: actions/upload-artifact@v4
+        if: failure()
+        with:
+          name: playwright-report
+          path: |
+            playwright-report/
+            test-results/
+          retention-days: 7
+
+  image:
+    name: Production image builds
+    runs-on: ubuntu-latest
+    needs: check
+    steps:
+      - uses: actions/checkout@v4
+      - uses: docker/setup-buildx-action@v3
+      - uses: docker/build-push-action@v6
+        with:
+          context: .
+          push: false
+          load: true
+          tags: kontrol:ci
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+      - name: Container starts and reports health
+        run: |
+          docker run -d --name kontrol -p 3000:3000 \
+            -e KONTROL_AUTH_SECRET="$(openssl rand -hex 32)" \
+            -e KONTROL_SIGNING_SECRET="$(openssl rand -hex 32)" \
+            -e KONTROL_SEED=false kontrol:ci
+          for i in $(seq 1 30); do
+            if curl -fsS http://127.0.0.1:3000/api/health >/dev/null; then echo "healthy"; exit 0; fi
+            sleep 2
+          done
+          docker logs kontrol
+          exit 1

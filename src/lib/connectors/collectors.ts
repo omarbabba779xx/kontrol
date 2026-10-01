@@ -1,0 +1,201 @@
+import { DescribeTrailsCommand, GetTrailStatusCommand } from "@aws-sdk/client-cloudtrail";
+import { GetComplianceSummaryByConfigRuleCommand } from "@aws-sdk/client-config-service";
+import { GetAccountPasswordPolicyCommand, GetAccountSummaryCommand } from "@aws-sdk/client-iam";
+import { GetPublicAccessBlockCommand, ListBucketsCommand } from "@aws-sdk/client-s3";
+
+/**
+ * Collectors turn live API responses into the flat facts that control policies evaluate.
+ * They are written against injected clients so they can be tested with recorded API responses.
+ * A fact that cannot be read (missing permission, service not enabled) is `null`, never a guess:
+ * the control pack skips controls whose facts are unavailable instead of failing them.
+ */
+
+export type JsonResponse = { status: number; body: unknown; link?: string | null };
+export type Facts = Record<string, unknown>;
+type Json = Record<string, unknown>;
+
+const record = (value: unknown): Json => (value && typeof value === "object" && !Array.isArray(value) ? (value as Json) : {});
+const text = (value: unknown) => (typeof value === "string" ? value : null);
+const DAY = 86_400_000;
+
+// ---------------------------------------------------------------- GitHub ------------------------------------------------
+
+export type GitHubApi = (path: string) => Promise<JsonResponse>;
+
+export async function collectGitHub(api: GitHubApi, owner: string, repository: string): Promise<Facts> {
+  const base = `/repos/${encodeURIComponent(owner)}/${encodeURIComponent(repository)}`;
+  const repo = await api(base);
+  if (repo.status !== 200) throw new Error(`GitHub API ${repo.status} reading ${owner}/${repository}`);
+  const data = record(repo.body);
+  const defaultBranch = text(data.default_branch) ?? "main";
+  const analysis = record(data.security_and_analysis);
+  const status = (key: string) => text(record(analysis[key]).status);
+
+  // 404 with "Branch not protected" means unprotected; any other failure means we could not tell.
+  let protection: Facts | null = null;
+  const response = await api(`${base}/branches/${encodeURIComponent(defaultBranch)}/protection`);
+  if (response.status === 200) {
+    const body = record(response.body);
+    const reviews = record(body.required_pull_request_reviews);
+    protection = {
+      enabled: true,
+      requiredReviews: Number(reviews.required_approving_review_count ?? 0),
+      enforceAdmins: record(body.enforce_admins).enabled === true,
+      dismissStaleReviews: reviews.dismiss_stale_reviews === true,
+      requireCodeOwnerReviews: reviews.require_code_owner_reviews === true,
+      requireSignedCommits: record(body.required_signatures).enabled === true,
+    };
+  } else if (response.status === 404 && /not protected/i.test(text(record(response.body).message) ?? "")) {
+    protection = { enabled: false, requiredReviews: 0, enforceAdmins: false, dismissStaleReviews: false, requireCodeOwnerReviews: false, requireSignedCommits: false };
+  }
+
+  // 204 = enabled. GitHub also answers 404 when the caller may not see the setting, so 404 only means
+  // "disabled" when the message says so; every other answer (401, 403, plain 404) is unknown.
+  const alerts = await api(`${base}/vulnerability-alerts`);
+  const vulnerabilityAlertsEnabled = alerts.status === 204 ? true : alerts.status === 404 && /alerts are disabled/i.test(text(record(alerts.body).message) ?? "") ? false : null;
+
+  let twoFactorRequired: boolean | null = null;
+  if (record(data.owner).type === "Organization") {
+    const org = await api(`/orgs/${encodeURIComponent(owner)}`);
+    const flag = record(org.body).two_factor_requirement_enabled;
+    if (org.status === 200 && typeof flag === "boolean") twoFactorRequired = flag;
+  }
+
+  return {
+    production: true,
+    repository: text(data.full_name) ?? `${owner}/${repository}`,
+    defaultBranch,
+    visibility: text(data.visibility),
+    archived: data.archived === true,
+    branchProtection: protection,
+    security: { secretScanning: status("secret_scanning"), pushProtection: status("secret_scanning_push_protection"), dependabotSecurityUpdates: status("dependabot_security_updates") },
+    vulnerabilityAlertsEnabled,
+    org: { twoFactorRequired },
+  };
+}
+
+// ---------------------------------------------------------------- AWS ---------------------------------------------------
+
+type Sender = { send(command: never): Promise<unknown> };
+export type AwsClients = { iam: Sender; s3: Sender; config: Sender; cloudtrail: Sender };
+
+const errorName = (error: unknown) => (error && typeof error === "object" && "name" in error ? String((error as { name: unknown }).name) : "");
+const call = <T>(client: Sender, command: unknown) => client.send(command as never) as Promise<T>;
+const MAX_BUCKETS = 300;
+
+export async function collectAws(clients: AwsClients, region: string): Promise<Facts> {
+  const facts: Facts = { region, root: null, passwordPolicy: null, s3: null, config: null, cloudTrail: null };
+
+  try {
+    const summary = await call<{ SummaryMap?: Record<string, number> }>(clients.iam, new GetAccountSummaryCommand({}));
+    const map = summary.SummaryMap ?? {};
+    if (typeof map.AccountMFAEnabled === "number") facts.root = { mfaEnabled: map.AccountMFAEnabled === 1, accessKeysPresent: map.AccountAccessKeysPresent ?? 0, users: map.Users ?? null, mfaDevices: map.MFADevices ?? null };
+  } catch { /* leave null */ }
+
+  try {
+    const policy = (await call<{ PasswordPolicy?: Record<string, unknown> }>(clients.iam, new GetAccountPasswordPolicyCommand({}))).PasswordPolicy ?? {};
+    facts.passwordPolicy = { exists: true, minimumLength: Number(policy.MinimumPasswordLength ?? 0), reusePrevention: Number(policy.PasswordReusePrevention ?? 0), maxPasswordAge: Number(policy.MaxPasswordAge ?? 0), requireSymbols: policy.RequireSymbols === true, requireNumbers: policy.RequireNumbers === true };
+  } catch (error) {
+    if (errorName(error) === "NoSuchEntityException") facts.passwordPolicy = { exists: false, minimumLength: 0, reusePrevention: 0, maxPasswordAge: 0, requireSymbols: false, requireNumbers: false };
+  }
+
+  try {
+    const buckets = ((await call<{ Buckets?: Array<{ Name?: string }> }>(clients.s3, new ListBucketsCommand({}))).Buckets ?? []).slice(0, MAX_BUCKETS);
+    let without = 0, unchecked = 0;
+    for (const bucket of buckets) {
+      try {
+        const block = (await call<{ PublicAccessBlockConfiguration?: Record<string, boolean> }>(clients.s3, new GetPublicAccessBlockCommand({ Bucket: bucket.Name }))).PublicAccessBlockConfiguration ?? {};
+        if (!(block.BlockPublicAcls && block.IgnorePublicAcls && block.BlockPublicPolicy && block.RestrictPublicBuckets)) without += 1;
+      } catch (error) {
+        if (errorName(error) === "NoSuchPublicAccessBlockConfiguration") without += 1;
+        else unchecked += 1;
+      }
+    }
+    facts.s3 = { buckets: buckets.length, withoutPublicAccessBlock: unchecked === 0 ? without : null, unchecked };
+  } catch { /* leave null */ }
+
+  try {
+    const summary = (await call<{ ComplianceSummary?: { CompliantResourceCount?: { CappedCount?: number }; NonCompliantResourceCount?: { CappedCount?: number } } }>(clients.config, new GetComplianceSummaryByConfigRuleCommand({}))).ComplianceSummary;
+    if (summary) facts.config = { compliantResources: summary.CompliantResourceCount?.CappedCount ?? 0, nonCompliantResources: summary.NonCompliantResourceCount?.CappedCount ?? 0 };
+  } catch { /* AWS Config not enabled or not permitted */ }
+
+  try {
+    const trails = (await call<{ trailList?: Array<{ Name?: string; TrailARN?: string; IsMultiRegionTrail?: boolean; LogFileValidationEnabled?: boolean }> }>(clients.cloudtrail, new DescribeTrailsCommand({}))).trailList ?? [];
+    const multi = trails.filter((trail) => trail.IsMultiRegionTrail);
+    let logging = false;
+    for (const trail of multi) {
+      try { if ((await call<{ IsLogging?: boolean }>(clients.cloudtrail, new GetTrailStatusCommand({ Name: trail.TrailARN ?? trail.Name }))).IsLogging) logging = true; } catch { /* status unreadable */ }
+    }
+    facts.cloudTrail = { trails: trails.length, multiRegionTrails: multi.length, logging, logValidation: multi.length > 0 && multi.every((trail) => trail.LogFileValidationEnabled === true) };
+  } catch { /* leave null */ }
+
+  return facts;
+}
+
+// ---------------------------------------------------------------- Okta --------------------------------------------------
+
+/** `path` is either an API path or an absolute `next` link already validated by the caller. */
+export type OktaApi = (path: string) => Promise<JsonResponse>;
+
+const MAX_PAGES = 25;
+const MAX_ADMINS = 100;
+
+/** Okta paginates with `Link: <url>; rel="next"`. */
+export function nextLink(header: string | null | undefined) {
+  const match = /<([^>]+)>;\s*rel="next"/i.exec(header ?? "");
+  return match ? match[1] : null;
+}
+
+async function pages(api: OktaApi, first: string) {
+  const items: unknown[] = [];
+  let next: string | null = first;
+  let truncated = false;
+  for (let page = 0; next; page++) {
+    if (page >= MAX_PAGES) { truncated = true; break; }
+    const response: JsonResponse = await api(next);
+    if (response.status !== 200) throw new Error(`Okta API ${response.status}`);
+    const body = record(response.body);
+    items.push(...(Array.isArray(response.body) ? response.body : Array.isArray(body.value) ? (body.value as unknown[]) : []));
+    next = nextLink(response.link);
+  }
+  return { items, truncated };
+}
+
+export async function collectOkta(api: OktaApi, organization: string, now = Date.now()): Promise<Facts> {
+  const facts: Facts = { organization, users: null, privileged: null, passwordPolicy: null };
+
+  try {
+    const { items, truncated } = await pages(api, "/api/v1/users?limit=200&filter=" + encodeURIComponent('status eq "ACTIVE"'));
+    const inactive = items.filter((item) => {
+      const user = record(item);
+      const reference = Date.parse(text(user.lastLogin) ?? text(user.created) ?? "");
+      return Number.isNaN(reference) ? false : now - reference > 90 * DAY;
+    }).length;
+    facts.users = { active: items.length, inactiveOver90Days: truncated ? null : inactive, truncated };
+  } catch { /* leave null */ }
+
+  try {
+    const { items } = await pages(api, "/api/v1/iam/assignees/users?limit=200");
+    const admins = items.map((item) => text(record(item).id)).filter((id): id is string => id !== null).slice(0, MAX_ADMINS);
+    let enrolled = 0;
+    for (const id of admins) {
+      const factors = await api(`/api/v1/users/${encodeURIComponent(id)}/factors`);
+      if (factors.status !== 200) throw new Error(`Okta API ${factors.status} reading factors`);
+      if ((Array.isArray(factors.body) ? factors.body : []).some((factor) => record(factor).status === "ACTIVE")) enrolled += 1;
+    }
+    if (admins.length > 0) facts.privileged = { total: admins.length, mfaEnrolled: enrolled, mfaCoverage: enrolled / admins.length };
+  } catch { /* leave null */ }
+
+  try {
+    const response = await api("/api/v1/policies?type=PASSWORD");
+    if (response.status === 200 && Array.isArray(response.body)) {
+      const lengths = response.body
+        .filter((policy) => record(policy).status === "ACTIVE")
+        .map((policy) => Number(record(record(record(record(policy).settings).password).complexity).minLength))
+        .filter((length) => Number.isFinite(length));
+      if (lengths.length) facts.passwordPolicy = { minLength: Math.min(...lengths), policies: lengths.length };
+    }
+  } catch { /* leave null */ }
+
+  return facts;
+}

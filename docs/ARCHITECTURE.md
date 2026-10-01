@@ -54,6 +54,20 @@ PostgreSQL, OPA and S3 are probed rather than assumed. Regulatory monitoring sto
 
 Attack paths connect technical entry points to business assets, obligations and financial exposure. Case management and workflow definitions preserve human accountability. Executive metrics and benchmarks are derived from tenant records; the included reference cohort is labelled synthetic and must be replaced with an approved privacy-preserving aggregation service before making peer claims.
 
+## Compliance hub
+
+`src/lib/frameworks` is pure data and arithmetic (no I/O, shared by tests and server): the framework catalogues (`catalog.ts`, `data/`), the unified-control library (`unified.ts`), the crosswalk resolver (`mapping.ts`: group inheritance, hand refinements, NIST-published derivation, link basis) and scoring (`scoring.ts`: `scoreFramework`, `buildRoadmap`, `crosswalk`, `overlapMatrix`, all taking optional per-tenant mapping overrides). `src/lib/core/compliance-engine.ts` adds persistence: tenants store only their own state (`framework_adoptions`, `control_implementations`, `requirement_scope`, `compliance_exceptions`, `policy_register`, `compliance_snapshots`, `mapping_reviews`), all under forced row-level security. The catalogue itself is versioned in code, not per tenant. Rows created by the sample posture carry `source = 'demo'` (or `attested` once a person edits them), which is what the purge keys on.
+
+A unified control can be linked to several executable controls (comma-separated codes). The engine reads the latest evidence of each: all healthy marks the control *verified*, any failed caps its weight at 0.5 and surfaces a contradiction, expired evidence marks it *stale*. Trend points are written only when a score moves.
+
+`src/lib/core/report.ts` renders the PDF audit-readiness report with `pdf-lib`, fingerprints the canonical report data, signs it and anchors the fingerprint in the audit chain.
+
+## Executable controls and policy engines
+
+`src/lib/connectors/pack.ts` defines the control pack: each control has a policy and the fact paths it `requires`. `collectors.ts` turns API responses into facts and is written against injected clients. A fact a collector could not read is `null`; a control with a missing required fact is skipped and reported, so lack of access is never recorded as non-compliance. `index.ts` installs the pack, evaluates it on every sync and stores raw facts as hashed evidence.
+
+`policy-engine.ts` evaluates `all` / `any` / `none` condition groups with fail-closed operators. `infra/opa/policy.rego` implements the same semantics and `opa.ts` cross-checks each evaluation when `OPA_URL` is set; the TypeScript verdict is authoritative and a disagreement opens a `policy_engine_divergence` drift event.
+
 ## Testing
 
 `npm test` runs the suite on SQLite; `npm run test:postgres` runs the same suite on an in-process PostgreSQL (PGlite) served over a socket, so the real PostgreSQL driver, row-level security and migration path are exercised without external services. Tamper scenarios (edited or deleted audit rows, altered decisions) are simulated through owner-level access that bypasses the application guards.
