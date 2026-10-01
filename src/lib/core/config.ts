@@ -38,6 +38,11 @@ export function signingSecret() {
   return value;
 }
 
+/** Key that protects connector credentials at rest. Required in production; a development fallback is used otherwise. */
+export function secretsKey() {
+  return readSecret("KONTROL_SECRETS_KEY", "local-secrets-key-change-me-0123456789");
+}
+
 /** Demo authentication is an evaluation convenience and is never honoured in production. */
 export function demoAuthAllowed() {
   return !isProduction() || (isDemoMode() && process.env.KONTROL_ALLOW_DEMO_IN_PRODUCTION === "true");

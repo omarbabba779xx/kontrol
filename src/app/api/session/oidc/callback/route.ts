@@ -35,12 +35,14 @@ export async function GET(request: Request) {
     const requestedRole = String(process.env.OIDC_TRUST_ROLE_CLAIM === "true" ? payload.kontrol_role ?? "viewer" : "viewer") as Role;
     const role: Role = allowedRoles.has(requestedRole) ? requestedRole : "viewer";
     const db = (await getDb()).system();
-    let user = await db.get<{ id: string; tenant_id: string; email: string; name: string; role: Role }>("SELECT id,tenant_id,email,name,role FROM users WHERE tenant_id=? AND email=?", tenantId, email);
+    let user = await db.get<{ id: string; tenant_id: string; email: string; name: string; role: Role; status?: string }>("SELECT id,tenant_id,email,name,role,status FROM users WHERE tenant_id=? AND email=?", tenantId, email);
     if (!user) {
       const id = `usr_oidc_${randomUUID()}`;
       await db.run("INSERT INTO users (id,tenant_id,email,name,role,created_at) VALUES (?,?,?,?,?,?)", id, tenantId, email, String(payload.name ?? email), role, new Date().toISOString());
       user = { id, tenant_id: tenantId, email, name: String(payload.name ?? email), role };
     }
+    if ((user as { status?: string }).status === "disabled") return Response.json({ error: "This account is disabled" }, { status: 403 });
+    await db.run("UPDATE users SET last_login_at = ? WHERE id = ?", new Date().toISOString(), user.id);
     const token = await issueSessionToken({ userId: user.id, tenantId: user.tenant_id, email: user.email, name: user.name, role: user.role });
     return new Response(null, { status: 302, headers: { Location: `${url.origin}/`, "Set-Cookie": `kontrol_session=${token}; HttpOnly; Secure; SameSite=Lax; Path=/; Max-Age=28800` } });
   } catch (error) {

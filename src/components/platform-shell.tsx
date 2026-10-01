@@ -6,6 +6,7 @@ import { usePathname, useRouter } from "next/navigation";
 import {
   Archive,
   BadgeCheck,
+  UserCog,
   ArrowUpRight,
   Boxes,
   Braces,
@@ -41,6 +42,7 @@ const navigation = [
   { name: "Assurance studio", code: "10", href: "/assurance", icon: ScanSearch },
   { name: "Enterprise platform", code: "11", href: "/enterprise", icon: Landmark },
   { name: "Compliance hub", code: "12", href: "/compliance", icon: BadgeCheck },
+  { name: "Administration", code: "13", href: "/admin", icon: UserCog },
 ];
 
 function Mark() {
