@@ -136,7 +136,8 @@ export async function buildReadinessReport(actor: Actor, options: { frameworkId?
   const generatedAt = new Date().toISOString();
   const nameOf = (id: string) => snapshot.catalog.find((item) => item.id === id)?.name ?? id;
 
-  const controlsByVerification = ["verified", "failing", "stale", "unverified"].map((key) => ({ key, count: snapshot.controls.filter((control) => control.verification === key && control.linkedControlCode).length }));
+  const controlsByVerification = ["verified", "documented", "failing", "stale", "unverified"].map((key) => ({ key, count: snapshot.controls.filter((control) => control.verification === key && (control.linkedControlCode || key === "documented")).length }));
+  const attested = snapshot.controls.filter((control) => ["implemented", "partial", "planned"].includes(control.status));
   const body = {
     tenant: actor.tenantId,
     generatedAt,
@@ -179,7 +180,8 @@ export async function buildReadinessReport(actor: Actor, options: { frameworkId?
 
   // Evidence integrity ----------------------------------------------------------------------------------------------
   layout.heading("2. Evidence and integrity");
-  layout.table(["Evidence-linked controls", "Count"], [200, 60], controlsByVerification.map((item) => [item.key, String(item.count)]));
+  layout.table(["Evidence-backed controls", "Count"], [200, 60], controlsByVerification.map((item) => [item.key === "verified" ? "verified (machine evidence)" : item.key === "documented" ? "documented (reviewed documents)" : item.key, String(item.count)]));
+  layout.text(`Attestations: ${attested.length} attested control(s), ${attested.filter((control) => control.attestationExpired).length} past their review date, ${attested.filter((control) => control.countersignedBy).length} countersigned by a second person${snapshot.policy.requireCountersignature ? " (required by policy)" : ""}. ${snapshot.alerts.pendingEvidence} document(s) awaiting review.`, { size: 8.5, color: MUTED });
   if (snapshot.alerts.contradictions.length) {
     layout.heading("Contradictions: attested but contradicted by live evidence", 2);
     layout.table(["Control", "Attested", "Linked evidence"], [200, 70, 150], snapshot.alerts.contradictions.map((item) => [`${item.code} ${item.title}`, item.attested, item.linkedControlCode ?? ""]));

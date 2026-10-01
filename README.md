@@ -35,7 +35,7 @@ flowchart LR
 - **Human accountability.** Workflows pause for approval; the requester cannot approve their own request and an approval can only happen once. Agents are read-only and advisory.
 - **Standards.** OSCAL 1.1.3 assessment-results export, OIDC with PKCE, FAIR-inspired Monte Carlo risk quantification with reproducible seeds.
 - **Multi-framework compliance hub.** ISO/IEC 27001:2022 (clauses 4-10 and all 93 Annex A controls), NIST CSF 2.0 (all 106 subcategories), SOC 2, GDPR (42 articles), NIS2, DORA, EU AI Act, ISO/IEC 42001 (clauses and all 38 controls), PCI DSS 4.0 and CIS Controls v8 (all 153 safeguards), mapped through 56 framework-neutral *unified controls*: implement once, score everywhere. Scores are capped when live evidence contradicts an attested control.
-- **Evidence that is actually collected.** 13 executable controls for GitHub, AWS and Okta verify what people attest. A fact that cannot be read is skipped, never failed.
+- **Evidence that is actually collected.** 16 executable controls (GitHub, AWS, Okta, and signed HR and learning-system reports) verify what people attest. A fact that cannot be read is skipped, never failed. Organisational claims expire, need a second person to countersign, and can be backed by documents that someone other than the uploader has reviewed.
 - **Two policy engines that must agree.** Control policies run in TypeScript and are cross-checked by Open Policy Agent; a parity suite compares both on thousands of cases and a disagreement in production raises a drift event.
 - **Honest about what is real.** Unconfigured services show as *standby*, demo-sourced evidence is tagged and scored lower, benchmark cohorts are labelled synthetic.
 
@@ -47,7 +47,7 @@ flowchart LR
 | Audit hash chain, signed decisions | Implemented | Append-only, fork-proof, covered by tamper tests |
 | RBAC, JWT sessions, OIDC (PKCE), rate limiting | Implemented | Fails closed in production without strong secrets |
 | Durable workflows with approval gates | Implemented | Retries with back-off, separation of duties |
-| GitHub / AWS / Okta collectors and control pack | Live with credentials, demo otherwise | 13 executable controls; demo evidence is tagged and trust-scored lower; unreadable facts are skipped, not failed |
+| GitHub / AWS / Okta collectors, HR/LMS webhook and control pack | Live with credentials, demo otherwise | 16 executable controls; demo evidence is tagged and trust-scored lower; unreadable facts are skipped, not failed |
 | Evidence trust, drift, contradictions, digital twin, third-party concentration | Implemented | Assurance Studio at `/assurance` |
 | Regulatory feeds and diff, policy compiler (NL → Rego + tests) | Implemented | HTTPS-only, SSRF-guarded; mappings require human review |
 | Evidence vault, case management, continuous authorization, attack paths, benchmarks | Implemented | Enterprise workspace at `/enterprise`; S3 Object Lock when configured |
@@ -123,9 +123,10 @@ npm test                # SQLite (runs the OPA parity test when an `opa` binary 
 npm run test:postgres   # in-process PostgreSQL (PGlite) over a socket: real driver, real RLS, migration
 npm run test:opa        # opa check --strict and opa test on infra/opa
 npm run test:e2e        # Playwright against a throwaway database, with axe accessibility checks
+npm run test:live       # read-only checks against your own GitHub, Okta and AWS (skipped unless you set credentials)
 ```
 
-The suite covers the audit chain (tampering, deletion, concurrent writers, append-only enforcement), decision signatures, policy semantics, authentication and RBAC, CSRF, workflow separation of duties, SSRF protection, OSCAL output, tenant isolation, the SQLite to PostgreSQL migration, the HTTP handlers, the framework catalogues and crosswalk, the compliance engine, the collectors, the PDF report and the browser flows. CI runs it all, plus a production-image build and health check.
+The suite covers the audit chain (tampering, deletion, concurrent writers, append-only enforcement), decision signatures, policy semantics, authentication and RBAC, CSRF, workflow separation of duties, SSRF protection, OSCAL output, tenant isolation, the SQLite to PostgreSQL migration, the HTTP handlers, the framework catalogues and crosswalk, the compliance engine, the collectors (including the real AWS SDK against Moto), attestations, evidence review, the signed webhook, licensed-content import, the PDF report and the browser flows. CI runs it all, plus a production-image build and health check.
 
 ## Project layout
 
@@ -150,10 +151,14 @@ See [architecture](docs/ARCHITECTURE.md) and the [security policy](SECURITY.md).
 `/compliance` turns the platform into a multi-framework GRC workspace.
 
 - **Unified controls.** Each of the 56 controls lists the requirements it advances in every framework; sub-requirements inherit their group's mapping unless refined. `tests/frameworks.test.ts` fails the build if any requirement of any framework is unmapped, if a reference points at nothing, or if a catalogue loses an item.
-- **A published basis where one exists.** NIST CSF 2.0 links are derived from the informative references NIST publishes for ISO/IEC 27001:2022 (`scripts/generate-csf-data.py`), and each link shows whether it is *published* or *editorial*.
-- **Mapping review.** A reviewer can validate or reject any built-in link, or add one, each with a note. Rejected and added links change the scores for that tenant only, and every review is chained in the audit log.
+- **A published basis where one exists.** Links are corroborated by NIST's CSF 2.0 informative references (to ISO 27001, PCI DSS and CIS) and by ENISA's NIS2 mapping table, with the source named on each link; what those sources imply but the mapping lacks is offered as a suggestion. The crosswalk is also measured against the independent Secure Controls Framework: 85.7% of testable links are corroborated. See [docs/CROSSWALK.md](docs/CROSSWALK.md).
+- **Mapping review.** A reviewer can validate or reject any built-in link, accept a suggestion, or add a link, each with a note. Rejected and added links change the scores for that tenant only, and every review is chained in the audit log.
 - **Scoring.** A requirement scores the mean of its controls (implemented 1, partial 0.5, planned 0.15, not started 0). Controls out of scope and requirements excluded with a written justification leave the denominator. A unified control linked to executable controls is *verified* by their latest evidence; one failing control caps it at partial and raises a contradiction alert.
 - **Evidence.** `Install the pack` adds the executable controls, a connector sync evaluates them, and `Link evidence` attaches them to the unified controls they verify. Linking never changes an attested status: evidence verifies a claim, it does not make one.
+- **Attestations that expire.** A claim gets a review date (a year for *implemented*, six months for *partial*, three for *planned*). Past that date, and when nothing else backs it, it counts as partial until the owner re-attests. A second person can countersign (the attester cannot), and a change to the claim voids the countersignature. `KONTROL_REQUIRE_COUNTERSIGN=true` makes an unconfirmed claim count as partial.
+- **Documentary evidence.** A document is uploaded to the hashed, signed evidence vault against a control and stays pending until a different person accepts it; it then marks the control *documented* while it is valid. Machine evidence outranks documents: a failing control is not rescued by a PDF.
+- **People systems.** HR and learning systems post signed reports (`/api/ingest/lms`, `/api/ingest/hris`) evaluated by the same control pack: training completion, leaver deprovisioning, screening. HMAC-SHA-256 per-tenant secrets, five-minute clock window, database-backed replay protection. See [docs/LIVE_TESTING.md](docs/LIVE_TESTING.md).
+- **Licensed content.** Standards bodies license some text (PCI DSS testing procedures, SOC 2 points of focus). An administrator can import the organisation's own licensed copy: it is stored for that tenant only with the licence acknowledgement and a content hash, never in the repository, and can be removed at any time. Imported sub-requirements inherit their parent's mapping and replace the parent in the score.
 - **Roadmap.** Incomplete controls are ranked by requirements advanced across the adopted frameworks, divided by typical effort.
 - **Exceptions.** Risk acceptances expire within 365 days, cannot be decided by their requester and can be decided only once.
 - **Exports.** `GET /api/compliance/frameworks/iso27001?format=csv` produces a Statement of Applicability (spreadsheet formulas are neutralised). `GET /api/compliance/report` produces a PDF audit-readiness report whose SHA-256 fingerprint and HMAC signature are also appended to the audit chain.
@@ -166,8 +171,9 @@ See [architecture](docs/ARCHITECTURE.md) and the [security policy](SECURITY.md).
 | GitHub | Branch protection, secret scanning with push protection, Dependabot, protection applies to administrators, organisation 2FA |
 | AWS | Root MFA and keys, IAM password policy, S3 public access block, Config compliance, multi-region CloudTrail |
 | Okta | Administrator MFA, dormant accounts, password policy |
+| HR and learning systems (signed webhook) | Training completion, leavers deprovisioned on time, screening before start |
 
-Collectors are written against injected clients and tested with API responses: the GitHub fixtures in `tests/fixtures/github` were recorded from api.github.com, and AWS and Okta use the documented response shapes. They have not been run against a live AWS or Okta tenant in CI. Control policies use 17 operators (`eq`, `gt`, `between`, `in`, `matches`, `within_days`, `older_than_days`, `length_gte`, and more) in `all` / `any` / `none` groups, and every operator fails closed. Regular expressions are length-bounded and reject nested quantifiers.
+Collectors are written against injected clients and tested at three levels: responses (the GitHub fixtures in `tests/fixtures/github` were recorded from api.github.com), the real AWS SDK against Moto, a server that speaks the AWS wire protocols (`tests/aws-moto.test.ts`), and your own accounts through opt-in read-only live tests (`npm run test:live`, [docs/LIVE_TESTING.md](docs/LIVE_TESTING.md)). Control policies use 17 operators (`eq`, `gt`, `between`, `in`, `matches`, `within_days`, `older_than_days`, `length_gte`, and more) in `all` / `any` / `none` groups, and every operator fails closed. Regular expressions are length-bounded and reject nested quantifiers.
 
 ### Policy engines
 
@@ -178,8 +184,9 @@ Collectors are written against injected clients and tested with API responses: t
 - The rate limiter and workflow scheduler are per process; run a shared limiter at the edge and a single scheduler (or an external cron hitting `/api/jobs/run`) when scaling out.
 - Evidence objects go to S3 with Object Lock when configured; otherwise a local folder is used and flagged as a fallback.
 - Benchmarking uses a disclosed synthetic cohort; connect an approved aggregation service before making peer claims.
-- **Catalogue depth.** PCI DSS is at section level (x.y) and SOC 2 at criterion level: the testing procedures and points of focus are licensed content and are not reproduced. The EU regulations cover the articles that bind the entity, not the whole text.
-- **Crosswalk.** Only the NIST CSF to ISO/IEC 27001 links have a published basis. The rest is editorial and meant to be reviewed per tenant in the hub. Mappings support, and never replace, an expert or certification body.
-- **Collectors.** Not yet run against live AWS or Okta tenants in CI, and organisational controls (training, management review) can only be attested, not machine-verified.
+- **Catalogue depth.** Without an import, PCI DSS is at section level and SOC 2 at criterion level. Importing your licensed copy takes both further; the EU regulations cover the articles that bind the entity, not the whole text.
+- **Crosswalk.** Sourced and measured, but a judgement. Published sources corroborate part of it, an independent comparison corroborates 85.7%, and per-tenant review makes the rest visible. It supports, and never replaces, an expert or certification body ([docs/CROSSWALK.md](docs/CROSSWALK.md)).
+- **Live accounts.** The AWS collectors run against a protocol-faithful server and the others against recorded and documented responses, but they have not been run against *your* tenants until you run `npm run test:live`.
+- **Organisational controls** cannot be machine-verified. They are attestations that expire, optionally countersigned, optionally backed by reviewed documents, or fed by your HR and learning systems.
 
 > Kontrol supports governance work; it does not provide legal advice or issue certification opinions.

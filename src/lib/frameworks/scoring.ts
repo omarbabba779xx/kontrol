@@ -4,7 +4,17 @@ import { UNIFIED_CONTROLS, effortOf } from "@/lib/frameworks/unified";
 import type { FrameworkId, ImplementationStatus } from "@/lib/frameworks/types";
 
 /** How well a unified control's implementation is backed by machine-collected evidence. */
-export type Verification = "verified" | "unverified" | "failing" | "stale";
+/**
+ * How well a unified control's implementation is backed by evidence.
+ *  - verified: the latest machine evidence of every linked executable control is healthy
+ *  - documented: reviewed documentary evidence (accepted by someone other than its uploader) is still valid
+ *  - failing: machine evidence contradicts the claim
+ *  - stale: the evidence that existed has expired
+ */
+export type Verification = "verified" | "documented" | "unverified" | "failing" | "stale";
+
+/** Evidence a person or a machine vouched for, as opposed to a bare attestation. */
+export const isBacked = (verification: Verification) => verification === "verified" || verification === "documented";
 
 export type ControlState = {
   status: ImplementationStatus;
@@ -12,6 +22,10 @@ export type ControlState = {
   verification: Verification;
   /** An approved, unexpired risk-acceptance covers the remaining gap. */
   excepted: boolean;
+  /** The attestation passed its review date and nothing else backs it: it can no longer count in full. */
+  attestationExpired?: boolean;
+  /** Organisation policy requires a second person to confirm attestations, and nobody has. */
+  awaitingCountersignature?: boolean;
 };
 
 export type RequirementStatus = "compliant" | "partial" | "initial" | "gap" | "not_applicable";
@@ -22,7 +36,8 @@ export const STATUS_WEIGHT: Record<Exclude<ImplementationStatus, "not_applicable
 export function controlWeight(state: ControlState): number | null {
   if (state.status === "not_applicable") return null;
   const weight = STATUS_WEIGHT[state.status];
-  return state.verification === "failing" ? Math.min(weight, 0.5) : weight;
+  // Failing machine evidence, a lapsed attestation and a missing countersignature each cap a claim at "partial".
+  return state.verification === "failing" || state.attestationExpired || state.awaitingCountersignature ? Math.min(weight, 0.5) : weight;
 }
 
 export function requirementStatus(score: number | null): RequirementStatus {
@@ -34,18 +49,25 @@ export function requirementStatus(score: number | null): RequirementStatus {
 }
 
 /** Tenant-level review of the built-in crosswalk: rejected links stop counting, added links start counting. */
-export type MappingOverrides = { rejected: Set<string>; added: Map<string, string[]> };
+export type CustomRequirement = { id: string; title: string; group: string; parent: string; controls: string[] };
+export type MappingOverrides = { rejected: Set<string>; added: Map<string, string[]>; /** Sub-requirements imported from a licensed copy, per framework. */ custom?: Map<FrameworkId, CustomRequirement[]> };
 export const NO_OVERRIDES: MappingOverrides = { rejected: new Set(), added: new Map() };
 
+function customOf(frameworkId: FrameworkId, requirementId: string, overrides: MappingOverrides) {
+  return overrides.custom?.get(frameworkId)?.find((item) => item.id === requirementId);
+}
+
 export function mappedControls(frameworkId: FrameworkId, requirementId: string, overrides: MappingOverrides = NO_OVERRIDES) {
-  const kept = baseControls(frameworkId, requirementId).filter((code) => !overrides.rejected.has(linkKey(frameworkId, requirementId, code)));
+  const base = customOf(frameworkId, requirementId, overrides)?.controls ?? baseControls(frameworkId, requirementId);
+  const kept = base.filter((code) => !overrides.rejected.has(linkKey(frameworkId, requirementId, code)));
   const added = overrides.added.get(`${frameworkId}|${requirementId}`) ?? [];
   return [...new Set([...kept, ...added])];
 }
 
 /** Requirements a control currently advances in a framework, after tenant overrides. */
 export function requirementsOf(ucCode: string, frameworkId: FrameworkId, overrides: MappingOverrides = NO_OVERRIDES) {
-  const kept = baseRequirements(ucCode, frameworkId).filter((id) => !overrides.rejected.has(linkKey(frameworkId, id, ucCode)));
+  const customIds = (overrides.custom?.get(frameworkId) ?? []).filter((item) => item.controls.includes(ucCode)).map((item) => item.id);
+  const kept = [...baseRequirements(ucCode, frameworkId), ...customIds].filter((id) => !overrides.rejected.has(linkKey(frameworkId, id, ucCode)));
   const added: string[] = [];
   for (const [key, codes] of overrides.added) if (key.startsWith(`${frameworkId}|`) && codes.includes(ucCode)) added.push(key.slice(frameworkId.length + 1));
   return [...new Set([...kept, ...added])];
@@ -54,6 +76,8 @@ export function requirementsOf(ucCode: string, frameworkId: FrameworkId, overrid
 export const DEFAULT_STATE: ControlState = { status: "not_started", maturity: 0, verification: "unverified", excepted: false };
 
 export type RequirementResult = {
+  /** Present on sub-requirements imported from a licensed copy. */
+  custom?: boolean;
   id: string;
   title: string;
   group: string;
@@ -89,8 +113,15 @@ export function scoreFramework(frameworkId: FrameworkId, states: Map<string, Con
   const framework = FRAMEWORK_BY_ID.get(frameworkId);
   if (!framework) throw new Error(`Framework ${frameworkId} not found`);
 
-  const requirements: RequirementResult[] = framework.requirements.map((requirement) => {
+  const imported = overrides.custom?.get(frameworkId) ?? [];
+  // A requirement refined by imported sub-requirements is replaced by them in the score, so nothing counts twice.
+  const refined = new Map<string, number>();
+  for (const item of imported) refined.set(item.parent, (refined.get(item.parent) ?? 0) + 1);
+  const catalogue = [...framework.requirements, ...imported.map((item) => ({ id: item.id, title: item.title, group: item.group, parent: item.parent, custom: true as const }))];
+
+  const requirements: RequirementResult[] = catalogue.map((requirement) => {
     const controls = mappedControls(frameworkId, requirement.id, overrides);
+    if (refined.has(requirement.id) && !notApplicable.has(requirement.id)) return { ...requirement, applicable: false, justification: `Refined into ${refined.get(requirement.id)} imported sub-requirement(s), which are scored instead`, score: null, status: "not_applicable", verified: false, controls };
     const justification = notApplicable.get(requirement.id) ?? null;
     if (justification !== null) return { ...requirement, applicable: false, justification, score: null, status: "not_applicable", verified: false, controls };
 
@@ -101,7 +132,7 @@ export function scoreFramework(frameworkId: FrameworkId, states: Map<string, Con
       const weight = controlWeight(state);
       if (weight === null) continue;
       weights.push(weight);
-      if (state.verification !== "verified") verified = false;
+      if (!isBacked(state.verification)) verified = false;
     }
     // Every mapped control being out of scope takes the requirement out of scope with it.
     if (weights.length === 0) return { ...requirement, applicable: controls.length > 0, justification: null, score: controls.length > 0 ? null : 0, status: controls.length > 0 ? "not_applicable" : "gap", verified: false, controls };

@@ -2,7 +2,7 @@ import { z } from "zod";
 import { requireActor, type Permission } from "@/lib/core/auth";
 import { apiError } from "@/lib/core/api";
 import { installControlPack } from "@/lib/connectors";
-import { adoptFramework, complianceSnapshot, decideException, linkEvidence, loadDemoPosture, purgeDemoPosture, recordComplianceSnapshot, requestException, reviewMapping, setImplementation, setRequirementScope, upsertPolicy } from "@/lib/core/compliance-engine";
+import { adoptFramework, complianceSnapshot, countersign, decideException, linkEvidence, loadDemoPosture, purgeDemoPosture, reattest, recordComplianceSnapshot, requestException, reviewEvidence, reviewMapping, setImplementation, setRequirementScope, upsertPolicy } from "@/lib/core/compliance-engine";
 
 const framework = z.enum(["iso27001", "nist_csf", "soc2", "gdpr", "nis2", "dora", "eu_ai_act", "iso42001", "pci_dss", "cis_v8"]);
 const ucCode = z.string().regex(/^UC-[A-Z]+-\d{2}$/);
@@ -15,6 +15,9 @@ const actionSchema = z.discriminatedUnion("action", [
   z.object({ action: z.literal("decide_exception"), id: z.string().min(3), approve: z.boolean(), note: z.string().min(10).max(2000) }),
   z.object({ action: z.literal("save_policy"), id: z.string().min(3).optional(), title: z.string().min(3).max(200), version: z.string().min(1).max(30), status: z.enum(["draft", "in_review", "approved", "retired"]), ownerId: z.string().min(3).optional(), nextReview: z.string().datetime().optional(), ucCodes: z.array(ucCode).max(50), content: z.string().max(500_000).optional() }),
   z.object({ action: z.literal("review_mapping"), frameworkId: framework, requirementId: z.string().min(1).max(40), ucCode, decision: z.enum(["validated", "rejected", "added", "reset"]), note: z.string().max(2000).optional() }),
+  z.object({ action: z.literal("reattest"), ucCode, note: z.string().min(10).max(2000) }),
+  z.object({ action: z.literal("countersign"), ucCode, note: z.string().min(10).max(2000) }),
+  z.object({ action: z.literal("review_evidence"), id: z.string().min(3), accept: z.boolean(), note: z.string().min(10).max(2000) }),
   z.object({ action: z.literal("install_pack") }),
   z.object({ action: z.literal("link_evidence") }),
   z.object({ action: z.literal("snapshot") }),
@@ -32,7 +35,7 @@ export async function GET(request: Request) {
 export async function POST(request: Request) {
   try {
     const input = actionSchema.parse(await request.json());
-    const permission: Permission = input.action === "decide_exception" || input.action === "review_mapping" ? "decisions:approve" : "controls:evaluate";
+    const permission: Permission = ["decide_exception", "review_mapping", "countersign", "review_evidence"].includes(input.action) ? "decisions:approve" : "controls:evaluate";
     const actor = await requireActor(request, permission);
     switch (input.action) {
       case "adopt_framework": return Response.json(await adoptFramework(actor, input), { status: 201 });
@@ -43,6 +46,9 @@ export async function POST(request: Request) {
       case "save_policy": return Response.json(await upsertPolicy(actor, input), { status: 201 });
       case "snapshot": return Response.json(await recordComplianceSnapshot(actor));
       case "review_mapping": return Response.json(await reviewMapping(actor, input));
+      case "reattest": return Response.json(await reattest(actor, input));
+      case "countersign": return Response.json(await countersign(actor, input));
+      case "review_evidence": return Response.json(await reviewEvidence(actor, input));
       case "install_pack": return Response.json(await installControlPack(actor));
       case "link_evidence": return Response.json(await linkEvidence(actor));
       case "load_demo": return Response.json(await loadDemoPosture(actor));

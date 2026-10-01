@@ -2,20 +2,23 @@ import "server-only";
 
 import { randomUUID } from "node:crypto";
 import type { Actor } from "@/lib/core/auth";
+import { userError } from "@/lib/core/errors";
 import { appendAudit, sha256 } from "@/lib/core/integrity";
 import { getDb } from "@/lib/db";
 import type { Executor } from "@/lib/db";
 import { FRAMEWORKS, FRAMEWORK_BY_ID } from "@/lib/frameworks/catalog";
 import { SUGGESTED_LINKS } from "@/lib/connectors/pack";
-import { allLinks, baseControls, linkBasis, linkKey } from "@/lib/frameworks/mapping";
-import { buildRoadmap, controlWeight, crosswalk, mappedControls, overlapMatrix, readinessLabel, requirementsOf, scoreFramework, type ControlState, type MappingOverrides, type NotApplicable, type Verification } from "@/lib/frameworks/scoring";
+import { storeVaultDocument } from "@/lib/core/enterprise-engine";
+import { listImports, loadCustomRequirements, loadLicensedText } from "@/lib/core/licensed-content";
+import { allLinks, allSuggestions, baseControls, linkBasis, linkKey, linkSource, suggestedControls } from "@/lib/frameworks/mapping";
+import { buildRoadmap, controlWeight, crosswalk, isBacked, mappedControls, overlapMatrix, readinessLabel, requirementsOf, scoreFramework, type ControlState, type MappingOverrides, type NotApplicable, type Verification } from "@/lib/frameworks/scoring";
 import { DOMAIN_LABELS, UNIFIED_CONTROLS, UC_BY_CODE } from "@/lib/frameworks/unified";
 import type { FrameworkId, ImplementationStatus } from "@/lib/frameworks/types";
 
 const MAX_EXCEPTION_DAYS = 365;
 const DAY = 86_400_000;
 
-type ImplementationRow = { uc_code: string; status: ImplementationStatus; maturity: number; owner_id: string | null; linked_control_code: string | null; notes: string; source: string; review_due: string | null; updated_at: string };
+type ImplementationRow = { uc_code: string; status: ImplementationStatus; maturity: number; owner_id: string | null; linked_control_code: string | null; notes: string; source: string; review_due: string | null; updated_by: string; updated_at: string; countersigned_by: string | null; countersigned_at: string | null };
 type ExceptionRow = { id: string; uc_code: string; title: string; justification: string; compensating_controls: string; risk_level: string; requested_by: string; approved_by: string | null; status: string; expires_at: string; created_at: string; decided_at: string | null; decision_note: string | null };
 type PolicyRow = { id: string; title: string; version: string; owner_id: string | null; status: string; approved_at: string | null; next_review: string | null; uc_codes_json: string; document_hash: string | null; updated_at: string; source: string };
 
@@ -45,18 +48,37 @@ async function evidenceVerification(db: Executor, tenantId: string, linked: stri
   return results.every((result) => result === "verified") ? "verified" : "unverified";
 }
 
-/** Merges attested implementation, live evidence on the linked control and approved risk acceptances into one state per unified control. */
+type EvidenceRow = { id: string; uc_code: string; title: string; kind: string; vault_document_id: string | null; content_hash: string; note: string; valid_until: string; uploaded_by: string; uploaded_at: string; status: "pending" | "accepted" | "rejected"; reviewed_by: string | null; reviewed_at: string | null; review_note: string | null };
+
+const requireCountersignature = () => process.env.KONTROL_REQUIRE_COUNTERSIGN === "true";
+const REVIEW_DAYS: Partial<Record<ImplementationStatus, number>> = { implemented: 365, partial: 180, planned: 90 };
+
+/** Machine evidence wins over documents; documents back a claim only while an accepted one is still valid. */
+function combineVerification(machine: Verification, documents: EvidenceRow[], now: string): Verification {
+  if (machine === "failing" || machine === "verified") return machine;
+  const accepted = documents.filter((row) => row.status === "accepted");
+  if (accepted.some((row) => row.valid_until > now)) return "documented";
+  return machine === "stale" || accepted.length > 0 ? "stale" : "unverified";
+}
+
+/** Merges attested implementation, machine and documentary evidence, expiry and approved risk acceptances into one state per unified control. */
 async function loadStates(tenantId: string) {
   const db = await scope(tenantId);
   const rows = await db.all<ImplementationRow>("SELECT * FROM control_implementations WHERE tenant_id = ?", tenantId);
+  const documents = await db.all<EvidenceRow>("SELECT * FROM control_evidence WHERE tenant_id = ?", tenantId);
   const now = new Date().toISOString();
   const excepted = new Set((await db.all<{ uc_code: string }>("SELECT uc_code FROM compliance_exceptions WHERE tenant_id = ? AND status = 'approved' AND expires_at > ?", tenantId, now)).map((row) => row.uc_code));
   const states = new Map<string, ControlState>();
   for (const row of rows) {
-    const verification = await evidenceVerification(db, tenantId, row.linked_control_code);
-    states.set(row.uc_code, { status: row.status, maturity: row.maturity, verification, excepted: excepted.has(row.uc_code) });
+    const verification = combineVerification(await evidenceVerification(db, tenantId, row.linked_control_code), documents.filter((item) => item.uc_code === row.uc_code), now);
+    const claimed = row.status === "implemented" || row.status === "partial";
+    states.set(row.uc_code, {
+      status: row.status, maturity: row.maturity, verification, excepted: excepted.has(row.uc_code),
+      attestationExpired: claimed && row.review_due !== null && row.review_due < now && !isBacked(verification),
+      awaitingCountersignature: requireCountersignature() && row.status === "implemented" && !row.countersigned_by && !isBacked(verification),
+    });
   }
-  return { states, rows };
+  return { states, rows, documents };
 }
 
 async function loadScope(tenantId: string) {
@@ -76,8 +98,8 @@ async function loadReviews(tenantId: string) {
   return (await scope(tenantId)).all<ReviewRow>("SELECT framework_id, requirement_id, uc_code, decision, note, reviewer_id, reviewed_at FROM mapping_reviews WHERE tenant_id = ?", tenantId);
 }
 
-function toOverrides(rows: ReviewRow[]): MappingOverrides {
-  const overrides: MappingOverrides = { rejected: new Set(), added: new Map() };
+function toOverrides(rows: ReviewRow[], custom?: MappingOverrides["custom"]): MappingOverrides {
+  const overrides: MappingOverrides = { rejected: new Set(), added: new Map(), custom };
   for (const row of rows) {
     if (row.decision === "rejected") overrides.rejected.add(linkKey(row.framework_id, row.requirement_id, row.uc_code));
     if (row.decision === "added") {
@@ -89,7 +111,7 @@ function toOverrides(rows: ReviewRow[]): MappingOverrides {
 }
 
 async function loadOverrides(tenantId: string) {
-  return toOverrides(await loadReviews(tenantId));
+  return toOverrides(await loadReviews(tenantId), await loadCustomRequirements(tenantId));
 }
 
 /** Review coverage of the built-in crosswalk for one framework. */
@@ -103,6 +125,7 @@ function mappingStats(frameworkId: FrameworkId, reviews: ReviewRow[]) {
     validated: mine.filter((row) => row.decision === "validated").length,
     rejected: mine.filter((row) => row.decision === "rejected").length,
     added: mine.filter((row) => row.decision === "added").length,
+    suggested: allSuggestions().filter((item) => item.frameworkId === frameworkId && !mine.some((row) => row.requirement_id === item.requirementId && row.uc_code === item.ucCode)).length,
     reviewedShare: links.length ? Math.round((links.filter((link) => decided.has(`${link.requirementId}|${link.ucCode}`) || link.basis === "published").length / links.length) * 1000) / 10 : 0,
   };
 }
@@ -117,8 +140,8 @@ function summary(score: ReturnType<typeof scoreFramework>) {
 
 export async function complianceSnapshot(tenantId: string) {
   const db = await scope(tenantId);
-  const [{ states, rows }, scopes, adoptions, reviews] = await Promise.all([loadStates(tenantId), loadScope(tenantId), adoptedIds(tenantId), loadReviews(tenantId)]);
-  const overrides = toOverrides(reviews);
+  const [{ states, rows, documents }, scopes, adoptions, reviews, custom] = await Promise.all([loadStates(tenantId), loadScope(tenantId), adoptedIds(tenantId), loadReviews(tenantId), loadCustomRequirements(tenantId)]);
+  const overrides = toOverrides(reviews, custom);
   const adopted = adoptions.map((row) => row.framework_id);
   const scores = adopted.map((id) => scoreFramework(id, states, scopes.get(id), overrides));
 
@@ -144,6 +167,11 @@ export async function complianceSnapshot(tenantId: string) {
       notes: row?.notes ?? "",
       source: row?.source ?? "none",
       reviewDue: row?.review_due ?? null,
+      attestedBy: row?.updated_by ?? null,
+      attestedAt: row?.updated_at ?? null,
+      countersignedBy: row?.countersigned_by ?? null,
+      attestationExpired: state?.attestationExpired ?? false,
+      awaitingCountersignature: state?.awaitingCountersignature ?? false,
       verification: state?.verification ?? "unverified",
       excepted: state?.excepted ?? false,
       weight: state ? controlWeight(state) : 0,
@@ -155,7 +183,8 @@ export async function complianceSnapshot(tenantId: string) {
   const contradictions = controls.filter((control) => control.verification === "failing" && ["implemented", "partial"].includes(control.status));
   return {
     generatedAt: now,
-    catalog: FRAMEWORKS.map((framework) => ({ id: framework.id, name: framework.name, version: framework.version, authority: framework.authority, kind: framework.kind, granularity: framework.granularity, sourceUrl: framework.sourceUrl, requirements: framework.requirements.length })),
+    catalog: FRAMEWORKS.map((framework) => ({ id: framework.id, name: framework.name, version: framework.version, authority: framework.authority, kind: framework.kind, granularity: framework.granularity, sourceUrl: framework.sourceUrl, requirements: framework.requirements.length, imported: custom.get(framework.id)?.length ?? 0 })),
+    imports: await listImports(tenantId),
     adoptions: adoptions.map((row) => ({ frameworkId: row.framework_id, scope: row.scope, targetDate: row.target_date, adoptedAt: row.adopted_at })),
     scores: scores.map(summary),
     overall: { score: overall, readiness: readinessLabel(overall), frameworks: scores.length },
@@ -166,7 +195,12 @@ export async function complianceSnapshot(tenantId: string) {
     exceptions: exceptions.map((row) => ({ ...row, expired: row.status === "approved" && row.expires_at <= now })),
     policies: policies.map((row) => ({ ...row, ucCodes: JSON.parse(row.uc_codes_json) as string[], overdue: row.status === "approved" && row.next_review !== null && row.next_review < now })),
     trend: trend.reverse(),
+    evidence: [...documents].sort((a, b) => b.uploaded_at.localeCompare(a.uploaded_at)).slice(0, 300),
+    policy: { requireCountersignature: requireCountersignature() },
     alerts: {
+      expiredAttestations: controls.filter((control) => control.attestationExpired).map((control) => ({ code: control.code, title: control.title, reviewDue: control.reviewDue })),
+      expiringAttestations: controls.filter((control) => !control.attestationExpired && control.reviewDue !== null && control.reviewDue > now && control.reviewDue < new Date(Date.now() + 30 * DAY).toISOString() && !["not_started", "not_applicable"].includes(control.status)).map((control) => ({ code: control.code, title: control.title, reviewDue: control.reviewDue })),
+      pendingEvidence: documents.filter((row) => row.status === "pending").length,
       contradictions: contradictions.map((control) => ({ code: control.code, title: control.title, attested: control.status, linkedControlCode: control.linkedControlCode })),
       pendingExceptions: exceptions.filter((row) => row.status === "pending").length,
       expiredExceptions: exceptions.filter((row) => row.status === "approved" && row.expires_at <= now).length,
@@ -177,9 +211,10 @@ export async function complianceSnapshot(tenantId: string) {
 }
 
 export async function frameworkDetail(tenantId: string, frameworkId: FrameworkId) {
-  if (!FRAMEWORK_BY_ID.has(frameworkId)) throw new Error(`Framework ${frameworkId} not found`);
-  const [{ states }, scopes, reviews] = await Promise.all([loadStates(tenantId), loadScope(tenantId), loadReviews(tenantId)]);
-  const overrides = toOverrides(reviews);
+  if (!FRAMEWORK_BY_ID.has(frameworkId)) throw userError(`Framework ${frameworkId} not found`);
+  const [{ states }, scopes, reviews, custom, licensedText] = await Promise.all([loadStates(tenantId), loadScope(tenantId), loadReviews(tenantId), loadCustomRequirements(tenantId), loadLicensedText(tenantId, frameworkId)]);
+  const overrides = toOverrides(reviews, custom);
+  const baseOf = (requirementId: string) => custom.get(frameworkId)?.find((item) => item.id === requirementId)?.controls ?? baseControls(frameworkId, requirementId);
   const score = scoreFramework(frameworkId, states, scopes.get(frameworkId), overrides);
   const decisions = new Map(reviews.filter((row) => row.framework_id === frameworkId).map((row) => [`${row.requirement_id}|${row.uc_code}`, row]));
   return {
@@ -189,10 +224,14 @@ export async function frameworkDetail(tenantId: string, frameworkId: FrameworkId
     requirements: score.requirements.map((requirement) => ({
       ...requirement,
       related: crosswalk(frameworkId, requirement.id, overrides).related.map((entry) => ({ frameworkId: entry.frameworkId, ids: entry.requirements.map((item) => item.id) })),
-      links: [...new Set([...baseControls(frameworkId, requirement.id), ...mappedControls(frameworkId, requirement.id, overrides)])].map((ucCode) => {
+      suggestions: suggestedControls(frameworkId, requirement.id)
+        .filter((item) => !decisions.has(`${requirement.id}|${item.ucCode}`) && !mappedControls(frameworkId, requirement.id, overrides).includes(item.ucCode))
+        .map((item) => ({ ucCode: item.ucCode, title: UC_BY_CODE.get(item.ucCode)?.title ?? item.ucCode, source: item.source })),
+      licensed: licensedText.get(requirement.id) ?? [],
+      links: [...new Set([...baseOf(requirement.id), ...mappedControls(frameworkId, requirement.id, overrides)])].map((ucCode) => {
         const review = decisions.get(`${requirement.id}|${ucCode}`);
-        const builtIn = baseControls(frameworkId, requirement.id).includes(ucCode);
-        return { ucCode, title: UC_BY_CODE.get(ucCode)?.title ?? ucCode, basis: builtIn ? linkBasis(frameworkId, requirement.id, ucCode) : ("tenant" as const), review: review?.decision ?? null, reviewer: review?.reviewer_id ?? null, note: review?.note ?? null, reviewedAt: review?.reviewed_at ?? null };
+        const builtIn = baseOf(requirement.id).includes(ucCode);
+        return { ucCode, title: UC_BY_CODE.get(ucCode)?.title ?? ucCode, basis: builtIn ? linkBasis(frameworkId, requirement.id, ucCode) : ("tenant" as const), source: builtIn ? linkSource(frameworkId, requirement.id, ucCode) : null, review: review?.decision ?? null, reviewer: review?.reviewer_id ?? null, note: review?.note ?? null, reviewedAt: review?.reviewed_at ?? null };
       }),
     })),
   };
@@ -214,13 +253,18 @@ async function refreshSnapshots(actor: Actor, force = false) {
   await (await scope(actor.tenantId)).transaction((tx) => recordSnapshots(tx, actor, adoptions.map((row) => row.framework_id), states, scopes, overrides, force));
 }
 
+/** Records a trend point when a score moved, for changes made outside this module (for example a licensed-content import). */
+export async function refreshComplianceTrend(actor: Actor) {
+  await refreshSnapshots(actor);
+}
+
 export async function recordComplianceSnapshot(actor: Actor) {
   await refreshSnapshots(actor, true);
   return complianceSnapshot(actor.tenantId);
 }
 
 export async function adoptFramework(actor: Actor, input: { frameworkId: FrameworkId; scope: string; targetDate?: string }) {
-  if (!FRAMEWORK_BY_ID.has(input.frameworkId)) throw new Error(`Framework ${input.frameworkId} not found`);
+  if (!FRAMEWORK_BY_ID.has(input.frameworkId)) throw userError(`Framework ${input.frameworkId} not found`);
   const db = await scope(actor.tenantId);
   const at = new Date().toISOString();
   await db.transaction(async (tx) => {
@@ -233,24 +277,26 @@ export async function adoptFramework(actor: Actor, input: { frameworkId: Framewo
 }
 
 export async function setImplementation(actor: Actor, input: { ucCode: string; status: ImplementationStatus; maturity: number; ownerId?: string; linkedControlCode?: string; notes: string; reviewDue?: string }) {
-  if (!UC_BY_CODE.has(input.ucCode)) throw new Error(`Unified control ${input.ucCode} not found`);
+  if (!UC_BY_CODE.has(input.ucCode)) throw userError(`Unified control ${input.ucCode} not found`);
   const db = await scope(actor.tenantId);
   const linkedList = linkedCodes(input.linkedControlCode);
   for (const code of linkedList) {
     const linked = await db.get("SELECT id FROM controls WHERE tenant_id = ? AND code = ? AND valid_to IS NULL", actor.tenantId, code);
-    if (!linked) throw new Error(`Control ${code} not found`);
+    if (!linked) throw userError(`Control ${code} not found`);
   }
   const linkedValue = linkedList.length ? linkedList.join(",") : null;
   if (input.ownerId) {
     const owner = await db.get("SELECT id FROM users WHERE tenant_id = ? AND id = ?", actor.tenantId, input.ownerId);
-    if (!owner) throw new Error(`User ${input.ownerId} not found`);
+    if (!owner) throw userError(`User ${input.ownerId} not found`);
   }
   const at = new Date().toISOString();
+  const reviewDays = REVIEW_DAYS[input.status];
+  const reviewDue = input.reviewDue ?? (reviewDays ? new Date(Date.now() + reviewDays * DAY).toISOString() : null);
   const previous = await db.get<{ status: string }>("SELECT status FROM control_implementations WHERE tenant_id = ? AND uc_code = ?", actor.tenantId, input.ucCode);
   await db.transaction(async (tx) => {
     await tx.run(`INSERT INTO control_implementations (id,tenant_id,uc_code,status,maturity,owner_id,linked_control_code,notes,source,review_due,updated_by,updated_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?)
-      ON CONFLICT(tenant_id, uc_code) DO UPDATE SET status = excluded.status, maturity = excluded.maturity, owner_id = excluded.owner_id, linked_control_code = excluded.linked_control_code, notes = excluded.notes, source = excluded.source, review_due = excluded.review_due, updated_by = excluded.updated_by, updated_at = excluded.updated_at`,
-      `impl_${randomUUID()}`, actor.tenantId, input.ucCode, input.status, input.maturity, input.ownerId ?? null, linkedValue, input.notes, "attested", input.reviewDue ?? null, actor.userId, at);
+      ON CONFLICT(tenant_id, uc_code) DO UPDATE SET status = excluded.status, maturity = excluded.maturity, owner_id = excluded.owner_id, linked_control_code = excluded.linked_control_code, notes = excluded.notes, source = excluded.source, review_due = excluded.review_due, updated_by = excluded.updated_by, updated_at = excluded.updated_at, countersigned_by = NULL, countersigned_at = NULL`,
+      `impl_${randomUUID()}`, actor.tenantId, input.ucCode, input.status, input.maturity, input.ownerId ?? null, linkedValue, input.notes, "attested", reviewDue, actor.userId, at);
     await appendAudit({ tenantId: actor.tenantId, actorId: actor.userId, action: "compliance.implementation_updated", objectType: "unified_control", objectId: input.ucCode, payload: { from: previous?.status ?? "not_started", to: input.status, maturity: input.maturity, linkedControlCode: linkedValue } }, tx);
   });
   await refreshSnapshots(actor);
@@ -285,10 +331,79 @@ export async function linkEvidence(actor: Actor) {
   return { linked };
 }
 
+/** Renews an attestation without changing it: the owner confirms the claim still holds. Restarts the review clock and clears the countersignature. */
+export async function reattest(actor: Actor, input: { ucCode: string; note: string }) {
+  if (!UC_BY_CODE.has(input.ucCode)) throw userError(`Unified control ${input.ucCode} not found`);
+  const db = await scope(actor.tenantId);
+  const row = await db.get<{ status: ImplementationStatus }>("SELECT status FROM control_implementations WHERE tenant_id = ? AND uc_code = ?", actor.tenantId, input.ucCode);
+  const days = row ? REVIEW_DAYS[row.status] : undefined;
+  if (!row || !days) throw userError("Only an implemented, partial or planned control can be re-attested");
+  const at = new Date().toISOString();
+  const reviewDue = new Date(Date.now() + days * DAY).toISOString();
+  await db.transaction(async (tx) => {
+    await tx.run("UPDATE control_implementations SET review_due = ?, updated_by = ?, updated_at = ?, countersigned_by = NULL, countersigned_at = NULL WHERE tenant_id = ? AND uc_code = ?", reviewDue, actor.userId, at, actor.tenantId, input.ucCode);
+    await appendAudit({ tenantId: actor.tenantId, actorId: actor.userId, action: "compliance.attestation_renewed", objectType: "unified_control", objectId: input.ucCode, payload: { note: input.note, status: row.status } }, tx);
+  });
+  await refreshSnapshots(actor);
+  return { ucCode: input.ucCode, reviewDue };
+}
+
+/** A second person confirms the current attestation. The person who made it cannot. Changing the attestation clears the countersignature. */
+export async function countersign(actor: Actor, input: { ucCode: string; note: string }) {
+  if (!UC_BY_CODE.has(input.ucCode)) throw userError(`Unified control ${input.ucCode} not found`);
+  const db = await scope(actor.tenantId);
+  const row = await db.get<{ status: ImplementationStatus; updated_by: string; countersigned_by: string | null }>("SELECT status, updated_by, countersigned_by FROM control_implementations WHERE tenant_id = ? AND uc_code = ?", actor.tenantId, input.ucCode);
+  if (!row || (row.status !== "implemented" && row.status !== "partial")) throw userError("Only an implemented or partial attestation can be countersigned");
+  if (row.updated_by === actor.userId) throw userError("Separation of duties: the person who made the attestation cannot countersign it");
+  await db.transaction(async (tx) => {
+    const result = await tx.run("UPDATE control_implementations SET countersigned_by = ?, countersigned_at = ? WHERE tenant_id = ? AND uc_code = ? AND updated_by = ?", actor.userId, new Date().toISOString(), actor.tenantId, input.ucCode, row.updated_by);
+    if (result.changes !== 1) throw userError("The attestation changed while you were reviewing it; review it again");
+    await appendAudit({ tenantId: actor.tenantId, actorId: actor.userId, action: "compliance.attestation_countersigned", objectType: "unified_control", objectId: input.ucCode, payload: { note: input.note, attestedBy: row.updated_by } }, tx);
+  });
+  await refreshSnapshots(actor);
+  return { ucCode: input.ucCode, countersignedBy: actor.userId };
+}
+
+const MAX_EVIDENCE_DAYS = 730;
+
+/** Stores a document in the evidence vault (hashed, signed, versioned) and files it against a unified control, pending review. */
+export async function attachEvidence(actor: Actor, input: { ucCode: string; title: string; kind: "document" | "record" | "report" | "certificate"; validUntil: string; note: string; file: File }) {
+  if (!UC_BY_CODE.has(input.ucCode)) throw userError(`Unified control ${input.ucCode} not found`);
+  const until = Date.parse(input.validUntil);
+  if (!(until > Date.now())) throw userError("Evidence must be valid until a future date");
+  if (until - Date.now() > MAX_EVIDENCE_DAYS * DAY) throw userError(`Evidence cannot be declared valid for more than ${MAX_EVIDENCE_DAYS} days`);
+  const stored = await storeVaultDocument(actor, input.file, `control-evidence:${input.kind}`);
+  const id = `cev_${randomUUID()}`;
+  const db = await scope(actor.tenantId);
+  await db.transaction(async (tx) => {
+    await tx.run(`INSERT INTO control_evidence (id,tenant_id,uc_code,title,kind,vault_document_id,content_hash,note,valid_until,uploaded_by,uploaded_at,status) VALUES (?,?,?,?,?,?,?,?,?,?,?,?)`,
+      id, actor.tenantId, input.ucCode, input.title, input.kind, stored.id, stored.hash, input.note, new Date(until).toISOString(), actor.userId, new Date().toISOString(), "pending");
+    await appendAudit({ tenantId: actor.tenantId, actorId: actor.userId, action: "compliance.evidence_attached", objectType: "control_evidence", objectId: id, payload: { ucCode: input.ucCode, hash: stored.hash, kind: input.kind, vaultDocumentId: stored.id } }, tx);
+  });
+  return { id, status: "pending", hash: stored.hash, duplicateDocument: stored.duplicate };
+}
+
+/** Accepting evidence makes the control "documented" while it is valid. The reviewer cannot be the uploader, and a decision is final. */
+export async function reviewEvidence(actor: Actor, input: { id: string; accept: boolean; note: string }) {
+  const db = await scope(actor.tenantId);
+  const row = await db.get<EvidenceRow>("SELECT * FROM control_evidence WHERE tenant_id = ? AND id = ?", actor.tenantId, input.id);
+  if (!row) throw userError("Evidence not found");
+  if (row.uploaded_by === actor.userId) throw userError("Separation of duties: the person who uploaded the evidence cannot review it");
+  const status = input.accept ? "accepted" : "rejected";
+  await db.transaction(async (tx) => {
+    const result = await tx.run("UPDATE control_evidence SET status = ?, reviewed_by = ?, reviewed_at = ?, review_note = ? WHERE tenant_id = ? AND id = ? AND status = 'pending'", status, actor.userId, new Date().toISOString(), input.note, actor.tenantId, input.id);
+    if (result.changes !== 1) throw userError("Evidence has already been reviewed");
+    await appendAudit({ tenantId: actor.tenantId, actorId: actor.userId, action: `compliance.evidence_${status}`, objectType: "control_evidence", objectId: input.id, payload: { ucCode: row.uc_code, hash: row.content_hash, note: input.note } }, tx);
+  });
+  await refreshSnapshots(actor);
+  return { id: input.id, status };
+}
+
 export async function setRequirementScope(actor: Actor, input: { frameworkId: FrameworkId; requirementId: string; applicable: boolean; justification?: string }) {
   const framework = FRAMEWORK_BY_ID.get(input.frameworkId);
-  if (!framework?.requirements.some((requirement) => requirement.id === input.requirementId)) throw new Error(`Requirement ${input.requirementId} not found`);
-  if (!input.applicable && (input.justification ?? "").trim().length < 15) throw new Error("A justification of at least 15 characters is required to exclude a requirement");
+  const imported = (await loadCustomRequirements(actor.tenantId)).get(input.frameworkId)?.some((item) => item.id === input.requirementId);
+  if (!imported && !framework?.requirements.some((requirement) => requirement.id === input.requirementId)) throw userError(`Requirement ${input.requirementId} not found`);
+  if (!input.applicable && (input.justification ?? "").trim().length < 15) throw userError("A justification of at least 15 characters is required to exclude a requirement");
   const db = await scope(actor.tenantId);
   await db.transaction(async (tx) => {
     if (input.applicable) await tx.run("DELETE FROM requirement_scope WHERE tenant_id = ? AND framework_id = ? AND requirement_id = ?", actor.tenantId, input.frameworkId, input.requirementId);
@@ -302,11 +417,11 @@ export async function setRequirementScope(actor: Actor, input: { frameworkId: Fr
 }
 
 export async function requestException(actor: Actor, input: { ucCode: string; title: string; justification: string; compensatingControls: string; riskLevel: "low" | "medium" | "high" | "critical"; expiresAt: string }) {
-  if (!UC_BY_CODE.has(input.ucCode)) throw new Error(`Unified control ${input.ucCode} not found`);
+  if (!UC_BY_CODE.has(input.ucCode)) throw userError(`Unified control ${input.ucCode} not found`);
   const expires = Date.parse(input.expiresAt);
   const now = Date.now();
-  if (!(expires > now)) throw new Error("An exception must expire in the future");
-  if (expires - now > MAX_EXCEPTION_DAYS * DAY) throw new Error(`An exception cannot last longer than ${MAX_EXCEPTION_DAYS} days; re-approve it instead`);
+  if (!(expires > now)) throw userError("An exception must expire in the future");
+  if (expires - now > MAX_EXCEPTION_DAYS * DAY) throw userError(`An exception cannot last longer than ${MAX_EXCEPTION_DAYS} days; re-approve it instead`);
   const id = `exc_${randomUUID()}`;
   const at = new Date().toISOString();
   await (await scope(actor.tenantId)).transaction(async (tx) => {
@@ -320,27 +435,27 @@ export async function requestException(actor: Actor, input: { ucCode: string; ti
 export async function decideException(actor: Actor, input: { id: string; approve: boolean; note: string }) {
   const db = await scope(actor.tenantId);
   const row = await db.get<ExceptionRow>("SELECT * FROM compliance_exceptions WHERE tenant_id = ? AND id = ?", actor.tenantId, input.id);
-  if (!row) throw new Error("Exception not found");
-  if (row.requested_by === actor.userId) throw new Error("Separation of duties: the requester cannot decide their own exception");
+  if (!row) throw userError("Exception not found");
+  if (row.requested_by === actor.userId) throw userError("Separation of duties: the requester cannot decide their own exception");
   const status = input.approve ? "approved" : "rejected";
   await db.transaction(async (tx) => {
     // The status guard makes a decision single-use even under concurrent approvals.
     const result = await tx.run("UPDATE compliance_exceptions SET status = ?, approved_by = ?, decided_at = ?, decision_note = ?, source = 'attested' WHERE tenant_id = ? AND id = ? AND status = 'pending'", status, actor.userId, new Date().toISOString(), input.note, actor.tenantId, input.id);
-    if (result.changes !== 1) throw new Error("Exception has already been decided");
+    if (result.changes !== 1) throw userError("Exception has already been decided");
     await appendAudit({ tenantId: actor.tenantId, actorId: actor.userId, action: `compliance.exception_${status}`, objectType: "exception", objectId: input.id, payload: { ucCode: row.uc_code, note: input.note } }, tx);
   });
   return { id: input.id, status };
 }
 
 export async function upsertPolicy(actor: Actor, input: { id?: string; title: string; version: string; status: "draft" | "in_review" | "approved" | "retired"; ownerId?: string; nextReview?: string; ucCodes: string[]; content?: string }) {
-  for (const code of input.ucCodes) if (!UC_BY_CODE.has(code)) throw new Error(`Unified control ${code} not found`);
+  for (const code of input.ucCodes) if (!UC_BY_CODE.has(code)) throw userError(`Unified control ${code} not found`);
   const db = await scope(actor.tenantId);
   const at = new Date().toISOString();
   const id = input.id ?? `pol_${randomUUID()}`;
   const hash = input.content ? sha256(input.content) : null;
   if (input.id) {
     const existing = await db.get("SELECT id FROM policy_register WHERE tenant_id = ? AND id = ?", actor.tenantId, input.id);
-    if (!existing) throw new Error("Policy not found");
+    if (!existing) throw userError("Policy not found");
   }
   await db.transaction(async (tx) => {
     await tx.run(`INSERT INTO policy_register (id,tenant_id,title,version,owner_id,status,approved_at,next_review,uc_codes_json,document_hash,created_at,updated_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?)
@@ -354,12 +469,13 @@ export async function upsertPolicy(actor: Actor, input: { id?: string; title: st
 /** Records a reviewer's decision on a crosswalk link. `reset` returns it to the built-in state. */
 export async function reviewMapping(actor: Actor, input: { frameworkId: FrameworkId; requirementId: string; ucCode: string; decision: "validated" | "rejected" | "added" | "reset"; note?: string }) {
   const framework = FRAMEWORK_BY_ID.get(input.frameworkId);
-  if (!framework?.requirements.some((requirement) => requirement.id === input.requirementId)) throw new Error(`Requirement ${input.requirementId} not found`);
-  if (!UC_BY_CODE.has(input.ucCode)) throw new Error(`Unified control ${input.ucCode} not found`);
-  const builtIn = baseControls(input.frameworkId, input.requirementId).includes(input.ucCode);
-  if (input.decision === "added" && builtIn) throw new Error("This link already exists in the built-in crosswalk");
-  if ((input.decision === "validated" || input.decision === "rejected") && !builtIn) throw new Error("Only links of the built-in crosswalk can be validated or rejected; remove an added link with reset");
-  if (input.decision !== "reset" && (input.note ?? "").trim().length < 10) throw new Error("A review note of at least 10 characters is required");
+  const imported = (await loadCustomRequirements(actor.tenantId)).get(input.frameworkId)?.find((item) => item.id === input.requirementId);
+  if (!imported && !framework?.requirements.some((requirement) => requirement.id === input.requirementId)) throw userError(`Requirement ${input.requirementId} not found`);
+  if (!UC_BY_CODE.has(input.ucCode)) throw userError(`Unified control ${input.ucCode} not found`);
+  const builtIn = (imported?.controls ?? baseControls(input.frameworkId, input.requirementId)).includes(input.ucCode);
+  if (input.decision === "added" && builtIn) throw userError("This link already exists in the built-in crosswalk");
+  if ((input.decision === "validated" || input.decision === "rejected") && !builtIn) throw userError("Only links of the built-in crosswalk can be validated or rejected; remove an added link with reset");
+  if (input.decision !== "reset" && (input.note ?? "").trim().length < 10) throw userError("A review note of at least 10 characters is required");
   const db = await scope(actor.tenantId);
   await db.transaction(async (tx) => {
     if (input.decision === "reset") await tx.run("DELETE FROM mapping_reviews WHERE tenant_id = ? AND framework_id = ? AND requirement_id = ? AND uc_code = ?", actor.tenantId, input.frameworkId, input.requirementId, input.ucCode);

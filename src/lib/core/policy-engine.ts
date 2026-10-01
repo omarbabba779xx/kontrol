@@ -82,7 +82,7 @@ export function evaluatePolicy(policy: Policy, facts: Record<string, unknown>, n
   return { passed, tests, failed: [...allResults.filter((result) => !result.passed), ...anyFailed, ...noneResults.filter((result) => !result.passed)] };
 }
 
-export async function evaluateControl(actor: Actor, input: { controlCode: string; assetId: string; facts: Record<string, unknown>; source: string; periodStart?: string; periodEnd?: string }) {
+export async function evaluateControl(actor: Actor, input: { controlCode: string; assetId: string; facts: Record<string, unknown>; source: string; periodStart?: string; periodEnd?: string; /** How long the evidence stays current; defaults to one day. */ validForDays?: number }) {
   const db = (await getDb()).scope(actor.tenantId);
   const control = await db.get<{ id: string; code: string; title: string; objective: string; policy_json: string }>("SELECT * FROM controls WHERE tenant_id = ? AND code = ? AND valid_to IS NULL", actor.tenantId, input.controlCode);
   if (!control) throw new Error(`Control ${input.controlCode} not found`);
@@ -100,7 +100,7 @@ export async function evaluateControl(actor: Actor, input: { controlCode: string
 
   const finding = await db.transaction(async (tx) => {
     await tx.run(`INSERT INTO evidence (id,tenant_id,control_id,asset_id,name,source,collection_method,content_type,content_json,content_hash,period_start,period_end,collected_at,expires_at,status,created_by) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
-      evidenceId, actor.tenantId, control.id, asset.id, `${control.title} evaluation`, input.source, "automated policy evaluation", "application/vnd.kontrol.control-result+json", content, sha256(content), input.periodStart ?? null, input.periodEnd ?? null, evaluatedAt, new Date(Date.now() + 86_400_000).toISOString(), result.passed ? "healthy" : "failed", actor.userId);
+      evidenceId, actor.tenantId, control.id, asset.id, `${control.title} evaluation`, input.source, "automated policy evaluation", "application/vnd.kontrol.control-result+json", content, sha256(content), input.periodStart ?? null, input.periodEnd ?? null, evaluatedAt, new Date(nowMs + Math.max(1, input.validForDays ?? 1) * 86_400_000).toISOString(), result.passed ? "healthy" : "failed", actor.userId);
 
     let outcome: string | string[];
     if (!result.passed) {

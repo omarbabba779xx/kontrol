@@ -1,11 +1,15 @@
 import { FRAMEWORKS, FRAMEWORK_BY_ID } from "@/lib/frameworks/catalog";
 import { CSF_SUBCATEGORIES } from "@/lib/frameworks/data/csf-data";
+import { ENISA_POINTS } from "@/lib/frameworks/data/enisa-data";
 import { UNIFIED_CONTROLS } from "@/lib/frameworks/unified";
 import type { FrameworkId } from "@/lib/frameworks/types";
 
 /**
  * Where a requirement-to-control link comes from.
- *  - published: derived from an official crosswalk (NIST CSF 2.0 informative references to ISO/IEC 27001:2022)
+ *  - published: corroborated by an official crosswalk, with the source named: NIST's CSF 2.0 informative references
+ *    (to ISO/IEC 27001:2022, PCI DSS and CIS Controls) and ENISA's NIS2 technical implementation mapping table.
+ *    The control layer itself is Kontrol's; "published" says the requirement is officially related to a requirement
+ *    that this control already serves.
  *  - editorial: authored by the Kontrol team and subject to review in the Compliance hub
  */
 export type Basis = "published" | "editorial";
@@ -135,7 +139,7 @@ A.10.3: UC-AI-07 UC-TPM-01
 A.10.4: UC-AI-07`,
 };
 
-type Resolved = { ucs: string[]; basis: Map<string, Basis> };
+type Resolved = { ucs: string[]; basis: Map<string, Basis>; source: Map<string, string> };
 
 function parseRefinements(text: string | undefined) {
   const out = new Map<string, string[]>();
@@ -159,14 +163,24 @@ for (const control of UNIFIED_CONTROLS) {
 /** NIST CSF 2.0 subcategory -> controls, derived from NIST's own informative references to ISO/IEC 27001:2022. */
 function deriveCsf(): Map<string, string[]> {
   const iso = listing.get("iso27001")!;
+  const csf = listing.get("nist_csf")!;
   const out = new Map<string, string[]>();
   for (const [id, , refs] of CSF_SUBCATEGORIES) {
     const codes = new Set<string>();
     for (const ref of refs) for (const code of iso.get(ref) ?? []) codes.add(code);
-    if (codes.size) out.set(id, [...codes]);
+    if (!codes.size) continue;
+    // NIST cites many ISO controls per subcategory, including broad governance ones. Keeping only the controls
+    // that also belong to the subcategory's own category removes that noise; if nothing is left the raw set is used.
+    const inCategory = new Set(csf.get(id.split("-")[0]) ?? []);
+    const focused = [...codes].filter((code) => inCategory.has(code));
+    out.set(id, focused.length ? focused : [...codes]);
   }
   return out;
 }
+
+const CSF_SOURCE = "NIST CSF 2.0 informative references to ISO/IEC 27001:2022";
+const NIST_SOURCE = "NIST CSF 2.0 informative references";
+const ENISA_SOURCE = "ENISA NIS2 technical implementation mapping table v1.2";
 
 const resolved = new Map<FrameworkId, Map<string, Resolved>>();
 
@@ -178,12 +192,13 @@ for (const framework of FRAMEWORKS) {
   for (const requirement of framework.requirements) {
     let codes: string[] | undefined;
     let basis: Basis = "editorial";
+    let source = "";
     if (refined.has(requirement.id)) codes = refined.get(requirement.id);
-    else if (derived.has(requirement.id)) { codes = derived.get(requirement.id); basis = "published"; }
+    else if (derived.has(requirement.id)) { codes = derived.get(requirement.id); basis = "published"; source = CSF_SOURCE; }
     else if (byId.has(requirement.id)) codes = byId.get(requirement.id);
     else if (requirement.parent && byId.has(requirement.parent)) codes = byId.get(requirement.parent);
     const unique = [...new Set(codes ?? [])];
-    map.set(requirement.id, { ucs: unique, basis: new Map(unique.map((code) => [code, basis])) });
+    map.set(requirement.id, { ucs: unique, basis: new Map(unique.map((code) => [code, basis])), source: new Map(unique.filter(() => basis === "published").map((code) => [code, source])) });
   }
   // A control that lists a whole group must not vanish because every child was refined elsewhere.
   for (const [groupId, codes] of byId) {
@@ -201,6 +216,82 @@ for (const framework of FRAMEWORKS) {
   resolved.set(framework.id, map);
 }
 
+type Edge = { source: string; support: number };
+type Edges = Map<string, Map<string, Edge>>; // requirement -> control -> source and how many independent references back it
+const published = new Map<FrameworkId, Edges>();
+function addEdge(frameworkId: FrameworkId, requirementId: string, ucCode: string, source: string) {
+  const edges = published.get(frameworkId) ?? new Map<string, Map<string, Edge>>();
+  const forRequirement = edges.get(requirementId) ?? new Map<string, Edge>();
+  const existing = forRequirement.get(ucCode);
+  if (existing) existing.support += 1;
+  else forRequirement.set(ucCode, { source, support: 1 });
+  edges.set(requirementId, forRequirement);
+  published.set(frameworkId, edges);
+}
+
+// NIST publishes PCI DSS and CIS Controls references per CSF subcategory; the subcategory's controls carry over.
+for (const [id, , , pciRefs, cisRefs] of CSF_SUBCATEGORIES) {
+  const codes = resolved.get("nist_csf")!.get(id)?.ucs ?? [];
+  for (const ref of pciRefs) if (resolved.get("pci_dss")!.has(ref)) for (const code of codes) addEdge("pci_dss", ref, code, `${NIST_SOURCE} via ${id}`);
+  for (const ref of cisRefs) if (resolved.get("cis_v8")!.has(ref)) for (const code of codes) addEdge("cis_v8", ref, code, `${NIST_SOURCE} via ${id}`);
+}
+
+/** CIR 2024/2690 Annex points elaborate NIS2 Article 21; this is the article each point belongs to. */
+function nis2Articles(point: string): string[] {
+  const [section, item] = point.split(".");
+  switch (section) {
+    case "1": return ["Art.21(2)(a)"];
+    case "2": return item === "1" ? ["Art.21(2)(a)"] : ["Art.21(2)(f)"];
+    case "3": return ["Art.21(2)(b)"];
+    case "4": return ["Art.21(2)(c)"];
+    case "5": return ["Art.21(2)(d)"];
+    case "6": return ["Art.21(2)(e)"];
+    case "7": return ["Art.21(2)(f)"];
+    case "8": return ["Art.21(2)(g)"];
+    case "9": return ["Art.21(2)(h)"];
+    case "10": return ["Art.21(2)(i)"];
+    case "11": return Number(item) >= 6 ? ["Art.21(2)(i)", "Art.21(2)(j)"] : ["Art.21(2)(i)"];
+    case "12": return ["Art.21(2)(i)"];
+    case "13": return ["Art.21(1)"];
+    default: return [];
+  }
+}
+
+const isoListing = listing.get("iso27001")!;
+for (const [point, , isoRefs] of ENISA_POINTS) {
+  for (const article of nis2Articles(point)) {
+    if (!resolved.get("nis2")!.has(article)) continue;
+    for (const ref of isoRefs) for (const code of isoListing.get(ref) ?? []) addEdge("nis2", article, code, `${ENISA_SOURCE} (point ${point})`);
+  }
+}
+
+// Corroborate existing links, and keep what the sources add as suggestions for a reviewer.
+const suggestions = new Map<FrameworkId, Map<string, Array<{ ucCode: string; source: string }>>>();
+for (const [frameworkId, edges] of published) {
+  const entries = resolved.get(frameworkId)!;
+  const bySuggestion = new Map<string, Array<{ ucCode: string; source: string }>>();
+  for (const [requirementId, controls] of edges) {
+    const entry = entries.get(requirementId);
+    if (!entry) continue;
+    for (const [ucCode, edge] of controls) {
+      if (entry.ucs.includes(ucCode)) {
+        if (entry.basis.get(ucCode) !== "published") { entry.basis.set(ucCode, "published"); entry.source.set(ucCode, edge.source); }
+      } else if (frameworkId === "nis2" || edge.support >= 2) {
+        // ENISA relates NIS2 to ISO directly. For PCI DSS and CIS the relation runs through CSF subcategories,
+        // so a control is only suggested when at least two of them agree.
+        bySuggestion.set(requirementId, [...(bySuggestion.get(requirementId) ?? []), { ucCode, source: edge.source }]);
+      }
+    }
+  }
+  suggestions.set(frameworkId, bySuggestion);
+}
+
+/** Controls a new sub-requirement inherits from its parent: a requirement of the catalogue, or a group. */
+export function controlsForParent(frameworkId: FrameworkId, parentId: string): string[] {
+  const requirement = resolved.get(frameworkId)?.get(parentId);
+  return requirement ? [...requirement.ucs] : [...(listing.get(frameworkId)?.get(parentId) ?? [])];
+}
+
 /** Unified controls linked to a requirement in the built-in crosswalk. */
 export function baseControls(frameworkId: FrameworkId, requirementId: string): string[] {
   return resolved.get(frameworkId)?.get(requirementId)?.ucs ?? [];
@@ -210,6 +301,22 @@ export function linkBasis(frameworkId: FrameworkId, requirementId: string, ucCod
   return resolved.get(frameworkId)?.get(requirementId)?.basis.get(ucCode) ?? "editorial";
 }
 
+/** The official source that corroborates a link, when it has one. */
+export function linkSource(frameworkId: FrameworkId, requirementId: string, ucCode: string): string | null {
+  return resolved.get(frameworkId)?.get(requirementId)?.source.get(ucCode) ?? null;
+}
+
+/** Links an official crosswalk implies but that are not in the built-in mapping. Offered to reviewers, never applied silently. */
+export function suggestedControls(frameworkId: FrameworkId, requirementId: string): Array<{ ucCode: string; source: string }> {
+  return suggestions.get(frameworkId)?.get(requirementId) ?? [];
+}
+
+export function allSuggestions() {
+  const out: Array<{ frameworkId: FrameworkId; requirementId: string; ucCode: string; source: string }> = [];
+  for (const [frameworkId, byRequirement] of suggestions) for (const [requirementId, items] of byRequirement) for (const item of items) out.push({ frameworkId, requirementId, ...item });
+  return out;
+}
+
 /** Requirements a unified control is linked to in the built-in crosswalk. */
 export function baseRequirements(ucCode: string, frameworkId: FrameworkId): string[] {
   const out: string[] = [];
@@ -217,11 +324,11 @@ export function baseRequirements(ucCode: string, frameworkId: FrameworkId): stri
   return out;
 }
 
-export type MappingLink = { frameworkId: FrameworkId; requirementId: string; ucCode: string; basis: Basis };
+export type MappingLink = { frameworkId: FrameworkId; requirementId: string; ucCode: string; basis: Basis; source: string | null };
 
 export function allLinks(): MappingLink[] {
   const links: MappingLink[] = [];
-  for (const [frameworkId, entries] of resolved) for (const [requirementId, entry] of entries) for (const ucCode of entry.ucs) links.push({ frameworkId, requirementId, ucCode, basis: entry.basis.get(ucCode) ?? "editorial" });
+  for (const [frameworkId, entries] of resolved) for (const [requirementId, entry] of entries) for (const ucCode of entry.ucs) links.push({ frameworkId, requirementId, ucCode, basis: entry.basis.get(ucCode) ?? "editorial", source: entry.source.get(ucCode) ?? null });
   return links;
 }
 

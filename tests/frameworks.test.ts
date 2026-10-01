@@ -53,7 +53,7 @@ test("NIST CSF links come from NIST's published ISO 27001:2022 references", () =
   assert.equal(linkBasis("nist_csf", "PR.AA-03", "UC-IAM-02"), "published");
   assert.ok(baseControls("nist_csf", "PR.AA-03").includes("UC-IAM-02"));
   const published = allLinks().filter((link) => link.frameworkId === "nist_csf" && link.basis === "published").length;
-  assert.ok(published > 150, `expected a large published share, got ${published}`);
+  assert.ok(published > 100, `expected a large published share, got ${published}`);
 });
 
 test("sub-requirements inherit their group mapping unless refined", () => {
@@ -115,4 +115,25 @@ test("overlap matrix reports a high ISO 27001 to SOC 2 reuse", () => {
   const row = overlapMatrix().find((entry) => entry.base === "iso27001")!;
   const soc2 = row.targets.find((target) => target.target === "soc2")!;
   assert.ok(soc2.share >= 70, `expected strong overlap, got ${soc2.share}%`);
+});
+
+test("official crosswalks corroborate links with a named source and propose the links they imply", async () => {
+  const { allSuggestions, linkSource } = await import("../src/lib/frameworks/mapping");
+  const links = allLinks();
+  const published = (framework: string) => links.filter((link) => link.frameworkId === framework && link.basis === "published");
+
+  assert.ok(published("nis2").length >= 8, "ENISA's table corroborates NIS2 links");
+  assert.match(linkSource("nis2", "Art.21(2)(h)", "UC-DAT-03") ?? "", /ENISA/);
+  assert.ok(published("pci_dss").length > 5 && published("cis_v8").length > 10, "NIST's PCI DSS and CIS references corroborate links");
+  assert.match(published("cis_v8")[0].source ?? "", /NIST CSF 2\.0/);
+  for (const link of links.filter((item) => item.basis === "published")) assert.ok(link.source, `${link.frameworkId} ${link.requirementId} ${link.ucCode} names its source`);
+  for (const link of links.filter((item) => item.basis === "editorial")) assert.equal(link.source, null);
+
+  const suggestions = allSuggestions();
+  assert.ok(suggestions.length > 0);
+  for (const item of suggestions) {
+    assert.ok(!baseControls(item.frameworkId, item.requirementId).includes(item.ucCode), `${item.requirementId} already links ${item.ucCode}`);
+    assert.ok(UNIFIED_CONTROLS.some((control) => control.code === item.ucCode));
+    assert.ok(item.source.length > 10);
+  }
 });

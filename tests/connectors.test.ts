@@ -216,13 +216,15 @@ test("a sync installs the control pack, opens findings for failures and records 
 
   const db = (await getDb()).scope(admin.tenantId);
   const codes = (await db.all<{ code: string }>("SELECT code FROM controls WHERE tenant_id = ? AND code LIKE 'CTL-%' ORDER BY code", admin.tenantId)).map((row) => row.code);
-  for (const control of PACK) assert.ok(codes.includes(control.code), `${control.code} installed`);
+  for (const control of PACK.filter((item) => item.connector !== "people")) assert.ok(codes.includes(control.code), `${control.code} installed`);
+  assert.ok(!codes.includes("CTL-HR-001"), "people controls wait for their first report or an explicit install");
   const open = await db.all<{ title: string }>("SELECT title FROM findings WHERE tenant_id = ? AND status = 'open'", admin.tenantId);
   assert.ok(open.some((finding) => finding.title.includes("Production branch protection")));
   assert.ok(open.some((finding) => finding.title.includes("Administrators enrolled in MFA")));
   assert.ok(!open.some((finding) => finding.title.includes("CloudTrail")));
 
   const { installControlPack } = await import("../src/lib/connectors");
+  assert.deepEqual((await installControlPack(admin)).installed, ["CTL-HR-001", "CTL-HR-002", "CTL-HR-003"], "an explicit install adds what is missing");
   assert.deepEqual((await installControlPack(admin)).installed, [], "installing the pack twice changes nothing");
 });
 

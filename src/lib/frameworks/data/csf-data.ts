@@ -90,1015 +90,322 @@ export const CSF_CATEGORIES: Array<{ id: string; title: string }> = [
   "title": "Incident Recovery Communication"
  }
 ];
-/** [id, title, ISO/IEC 27001:2022 informative references published by NIST] */
-export const CSF_SUBCATEGORIES: Array<[string, string, string[]]> = [
- [
-  "GV.OC-01",
-  "The organizational mission is understood and informs cybersecurity risk management",
-  [
-   "C4.1",
-   "C6.1",
-   "C8.1",
-   "C8.2",
-   "C8.3"
-  ]
- ],
- [
-  "GV.OC-02",
-  "Internal and external stakeholders are understood, and their needs and expectations regarding cybersecurity risk management are understood and considered",
-  [
-   "C4.1",
-   "C4.2",
-   "C4.4",
-   "C6.1",
-   "C8.1",
-   "C8.2",
-   "C8.3"
-  ]
- ],
- [
-  "GV.OC-03",
-  "Legal, regulatory, and contractual requirements regarding cybersecurity - including privacy and civil liberties obligations - are understood and managed",
-  [
-   "C4.2",
-   "A5.20",
-   "A5.31"
-  ]
- ],
- [
-  "GV.OC-04",
-  "Critical objectives, capabilities, and services that external stakeholders depend on or expect from the organization are understood and communicated",
-  [
-   "C4.2",
-   "A5.20",
-   "A5.31"
-  ]
- ],
- [
-  "GV.OC-05",
-  "Outcomes, capabilities, and services that the organization depends on are understood and communicated",
-  [
-   "A5.3",
-   "A5.8"
-  ]
- ],
- [
-  "GV.RM-01",
-  "Risk management objectives are established and agreed to by organizational stakeholders",
-  [
-   "C6.1",
-   "A5.1"
-  ]
- ],
- [
-  "GV.RM-02",
-  "Risk appetite and risk tolerance statements are established, communicated, and maintained",
-  [
-   "C6.1",
-   "A5.1"
-  ]
- ],
- [
-  "GV.RM-03",
-  "Cybersecurity risk management activities and outcomes are included in enterprise risk management processes",
-  [
-   "C6.1",
-   "A5.1"
-  ]
- ],
- [
-  "GV.RM-04",
-  "Strategic direction that describes appropriate risk response options is established and communicated",
-  [
-   "C6.1",
-   "A5.1"
-  ]
- ],
- [
-  "GV.RM-05",
-  "Lines of communication across the organization are established for cybersecurity risks, including risks from suppliers and other third parties",
-  [
-   "C6.1",
-   "A5.1",
-   "A5.19"
-  ]
- ],
- [
-  "GV.RM-06",
-  "A standardized method for calculating, documenting, categorizing, and prioritizing cybersecurity risks is established and communicated",
-  [
-   "C6.1",
-   "A5.1"
-  ]
- ],
- [
-  "GV.RM-07",
-  "Strategic opportunities (i.e., positive risks) are characterized and are included in organizational cybersecurity risk discussions",
-  [
-   "C6.11"
-  ]
- ],
- [
-  "GV.RR-01",
-  "Organizational leadership is responsible and accountable for cybersecurity risk and fosters a culture that is risk-aware, ethical, and continually improving",
-  [
-   "C7.2",
-   "A5.4"
-  ]
- ],
- [
-  "GV.RR-02",
-  "Roles, responsibilities, and authorities related to cybersecurity risk management are established, communicated, understood, and enforced",
-  [
-   "C7.2",
-   "A5.2",
-   "A5.3"
-  ]
- ],
- [
-  "GV.RR-03",
-  "Adequate resources are allocated commensurate with the cybersecurity risk strategy, roles, responsibilities, and policies",
-  [
-   "C7.1",
-   "C7.2",
-   "A6.6"
-  ]
- ],
- [
-  "GV.RR-04",
-  "Cybersecurity is included in human resources practices",
-  [
-   "C7.3",
-   "A6.1",
-   "A6.2",
-   "A6.3",
-   "A6.4",
-   "A6.5",
-   "A6.6",
-   "A6.7",
-   "A6.8"
-  ]
- ],
- [
-  "GV.PO-01",
-  "Policy for managing cybersecurity risks is established based on organizational context, cybersecurity strategy, and priorities and is communicated and enforced",
-  [
-   "C5.2",
-   "A5.1",
-   "A5.37",
-   "A6.1",
-   "A6.2",
-   "A6.4",
-   "A6.5",
-   "A6.7",
-   "A6.8"
-  ]
- ],
- [
-  "GV.PO-02",
-  "Policy for managing cybersecurity risks is reviewed, updated, communicated, and enforced to reflect changes in requirements, threats, technology, and organizational mission",
-  [
-   "C5.2",
-   "A5.1",
-   "A5.31",
-   "A5.32",
-   "A5.34"
-  ]
- ],
- [
-  "GV.OV-01",
-  "Cybersecurity risk management strategy outcomes are reviewed to inform and adjust strategy and direction",
-  [
-   "C9.1",
-   "A5.1",
-   "A5.5",
-   "A5.6",
-   "A5.19",
-   "A5.24"
-  ]
- ],
- [
-  "GV.OV-02",
-  "The cybersecurity risk management strategy is reviewed and adjusted to ensure coverage of organizational requirements and risks",
-  [
-   "C9.1",
-   "A5.1",
-   "A5.19",
-   "A5.27",
-   "A5.35",
-   "A5.36"
-  ]
- ],
- [
-  "GV.OV-03",
-  "Organizational cybersecurity risk management performance is evaluated and reviewed for adjustments needed",
-  [
-   "C9.1",
-   "A5.1",
-   "A5.19",
-   "A5.20",
-   "A8.30",
-   "A8.32",
-   "A8.34"
-  ]
- ],
- [
-  "GV.SC-01",
-  "A cybersecurity supply chain risk management program, strategy, objectives, policies, and processes are established and agreed to by organizational stakeholders",
-  [
-   "C8.1",
-   "A5.1",
-   "A5.19",
-   "A5.20",
-   "A5.21",
-   "A5.22"
-  ]
- ],
- [
-  "GV.SC-02",
-  "Cybersecurity roles and responsibilities for suppliers, customers, and partners are established, communicated, and coordinated internally and externally",
-  [
-   "C5.3",
-   "A5.2",
-   "A5.4"
-  ]
- ],
- [
-  "GV.SC-03",
-  "Cybersecurity supply chain risk management is integrated into cybersecurity and enterprise risk management, risk assessment, and improvement processes",
-  [
-   "C8.1",
-   "A5.1",
-   "A5.19",
-   "A5.20",
-   "A5.21"
-  ]
- ],
- [
-  "GV.SC-04",
-  "Suppliers are known and prioritized by criticality",
-  [
-   "C6.1",
-   "A5.19",
-   "A5.22"
-  ]
- ],
- [
-  "GV.SC-05",
-  "Requirements to address cybersecurity risks in supply chains are established, prioritized, and integrated into contracts and other types of agreements with suppliers and other relevant third parties",
-  [
-   "C4.2",
-   "A5.19",
-   "A5.20",
-   "A5.31"
-  ]
- ],
- [
-  "GV.SC-06",
-  "Planning and due diligence are performed to reduce risks before entering into formal supplier or other third-party relationships",
-  [
-   "C4.2",
-   "A5.19",
-   "A5.20",
-   "A5.31"
-  ]
- ],
- [
-  "GV.SC-07",
-  "The risks posed by a supplier, their products and services, and other third parties are understood, recorded, prioritized, assessed, responded to, and monitored over the course of the relationship",
-  [
-   "C6.1",
-   "A5.19",
-   "A5.20",
-   "A5.22",
-   "A5.31"
-  ]
- ],
- [
-  "GV.SC-08",
-  "Relevant suppliers and other third parties are included in incident planning, response, and recovery activities",
-  [
-   "A5.26"
-  ]
- ],
- [
-  "GV.SC-09",
-  "Supply chain security practices are integrated into cybersecurity and enterprise risk management programs, and their performance is monitored throughout the technology product and service life cycle",
-  [
-   "C6.1",
-   "A5.19",
-   "A5.20",
-   "A5.21",
-   "A5.22"
-  ]
- ],
- [
-  "GV.SC-10",
-  "Cybersecurity supply chain risk management plans include provisions for activities that occur after the conclusion of a partnership or service agreement",
-  [
-   "C6.1",
-   "A5.19",
-   "A5.20",
-   "A5.21",
-   "A5.22"
-  ]
- ],
- [
-  "ID.AM-01",
-  "Inventories of hardware managed by the organization are maintained",
-  [
-   "A5.9"
-  ]
- ],
- [
-  "ID.AM-02",
-  "Inventories of software, services, and systems managed by the organization are maintained",
-  [
-   "A5.9"
-  ]
- ],
- [
-  "ID.AM-03",
-  "Representations of the organization's authorized network communication and internal and external network data flows are maintained",
-  [
-   "A5.14",
-   "A8.20",
-   "A8.21",
-   "A8.22"
-  ]
- ],
- [
-  "ID.AM-04",
-  "Inventories of services provided by suppliers are maintained",
-  [
-   "A5.22"
-  ]
- ],
- [
-  "ID.AM-05",
-  "Assets are prioritized based on classification, criticality, resources, and impact on the mission",
-  [
-   "A5.9",
-   "A5.12",
-   "A5.13"
-  ]
- ],
- [
-  "ID.AM-07",
-  "Inventories of data and corresponding metadata for designated data types are maintained",
-  [
-   "A5.9"
-  ]
- ],
- [
-  "ID.AM-08",
-  "Systems, hardware, software, services, and data are managed throughout their life cycles",
-  [
-   "A5.8",
-   "A5.9",
-   "A5.11",
-   "A5.12",
-   "A5.13",
-   "A5.19",
-   "A5.22",
-   "A7.10",
-   "A7.13",
-   "A7.14"
-  ]
- ],
- [
-  "ID.RA-01",
-  "Vulnerabilities in assets are identified, validated, and recorded",
-  [
-   "A8.8"
-  ]
- ],
- [
-  "ID.RA-02",
-  "Cyber threat intelligence is received from information sharing forums and sources",
-  [
-   "A5.7",
-   "A5.22",
-   "A8.16"
-  ]
- ],
- [
-  "ID.RA-03",
-  "Internal and external threats to the organization are identified and recorded",
-  [
-   "C6.1",
-   "A5.7",
-   "A5.22",
-   "A8.16"
-  ]
- ],
- [
-  "ID.RA-04",
-  "Potential impacts and likelihoods of threats exploiting vulnerabilities are identified and recorded",
-  [
-   "C6.1"
-  ]
- ],
- [
-  "ID.RA-05",
-  "Threats, vulnerabilities, likelihoods, and impacts are used to understand inherent risk and inform risk response prioritization",
-  [
-   "C6.1",
-   "A5.7"
-  ]
- ],
- [
-  "ID.RA-06",
-  "Risk responses are chosen, prioritized, planned, tracked, and communicated",
-  [
-   "C6.13",
-   "A5.7"
-  ]
- ],
- [
-  "ID.RA-07",
-  "Changes and exceptions are managed, assessed for risk impact, recorded, and tracked",
-  [
-   "C6.1",
-   "A8.32"
-  ]
- ],
- [
-  "ID.RA-08",
-  "Processes for receiving, analyzing, and responding to vulnerability disclosures are established",
-  [
-   "C6.1"
-  ]
- ],
- [
-  "ID.RA-09",
-  "The authenticity and integrity of hardware and software are assessed prior to acquisition and use",
-  [
-   "A5.19",
-   "A5.20",
-   "A5.22"
-  ]
- ],
- [
-  "ID.RA-10",
-  "Critical suppliers are assessed prior to acquisition",
-  [
-   "A5.19",
-   "A5.20",
-   "A5.22"
-  ]
- ],
- [
-  "ID.IM-01",
-  "Improvements are identified from evaluations",
-  [
-   "C10.1",
-   "C10.2",
-   "C9.2",
-   "A5.35"
-  ]
- ],
- [
-  "ID.IM-02",
-  "Improvements are identified from security tests and exercises, including those done in coordination with suppliers and relevant third parties",
-  [
-   "C10.1",
-   "C10.2",
-   "C9.2",
-   "C9.3",
-   "A5.19",
-   "A5.35"
-  ]
- ],
- [
-  "ID.IM-03",
-  "Improvements are identified from execution of operational processes, procedures, and activities",
-  [
-   "C9.1",
-   "A5.27"
-  ]
- ],
- [
-  "ID.IM-04",
-  "Incident response plans and other cybersecurity plans that affect operations are established, communicated, maintained, and improved",
-  [
-   "C9.1",
-   "A5.24",
-   "A5.26",
-   "A5.27"
-  ]
- ],
- [
-  "PR.AA-01",
-  "Identities and credentials for authorized users, services, and hardware are managed by the organization",
-  [
-   "A5.15",
-   "A5.16",
-   "A5.18",
-   "A8.2",
-   "A8.5"
-  ]
- ],
- [
-  "PR.AA-02",
-  "Identities are proofed and bound to credentials based on the context of interactions",
-  [
-   "A8.2",
-   "A8.3",
-   "A8.5"
-  ]
- ],
- [
-  "PR.AA-03",
-  "Users, services, and hardware are authenticated",
-  [
-   "A5.15",
-   "A5.16",
-   "A5.17",
-   "A5.18",
-   "A8.5"
-  ]
- ],
- [
-  "PR.AA-04",
-  "Identity assertions are protected, conveyed, and verified",
-  [
-   "A5.16"
-  ]
- ],
- [
-  "PR.AA-05",
-  "Access permissions, entitlements, and authorizations are defined in a policy, managed, enforced, and reviewed, and incorporate the principles of least privilege and separation of duties",
-  [
-   "A5.1",
-   "A5.3",
-   "A5.14",
-   "A5.15",
-   "A5.16",
-   "A5.17",
-   "A5.18",
-   "A8.2",
-   "A8.3",
-   "A8.4",
-   "A8.5",
-   "A8.18"
-  ]
- ],
- [
-  "PR.AA-06",
-  "Physical access to assets is managed, monitored, and enforced commensurate with risk",
-  [
-   "A7.1",
-   "A7.2",
-   "A7.3",
-   "A7.4",
-   "A7.12"
-  ]
- ],
- [
-  "PR.AT-01",
-  "Personnel are provided with awareness and training so that they possess the knowledge and skills to perform general tasks with cybersecurity risks in mind",
-  [
-   "C7.3",
-   "A6.3"
-  ]
- ],
- [
-  "PR.AT-02",
-  "Individuals in specialized roles are provided with awareness and training so that they possess the knowledge and skills to perform relevant tasks with cybersecurity risks in mind",
-  [
-   "C7.3",
-   "A5.2",
-   "A6.3"
-  ]
- ],
- [
-  "PR.DS-01",
-  "The confidentiality, integrity, and availability of data-at-rest are protected",
-  [
-   "C4.2",
-   "C5.2",
-   "A5.1",
-   "A5.3",
-   "A5.10",
-   "A5.12",
-   "A5.13",
-   "A5.14",
-   "A5.15",
-   "A5.33",
-   "A6.1",
-   "A6.2",
-   "A6.5",
-   "A7.7",
-   "A7.9",
-   "A7.10",
-   "A8.2",
-   "A8.3",
-   "A8.4",
-   "A8.7",
-   "A8.8",
-   "A8.10",
-   "A8.11",
-   "A8.12",
-   "A8.13",
-   "A8.17",
-   "A8.19",
-   "A8.22",
-   "A8.26",
-   "A8.33"
-  ]
- ],
- [
-  "PR.DS-02",
-  "The confidentiality, integrity, and availability of data-in-transit are protected",
-  [
-   "C4.2",
-   "C5.2",
-   "A5.3",
-   "A5.10",
-   "A5.13",
-   "A5.14",
-   "A5.15",
-   "A6.1",
-   "A6.2",
-   "A6.5",
-   "A8.2",
-   "A8.3",
-   "A8.4",
-   "A8.17",
-   "A8.20",
-   "A8.22",
-   "A8.24",
-   "A8.26"
-  ]
- ],
- [
-  "PR.DS-10",
-  "The confidentiality, integrity, and availability of data-in-use are protected",
-  [
-   "C4.2",
-   "C5.2",
-   "A5.3",
-   "A5.10",
-   "A5.13",
-   "A5.14",
-   "A5.15",
-   "A5.23",
-   "A6.1",
-   "A6.2",
-   "A6.5",
-   "A8.2",
-   "A8.3",
-   "A8.4",
-   "A8.17",
-   "A8.22",
-   "A8.26"
-  ]
- ],
- [
-  "PR.DS-11",
-  "Backups of data are created, protected, maintained, and tested",
-  [
-   "A8.13"
-  ]
- ],
- [
-  "PR.PS-01",
-  "Configuration management practices are established and applied",
-  [
-   "C9.3",
-   "A8.8",
-   "A8.9"
-  ]
- ],
- [
-  "PR.PS-02",
-  "Software is maintained, replaced, and removed commensurate with risk",
-  [
-   "A5.9",
-   "A8.7"
-  ]
- ],
- [
-  "PR.PS-03",
-  "Hardware is maintained, replaced, and removed commensurate with risk",
-  [
-   "A5.9",
-   "A8.1"
-  ]
- ],
- [
-  "PR.PS-04",
-  "Log records are generated and made available for continuous monitoring",
-  [
-   "A8.15",
-   "A8.17"
-  ]
- ],
- [
-  "PR.PS-05",
-  "Installation and execution of unauthorized software are prevented",
-  [
-   "A8.19"
-  ]
- ],
- [
-  "PR.PS-06",
-  "Secure software development practices are integrated, and their performance is monitored throughout the software development life cycle",
-  [
-   "A8.25",
-   "A8.26",
-   "A8.28",
-   "A8.29",
-   "A8.31"
-  ]
- ],
- [
-  "PR.IR-01",
-  "Networks and environments are protected from unauthorized logical access and usage",
-  [
-   "A8.20",
-   "A8.21",
-   "A8.22",
-   "A8.23"
-  ]
- ],
- [
-  "PR.IR-02",
-  "The organization's technology assets are protected from environmental threats",
-  [
-   "A7.5",
-   "A7.6",
-   "A7.7",
-   "A7.8",
-   "A7.11",
-   "A7.12",
-   "A7.13",
-   "A7.14"
-  ]
- ],
- [
-  "PR.IR-03",
-  "Mechanisms are implemented to achieve resilience requirements in normal and adverse situations",
-  [
-   "C4.2",
-   "C6.1",
-   "A5.29",
-   "A8.14",
-   "A8.17",
-   "A8.27"
-  ]
- ],
- [
-  "PR.IR-04",
-  "Adequate resource capacity to ensure availability is maintained",
-  [
-   "A8.6"
-  ]
- ],
- [
-  "DE.CM-01",
-  "Networks and network services are monitored to find potentially adverse events",
-  [
-   "A8.15",
-   "A8.16"
-  ]
- ],
- [
-  "DE.CM-02",
-  "The physical environment is monitored to find potentially adverse events",
-  [
-   "A7.4"
-  ]
- ],
- [
-  "DE.CM-03",
-  "Personnel activity and technology usage are monitored to find potentially adverse events",
-  [
-   "C9.1",
-   "A7.4",
-   "A8.16"
-  ]
- ],
- [
-  "DE.CM-06",
-  "External service provider activities and services are monitored to find potentially adverse events",
-  [
-   "A5.22",
-   "A8.16"
-  ]
- ],
- [
-  "DE.CM-09",
-  "Computing hardware and software, runtime environments, and their data are monitored to find potentially adverse events",
-  [
-   "A8.6",
-   "A8.16"
-  ]
- ],
- [
-  "DE.AE-02",
-  "Potentially adverse events are analyzed to better understand associated activities",
-  [
-   "A5.24",
-   "A5.25"
-  ]
- ],
- [
-  "DE.AE-03",
-  "Information is correlated from multiple sources",
-  [
-   "A8.15",
-   "A8.16"
-  ]
- ],
- [
-  "DE.AE-04",
-  "The estimated impact and scope of adverse events are understood",
-  [
-   "A5.25"
-  ]
- ],
- [
-  "DE.AE-06",
-  "Information on adverse events is provided to authorized staff and tools",
-  [
-   "A5.26"
-  ]
- ],
- [
-  "DE.AE-07",
-  "Cyber threat intelligence and other contextual information are integrated into the analysis",
-  [
-   "A5.7"
-  ]
- ],
- [
-  "DE.AE-08",
-  "Incidents are declared when adverse events meet the defined incident criteria",
-  [
-   "A5.25",
-   "A5.26"
-  ]
- ],
- [
-  "RS.MA-01",
-  "The incident response plan is executed in coordination with relevant third parties once an incident is declared",
-  [
-   "A5.26",
-   "A5.27",
-   "A5.28"
-  ]
- ],
- [
-  "RS.MA-02",
-  "Incident reports are triaged and validated",
-  [
-   "A5.24",
-   "A5.26",
-   "A5.27",
-   "A5.28",
-   "A6.8"
-  ]
- ],
- [
-  "RS.MA-03",
-  "Incidents are categorized and prioritized",
-  [
-   "A5.25"
-  ]
- ],
- [
-  "RS.MA-04",
-  "Incidents are escalated or elevated as needed",
-  [
-   "A5.26"
-  ]
- ],
- [
-  "RS.MA-05",
-  "The criteria for initiating incident recovery are applied",
-  [
-   "A5.25"
-  ]
- ],
- [
-  "RS.AN-03",
-  "Analysis is performed to establish what has taken place during an incident and the root cause of the incident",
-  [
-   "A5.25",
-   "A5.27"
-  ]
- ],
- [
-  "RS.AN-06",
-  "Actions performed during an investigation are recorded, and the records' integrity and provenance are preserved",
-  [
-   "A5.28"
-  ]
- ],
- [
-  "RS.AN-07",
-  "Incident data and metadata are collected, and their integrity and provenance are preserved",
-  [
-   "A5.28"
-  ]
- ],
- [
-  "RS.AN-08",
-  "An incident's magnitude is estimated and validated",
-  [
-   "A5.25"
-  ]
- ],
- [
-  "RS.CO-02",
-  "Internal and external stakeholders are notified of incidents",
-  [
-   "C7.4",
-   "A5.26"
-  ]
- ],
- [
-  "RS.CO-03",
-  "Information is shared with designated internal and external stakeholders",
-  [
-   "C7.4",
-   "A5.26"
-  ]
- ],
- [
-  "RS.MI-01",
-  "Incidents are contained",
-  [
-   "A5.26"
-  ]
- ],
- [
-  "RS.MI-02",
-  "Incidents are eradicated",
-  [
-   "A5.26"
-  ]
- ],
- [
-  "RC.RP-01",
-  "The recovery portion of the incident response plan is executed once initiated from the incident response process",
-  [
-   "A5.26",
-   "A5.29"
-  ]
- ],
- [
-  "RC.RP-02",
-  "Recovery actions are selected, scoped, prioritized, and performed",
-  [
-   "A5.26",
-   "A5.30"
-  ]
- ],
- [
-  "RC.RP-03",
-  "The integrity of backups and other restoration assets is verified before using them for restoration",
-  [
-   "A8.13"
-  ]
- ],
- [
-  "RC.RP-04",
-  "Critical mission functions and cybersecurity risk management are considered to establish post-incident operational norms",
-  [
-   "C8.1"
-  ]
- ],
- [
-  "RC.RP-05",
-  "The integrity of restored assets is verified, systems and services are restored, and normal operating status is confirmed",
-  [
-   "A5.26"
-  ]
- ],
- [
-  "RC.RP-06",
-  "The end of incident recovery is declared based on criteria, and incident-related documentation is completed",
-  [
-   "A5.27",
-   "A8.13"
-  ]
- ],
- [
-  "RC.CO-03",
-  "Recovery activities and progress in restoring operational capabilities are communicated to designated internal and external stakeholders",
-  [
-   "C7.4",
-   "A5.28"
-  ]
- ],
- [
-  "RC.CO-04",
-  "Public updates on incident recovery are shared using approved methods and messaging",
-  [
-   "C7.4"
-  ]
- ]
-];
+/** [id, title, ISO/IEC 27001:2022, PCI DSS 4 sections, CIS Controls v8 safeguards: informative references published by NIST] */
+export const CSF_SUBCATEGORIES: Array<[string, string, string[], string[], string[]]> = [["GV.OC-01","The organizational mission is understood and informs cybersecurity risk management",["C4.1","C6.1","C8.1","C8.2","C8.3"],
+["Req.12.1"],
+[]],
+["GV.OC-02","Internal and external stakeholders are understood, and their needs and expectations regarding cybersecurity risk management are understood and considered",["C4.1","C4.2","C4.4","C6.1","C8.1","C8.2","C8.3"],
+["Req.12.1","Req.12.8","Req.12.9"],
+[]],
+["GV.OC-03","Legal, regulatory, and contractual requirements regarding cybersecurity - including privacy and civil liberties obligations - are understood and managed",["C4.2","A5.20","A5.31"],
+["Req.3.2","Req.9.4","Req.12.8","Req.12.9"],
+[]],
+["GV.OC-04","Critical objectives, capabilities, and services that external stakeholders depend on or expect from the organization are understood and communicated",["C4.2","A5.20","A5.31"],
+["Req.12.5","Req.12.10"],
+[]],
+["GV.OC-05","Outcomes, capabilities, and services that the organization depends on are understood and communicated",["A5.3","A5.8"],
+["Req.1.2","Req.12.5","Req.12.8","Req.12.9"],
+[]],
+["GV.RM-01","Risk management objectives are established and agreed to by organizational stakeholders",["C6.1","A5.1"],
+["Req.12.1"],
+[]],
+["GV.RM-02","Risk appetite and risk tolerance statements are established, communicated, and maintained",["C6.1","A5.1"],
+[],
+[]],
+["GV.RM-03","Cybersecurity risk management activities and outcomes are included in enterprise risk management processes",["C6.1","A5.1"],
+["Req.5.2","Req.5.3","Req.6.3","Req.7.2","Req.8.6","Req.9.5","Req.10.4","Req.11.3","Req.11.6","Req.12.3","Req.12.5","Req.12.8","Req.12.10"],
+[]],
+["GV.RM-04","Strategic direction that describes appropriate risk response options is established and communicated",["C6.1","A5.1"],
+["Req.12.10"],
+[]],
+["GV.RM-05","Lines of communication across the organization are established for cybersecurity risks, including risks from suppliers and other third parties",["C6.1","A5.1","A5.19"],
+["Req.10.7","Req.12.5","Req.12.8","Req.12.9","Req.12.10"],
+[]],
+["GV.RM-06","A standardized method for calculating, documenting, categorizing, and prioritizing cybersecurity risks is established and communicated",["C6.1","A5.1"],
+["Req.5.2","Req.5.3","Req.6.3","Req.7.2","Req.8.6","Req.9.5","Req.10.4","Req.11.3","Req.11.6","Req.12.3","Req.12.8","Req.12.10"],
+[]],
+["GV.RM-07","Strategic opportunities (i.e., positive risks) are characterized and are included in organizational cybersecurity risk discussions",["C6.11"],
+[],
+[]],
+["GV.RR-01","Organizational leadership is responsible and accountable for cybersecurity risk and fosters a culture that is risk-aware, ethical, and continually improving",["C7.2","A5.4"],
+["Req.6.2","Req.12.1","Req.12.6","Req.12.10"],
+["CIS.14.1"]],
+["GV.RR-02","Roles, responsibilities, and authorities related to cybersecurity risk management are established, communicated, understood, and enforced",["C7.2","A5.2","A5.3"],
+["Req.1.1","Req.2.1","Req.3.1","Req.4.1","Req.5.1","Req.6.1","Req.7.1","Req.8.1","Req.9.1","Req.10.1","Req.11.1","Req.12.1"],
+["CIS.14.9"]],
+["GV.RR-03","Adequate resources are allocated commensurate with the cybersecurity risk strategy, roles, responsibilities, and policies",["C7.1","C7.2","A6.6"],
+["Req.12.1","Req.12.10"],
+[]],
+["GV.RR-04","Cybersecurity is included in human resources practices",["C7.3","A6.1","A6.2","A6.3","A6.4","A6.5","A6.6","A6.7","A6.8"],
+["Req.7.2","Req.8.2","Req.9.3","Req.12.6","Req.12.7"],
+["CIS.6.1","CIS.6.2"]],
+["GV.PO-01","Policy for managing cybersecurity risks is established based on organizational context, cybersecurity strategy, and priorities and is communicated and enforced",["C5.2","A5.1","A5.37","A6.1","A6.2","A6.4","A6.5","A6.7","A6.8"],
+["Req.12.1","Req.12.6"],
+[]],
+["GV.PO-02","Policy for managing cybersecurity risks is reviewed, updated, communicated, and enforced to reflect changes in requirements, threats, technology, and organizational mission",["C5.2","A5.1","A5.31","A5.32","A5.34"],
+["Req.1.1","Req.2.1","Req.3.1","Req.4.1","Req.5.1","Req.6.1","Req.7.1","Req.8.1","Req.9.1","Req.10.1","Req.11.1","Req.12.1"],
+[]],
+["GV.OV-01","Cybersecurity risk management strategy outcomes are reviewed to inform and adjust strategy and direction",["C9.1","A5.1","A5.5","A5.6","A5.19","A5.24"],
+["Req.10.7","Req.12.3","Req.12.4","Req.12.10"],
+[]],
+["GV.OV-02","The cybersecurity risk management strategy is reviewed and adjusted to ensure coverage of organizational requirements and risks",["C9.1","A5.1","A5.19","A5.27","A5.35","A5.36"],
+["Req.10.7","Req.11.4","Req.12.3","Req.12.4","Req.12.5","Req.12.8","Req.12.10"],
+[]],
+["GV.OV-03","Organizational cybersecurity risk management performance is evaluated and reviewed for adjustments needed",["C9.1","A5.1","A5.19","A5.20","A8.30","A8.32","A8.34"],
+["Req.7.2","Req.10.7","Req.11.3","Req.11.4","Req.12.3","Req.12.4"],
+[]],
+["GV.SC-01","A cybersecurity supply chain risk management program, strategy, objectives, policies, and processes are established and agreed to by organizational stakeholders",["C8.1","A5.1","A5.19","A5.20","A5.21","A5.22"],
+["Req.1.2","Req.6.3","Req.6.4","Req.11.6","Req.12.1","Req.12.8","Req.12.9"],
+["CIS.15.2"]],
+["GV.SC-02","Cybersecurity roles and responsibilities for suppliers, customers, and partners are established, communicated, and coordinated internally and externally",["C5.3","A5.2","A5.4"],
+["Req.12.1","Req.12.8","Req.12.10"],
+["CIS.15.4"]],
+["GV.SC-03","Cybersecurity supply chain risk management is integrated into cybersecurity and enterprise risk management, risk assessment, and improvement processes",["C8.1","A5.1","A5.19","A5.20","A5.21"],
+["Req.6.2","Req.6.3","Req.6.4","Req.11.6","Req.12.3","Req.12.8"],
+[]],
+["GV.SC-04","Suppliers are known and prioritized by criticality",["C6.1","A5.19","A5.22"],
+["Req.1.2","Req.6.3","Req.12.5","Req.12.8"],
+["CIS.15.1","CIS.15.3"]],
+["GV.SC-05","Requirements to address cybersecurity risks in supply chains are established, prioritized, and integrated into contracts and other types of agreements with suppliers and other relevant third parties",["C4.2","A5.19","A5.20","A5.31"],
+["Req.12.8","Req.12.9"],
+["CIS.15.4"]],
+["GV.SC-06","Planning and due diligence are performed to reduce risks before entering into formal supplier or other third-party relationships",["C4.2","A5.19","A5.20","A5.31"],
+["Req.1.2","Req.12.5","Req.12.8"],
+["CIS.15.5"]],
+["GV.SC-07","The risks posed by a supplier, their products and services, and other third parties are understood, recorded, prioritized, assessed, responded to, and monitored over the course of the relationship",["C6.1","A5.19","A5.20","A5.22","A5.31"],
+["Req.1.2","Req.6.3","Req.6.4","Req.11.6","Req.12.5","Req.12.8","Req.12.9"],
+["CIS.15.6"]],
+["GV.SC-08","Relevant suppliers and other third parties are included in incident planning, response, and recovery activities",["A5.26"],
+["Req.1.2","Req.12.8","Req.12.9","Req.12.10"],
+["CIS.15.4"]],
+["GV.SC-09","Supply chain security practices are integrated into cybersecurity and enterprise risk management programs, and their performance is monitored throughout the technology product and service life cycle",["C6.1","A5.19","A5.20","A5.21","A5.22"],
+["Req.6.2","Req.6.3","Req.6.4","Req.9.5","Req.11.6","Req.12.3","Req.12.8"],
+["CIS.15.6"]],
+["GV.SC-10","Cybersecurity supply chain risk management plans include provisions for activities that occur after the conclusion of a partnership or service agreement",["C6.1","A5.19","A5.20","A5.21","A5.22"],
+["Req.1.2","Req.3.2","Req.6.4","Req.8.2","Req.9.3","Req.9.4","Req.12.3","Req.12.5","Req.12.8","Req.12.10"],
+["CIS.15.7"]],
+["ID.AM-01","Inventories of hardware managed by the organization are maintained",["A5.9"],
+["Req.1.2","Req.9.5","Req.12.5"],
+["CIS.1.1"]],
+["ID.AM-02","Inventories of software, services, and systems managed by the organization are maintained",["A5.9"],
+["Req.6.3","Req.6.4","Req.12.5","Req.12.8"],
+["CIS.2.1"]],
+["ID.AM-03","Representations of the organization's authorized network communication and internal and external network data flows are maintained",["A5.14","A8.20","A8.21","A8.22"],
+["Req.1.2","Req.12.5"],
+["CIS.3.8"]],
+["ID.AM-04","Inventories of services provided by suppliers are maintained",["A5.22"],
+["Req.12.8"],
+["CIS.15.1"]],
+["ID.AM-05","Assets are prioritized based on classification, criticality, resources, and impact on the mission",["A5.9","A5.12","A5.13"],
+["Req.6.3","Req.9.5","Req.10.4","Req.11.6","Req.12.3"],
+["CIS.3.7"]],
+["ID.AM-07","Inventories of data and corresponding metadata for designated data types are maintained",["A5.9"],
+["Req.3.2","Req.3.4","Req.12.5","Req.12.10"],
+["CIS.3.2"]],
+["ID.AM-08","Systems, hardware, software, services, and data are managed throughout their life cycles",["A5.8","A5.9","A5.11","A5.12","A5.13","A5.19","A5.22","A7.10","A7.13","A7.14"],
+["Req.6.2","Req.6.3","Req.11.6","Req.12.3"],
+["CIS.1.1","CIS.3.5"]],
+["ID.RA-01","Vulnerabilities in assets are identified, validated, and recorded",["A8.8"],
+["Req.6.3","Req.11.3","Req.11.4"],
+["CIS.7.1"]],
+["ID.RA-02","Cyber threat intelligence is received from information sharing forums and sources",["A5.7","A5.22","A8.16"],
+[],
+[]],
+["ID.RA-03","Internal and external threats to the organization are identified and recorded",["C6.1","A5.7","A5.22","A8.16"],
+["Req.12.3"],
+[]],
+["ID.RA-04","Potential impacts and likelihoods of threats exploiting vulnerabilities are identified and recorded",["C6.1"],
+["Req.12.3"],
+[]],
+["ID.RA-05","Threats, vulnerabilities, likelihoods, and impacts are used to understand inherent risk and inform risk response prioritization",["C6.1","A5.7"],
+["Req.6.3","Req.11.3","Req.12.3"],
+[]],
+["ID.RA-06","Risk responses are chosen, prioritized, planned, tracked, and communicated",["C6.13","A5.7"],
+["Req.6.3","Req.11.3","Req.12.10"],
+[]],
+["ID.RA-07","Changes and exceptions are managed, assessed for risk impact, recorded, and tracked",["C6.1","A8.32"],
+["Req.8.6","Req.9.5","Req.10.4","Req.12.3"],
+[]],
+["ID.RA-08","Processes for receiving, analyzing, and responding to vulnerability disclosures are established",["C6.1"],
+[],
+["CIS.7.2"]],
+["ID.RA-09","The authenticity and integrity of hardware and software are assessed prior to acquisition and use",["A5.19","A5.20","A5.22"],
+["Req.6.4","Req.9.5"],
+[]],
+["ID.RA-10","Critical suppliers are assessed prior to acquisition",["A5.19","A5.20","A5.22"],
+["Req.12.8"],
+[]],
+["ID.IM-01","Improvements are identified from evaluations",["C10.1","C10.2","C9.2","A5.35"],
+["Req.12.3","Req.12.4"],
+[]],
+["ID.IM-02","Improvements are identified from security tests and exercises, including those done in coordination with suppliers and relevant third parties",["C10.1","C10.2","C9.2","C9.3","A5.19","A5.35"],
+["Req.11.4","Req.12.8","Req.12.10"],
+["CIS.17.7"]],
+["ID.IM-03","Improvements are identified from execution of operational processes, procedures, and activities",["C9.1","A5.27"],
+["Req.6.3","Req.10.7","Req.11.3"],
+[]],
+["ID.IM-04","Incident response plans and other cybersecurity plans that affect operations are established, communicated, maintained, and improved",["C9.1","A5.24","A5.26","A5.27"],
+["Req.12.10"],
+[]],
+["PR.AA-01","Identities and credentials for authorized users, services, and hardware are managed by the organization",["A5.15","A5.16","A5.18","A8.2","A8.5"],
+["Req.3.6","Req.8.2","Req.8.6","Req.9.5","Req.12.5"],
+["CIS.5.1","CIS.6.7"]],
+["PR.AA-02","Identities are proofed and bound to credentials based on the context of interactions",["A8.2","A8.3","A8.5"],
+["Req.8.2","Req.8.3","Req.12.7"],
+[]],
+["PR.AA-03","Users, services, and hardware are authenticated",["A5.15","A5.16","A5.17","A5.18","A8.5"],
+["Req.2.2","Req.2.3","Req.3.5","Req.8.2","Req.8.3","Req.9.2"],
+[]],
+["PR.AA-04","Identity assertions are protected, conveyed, and verified",["A5.16"],
+["Req.3.6","Req.4.2","Req.12.3"],
+[]],
+["PR.AA-05","Access permissions, entitlements, and authorizations are defined in a policy, managed, enforced, and reviewed, and incorporate the principles of least privilege and separation of duties",["A5.1","A5.3","A5.14","A5.15","A5.16","A5.17","A5.18","A8.2","A8.3","A8.4","A8.5","A8.18"],
+["Req.7.1","Req.7.2","Req.8.1","Req.8.2","Req.12.1"],
+["CIS.3.3","CIS.6.8"]],
+["PR.AA-06","Physical access to assets is managed, monitored, and enforced commensurate with risk",["A7.1","A7.2","A7.3","A7.4","A7.12"],
+["Req.9.2","Req.9.3","Req.9.5"],
+[]],
+["PR.AT-01","Personnel are provided with awareness and training so that they possess the knowledge and skills to perform general tasks with cybersecurity risks in mind",["C7.3","A6.3"],
+["Req.12.6"],
+["CIS.14.1"]],
+["PR.AT-02","Individuals in specialized roles are provided with awareness and training so that they possess the knowledge and skills to perform relevant tasks with cybersecurity risks in mind",["C7.3","A5.2","A6.3"],
+["Req.6.2","Req.12.10"],
+["CIS.14.9"]],
+["PR.DS-01","The confidentiality, integrity, and availability of data-at-rest are protected",["C4.2","C5.2","A5.1","A5.3","A5.10","A5.12","A5.13","A5.14","A5.15","A5.33","A6.1","A6.2","A6.5","A7.7","A7.9","A7.10","A8.2","A8.3","A8.4","A8.7","A8.8","A8.10","A8.11","A8.12","A8.13","A8.17","A8.19","A8.22","A8.26","A8.33"],
+["Req.3.3","Req.3.5","Req.3.6","Req.9.4"],
+["CIS.3.11"]],
+["PR.DS-02","The confidentiality, integrity, and availability of data-in-transit are protected",["C4.2","C5.2","A5.3","A5.10","A5.13","A5.14","A5.15","A6.1","A6.2","A6.5","A8.2","A8.3","A8.4","A8.17","A8.20","A8.22","A8.24","A8.26"],
+["Req.2.3","Req.4.2","Req.12.3"],
+["CIS.3.10"]],
+["PR.DS-10","The confidentiality, integrity, and availability of data-in-use are protected",["C4.2","C5.2","A5.3","A5.10","A5.13","A5.14","A5.15","A5.23","A6.1","A6.2","A6.5","A8.2","A8.3","A8.4","A8.17","A8.22","A8.26"],
+["Req.3.2","Req.3.4","Req.7.2","Req.8.2"],
+[]],
+["PR.DS-11","Backups of data are created, protected, maintained, and tested",["A8.13"],
+["Req.9.3","Req.9.4","Req.12.10"],
+["CIS.11.2","CIS.11.3","CIS.11.5"]],
+["PR.PS-01","Configuration management practices are established and applied",["C9.3","A8.8","A8.9"],
+["Req.2.2"],
+["CIS.4.1","CIS.4.2"]],
+["PR.PS-02","Software is maintained, replaced, and removed commensurate with risk",["A5.9","A8.7"],
+["Req.6.3","Req.12.3"],
+["CIS.2.2","CIS.2.3"]],
+["PR.PS-03","Hardware is maintained, replaced, and removed commensurate with risk",["A5.9","A8.1"],
+["Req.9.4","Req.9.5","Req.12.3"],
+["CIS.1.2"]],
+["PR.PS-04","Log records are generated and made available for continuous monitoring",["A8.15","A8.17"],
+["Req.10.2","Req.10.3","Req.10.4","Req.10.6"],
+["CIS.8.2"]],
+["PR.PS-05","Installation and execution of unauthorized software are prevented",["A8.19"],
+["Req.2.2","Req.5.3","Req.6.4"],
+["CIS.2.5"]],
+["PR.PS-06","Secure software development practices are integrated, and their performance is monitored throughout the software development life cycle",["A8.25","A8.26","A8.28","A8.29","A8.31"],
+["Req.6.2","Req.6.3","Req.11.4"],
+["CIS.16.1"]],
+["PR.IR-01","Networks and environments are protected from unauthorized logical access and usage",["A8.20","A8.21","A8.22","A8.23"],
+["Req.1.2","Req.5.2","Req.10.2","Req.11.2"],
+["CIS.3.12","CIS.12.2"]],
+["PR.IR-02","The organization's technology assets are protected from environmental threats",["A7.5","A7.6","A7.7","A7.8","A7.11","A7.12","A7.13","A7.14"],
+["Req.9.1","Req.12.10"],
+[]],
+["PR.IR-03","Mechanisms are implemented to achieve resilience requirements in normal and adverse situations",["C4.2","C6.1","A5.29","A8.14","A8.17","A8.27"],
+["Req.12.10"],
+[]],
+["PR.IR-04","Adequate resource capacity to ensure availability is maintained",["A8.6"],
+[],
+[]],
+["DE.CM-01","Networks and network services are monitored to find potentially adverse events",["A8.15","A8.16"],
+["Req.1.2","Req.10.2","Req.10.4","Req.11.2"],
+["CIS.13.1"]],
+["DE.CM-02","The physical environment is monitored to find potentially adverse events",["A7.4"],
+["Req.9.3","Req.9.4","Req.9.5"],
+[]],
+["DE.CM-03","Personnel activity and technology usage are monitored to find potentially adverse events",["C9.1","A7.4","A8.16"],
+["Req.8.2","Req.10.2","Req.10.4","Req.10.6"],
+["CIS.10.7"]],
+["DE.CM-06","External service provider activities and services are monitored to find potentially adverse events",["A5.22","A8.16"],
+["Req.7.2","Req.10.2","Req.12.8"],
+["CIS.15.2","CIS.15.6"]],
+["DE.CM-09","Computing hardware and software, runtime environments, and their data are monitored to find potentially adverse events",["A8.6","A8.16"],
+["Req.5.2","Req.5.3","Req.6.4","Req.10.3","Req.11.3"],
+["CIS.10.1"]],
+["DE.AE-02","Potentially adverse events are analyzed to better understand associated activities",["A5.24","A5.25"],
+["Req.6.3","Req.10.2","Req.10.3","Req.10.4"],
+["CIS.8.11"]],
+["DE.AE-03","Information is correlated from multiple sources",["A8.15","A8.16"],
+["Req.1.2","Req.10.2","Req.10.3","Req.10.4","Req.12.5"],
+[]],
+["DE.AE-04","The estimated impact and scope of adverse events are understood",["A5.25"],
+["Req.1.2","Req.10.2","Req.10.4","Req.12.5"],
+[]],
+["DE.AE-06","Information on adverse events is provided to authorized staff and tools",["A5.26"],
+["Req.10.3","Req.12.10"],
+[]],
+["DE.AE-07","Cyber threat intelligence and other contextual information are integrated into the analysis",["A5.7"],
+["Req.6.3","Req.6.4","Req.12.3","Req.12.5"],
+[]],
+["DE.AE-08","Incidents are declared when adverse events meet the defined incident criteria",["A5.25","A5.26"],
+["Req.12.10"],
+[]],
+["RS.MA-01","The incident response plan is executed in coordination with relevant third parties once an incident is declared",["A5.26","A5.27","A5.28"],
+["Req.12.8","Req.12.10"],
+["CIS.17.4"]],
+["RS.MA-02","Incident reports are triaged and validated",["A5.24","A5.26","A5.27","A5.28","A6.8"],
+["Req.10.2","Req.10.4","Req.12.10"],
+[]],
+["RS.MA-03","Incidents are categorized and prioritized",["A5.25"],
+["Req.10.4","Req.12.10"],
+[]],
+["RS.MA-04","Incidents are escalated or elevated as needed",["A5.26"],
+["Req.12.10"],
+[]],
+["RS.MA-05","The criteria for initiating incident recovery are applied",["A5.25"],
+["Req.12.10"],
+["CIS.17.9"]],
+["RS.AN-03","Analysis is performed to establish what has taken place during an incident and the root cause of the incident",["A5.25","A5.27"],
+["Req.6.3","Req.10.2","Req.10.4"],
+["CIS.17.8"]],
+["RS.AN-06","Actions performed during an investigation are recorded, and the records' integrity and provenance are preserved",["A5.28"],
+["Req.10.3","Req.10.5","Req.10.6"],
+[]],
+["RS.AN-07","Incident data and metadata are collected, and their integrity and provenance are preserved",["A5.28"],
+["Req.10.2","Req.10.3","Req.10.6"],
+[]],
+["RS.AN-08","An incident's magnitude is estimated and validated",["A5.25"],
+["Req.1.2","Req.10.4","Req.12.5"],
+[]],
+["RS.CO-02","Internal and external stakeholders are notified of incidents",["C7.4","A5.26"],
+["Req.12.8","Req.12.10"],
+["CIS.17.2"]],
+["RS.CO-03","Information is shared with designated internal and external stakeholders",["C7.4","A5.26"],
+["Req.12.8","Req.12.10"],
+["CIS.17.2"]],
+["RS.MI-01","Incidents are contained",["A5.26"],
+["Req.5.2","Req.5.3","Req.12.10"],
+[]],
+["RS.MI-02","Incidents are eradicated",["A5.26"],
+["Req.2.2","Req.5.2","Req.6.2","Req.6.3","Req.12.10"],
+[]],
+["RC.RP-01","The recovery portion of the incident response plan is executed once initiated from the incident response process",["A5.26","A5.29"],
+["Req.12.10"],
+[]],
+["RC.RP-02","Recovery actions are selected, scoped, prioritized, and performed",["A5.26","A5.30"],
+["Req.1.2","Req.12.10"],
+[]],
+["RC.RP-03","The integrity of backups and other restoration assets is verified before using them for restoration",["A8.13"],
+["Req.5.3","Req.9.4","Req.12.10"],
+["CIS.11.5"]],
+["RC.RP-04","Critical mission functions and cybersecurity risk management are considered to establish post-incident operational norms",["C8.1"],
+["Req.1.2","Req.10.2","Req.12.5","Req.12.10"],
+[]],
+["RC.RP-05","The integrity of restored assets is verified, systems and services are restored, and normal operating status is confirmed",["A5.26"],
+["Req.6.2","Req.10.4","Req.11.4"],
+[]],
+["RC.RP-06","The end of incident recovery is declared based on criteria, and incident-related documentation is completed",["A5.27","A8.13"],
+["Req.10.5","Req.12.10"],
+[]],
+["RC.CO-03","Recovery activities and progress in restoring operational capabilities are communicated to designated internal and external stakeholders",["C7.4","A5.28"],
+["Req.12.8","Req.12.10"],
+[]],
+["RC.CO-04","Public updates on incident recovery are shared using approved methods and messaging",["C7.4"],
+["Req.12.10"],
+["CIS.17.2","CIS.17.6"]]];

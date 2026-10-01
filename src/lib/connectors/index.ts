@@ -27,6 +27,7 @@ export type ConnectorSyncResult = {
 };
 
 const ASSETS: Record<Exclude<ConnectorKind, "github">, { id: string; type: string; name: string }> = {
+  people: { id: "asset_workforce", type: "workforce", name: "Workforce" },
   aws: { id: "asset_aws_account", type: "cloud_account", name: "AWS account" },
   okta: { id: "asset_okta_org", type: "identity_provider", name: "Okta organisation" },
 };
@@ -64,7 +65,7 @@ async function runPack(actor: Actor, connector: ConnectorKind, facts: Facts, ass
   for (const control of PACK.filter((item) => item.connector === connector)) {
     const missing = missingFacts(control, facts);
     if (missing.length) { skipped.push({ controlCode: control.code, missing }); continue; }
-    const result = await evaluateControl(actor, { controlCode: control.code, assetId, facts, source });
+    const result = await evaluateControl(actor, { controlCode: control.code, assetId, facts, source, validForDays: control.validForDays });
     first ??= result;
     evaluations.push({ controlCode: control.code, passed: result.passed, finding: result.finding });
   }
@@ -144,6 +145,17 @@ export async function syncOkta(actor: Actor, api?: OktaApi): Promise<ConnectorSy
   await persistConnectorEvidence(actor, "okta", "Okta identity posture", facts, demo);
   await updateConnector(actor, "okta", demo ? "demo" : "healthy", facts);
   return { connector: "okta", mode: demo ? "demo" : "live", collectedAt: new Date().toISOString(), facts, evaluations, skipped };
+}
+
+// ---------------------------------------------------------------- People systems ------------------------------------------
+
+/** Facts reported by HR and learning systems through the signed ingest endpoint. Evaluated by the same control pack. */
+export async function syncPeople(actor: Actor, facts: Facts, source: string): Promise<ConnectorSyncResult> {
+  await ensureAsset(actor, ASSETS.people);
+  const { evaluations, skipped } = await runPack(actor, "people", facts, ASSETS.people.id, source);
+  await persistConnectorEvidence(actor, source.split(":")[0], `People system report (${source})`, facts, false);
+  await updateConnector(actor, "people", "healthy", facts);
+  return { connector: "people", mode: "live", collectedAt: new Date().toISOString(), facts, evaluations, skipped };
 }
 
 // ---------------------------------------------------------------- Persistence -------------------------------------------

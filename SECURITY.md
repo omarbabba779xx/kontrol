@@ -30,3 +30,9 @@ AI analysis is advisory and read-only. It cannot approve decisions, change mappi
 ## Reporting
 
 Do not open a public issue for a suspected vulnerability. Send a minimal reproduction, affected version and impact to the private security contact configured by the deploying organization.
+
+## Webhook ingest and imported content
+
+- `/api/ingest/*` is authenticated only by an HMAC-SHA-256 signature over `timestamp.body` with a per-tenant derived secret. Requests outside a five-minute window are refused, each accepted signature is stored and cannot be replayed, bodies are capped at 256 KB, and an unknown tenant and a bad signature are indistinguishable. Without `KONTROL_INGEST_SECRET` (32+ characters) the endpoint answers 503.
+- Licensed-content imports are administrator-only, require an explicit licence acknowledgement that is recorded with a content hash, are size-limited, validated completely before any write, rendered as plain text, and removable at any time.
+- Regular expressions in control policies are length-bounded and reject back-references and nested quantifiers.

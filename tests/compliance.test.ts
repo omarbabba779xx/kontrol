@@ -212,3 +212,25 @@ test("evidence links aggregate several executable controls: one failing control 
   assert.equal(byCode("UC-IAM-02").status, "not_started", "linking evidence never changes the attested status");
   assert.ok(byCode("UC-IAM-02").linkedControlCode?.includes(","));
 });
+
+test("published suggestions can be accepted, and accepting one removes it from the list", async () => {
+  const { frameworkDetail, reviewMapping, complianceSnapshot } = await engine();
+  const requirement = async () => (await frameworkDetail(admin.tenantId, "nis2")).requirements.find((item) => item.id === "Art.21(2)(a)")!;
+
+  const before = await requirement();
+  const suggestion = before.suggestions.find((item) => item.ucCode === "UC-GOV-06");
+  assert.ok(suggestion, "ENISA relates point 1.1 to the independent-review control");
+  assert.match(suggestion.source, /ENISA/);
+  assert.ok(!before.controls.includes("UC-GOV-06"));
+  const suggestedBefore = (await complianceSnapshot(admin.tenantId)).mapping.find((item) => item.frameworkId === "nis2")!.suggested;
+  assert.ok(suggestedBefore > 0);
+
+  await reviewMapping(admin, { frameworkId: "nis2", requirementId: "Art.21(2)(a)", ucCode: "UC-GOV-06", decision: "added", note: `Suggested by ${suggestion.source}` });
+  const after = await requirement();
+  assert.ok(after.controls.includes("UC-GOV-06"));
+  assert.ok(!after.suggestions.some((item) => item.ucCode === "UC-GOV-06"));
+  assert.equal((await complianceSnapshot(admin.tenantId)).mapping.find((item) => item.frameworkId === "nis2")!.suggested, suggestedBefore - 1);
+
+  await reviewMapping(admin, { frameworkId: "nis2", requirementId: "Art.21(2)(a)", ucCode: "UC-GOV-06", decision: "reset" });
+  assert.ok((await requirement()).suggestions.some((item) => item.ucCode === "UC-GOV-06"), "resetting brings the suggestion back");
+});

@@ -1,6 +1,6 @@
 import type { Policy } from "@/lib/core/policy-engine";
 
-export type ConnectorKind = "github" | "aws" | "okta";
+export type ConnectorKind = "github" | "aws" | "okta" | "people";
 
 /** An executable control shipped with Kontrol. It is evaluated against facts collected from a live system. */
 export type PackControl = {
@@ -8,7 +8,9 @@ export type PackControl = {
   title: string;
   objective: string;
   connector: ConnectorKind;
-  frequency: "hourly" | "daily";
+  frequency: "hourly" | "daily" | "monthly";
+  /** How long a result stays current as evidence (default 1 day). Monthly feeds from HR and learning systems need longer. */
+  validForDays?: number;
   policy: Policy;
   /**
    * Fact paths that must be available for the verdict to mean anything. When a collector could not read one
@@ -84,6 +86,21 @@ export const PACK: PackControl[] = [
     policy: { all: [{ path: "passwordPolicy.minLength", op: "gte", value: 12 }] },
     requires: ["passwordPolicy.minLength"],
   },
+  {
+    code: "CTL-HR-001", title: "Security awareness training completed", objective: "At least 95% of the workforce has completed security awareness training, as reported by the learning system.", connector: "people", frequency: "monthly", validForDays: 35,
+    policy: { all: [{ path: "training.completionRate", op: "gte", value: 0.95 }] },
+    requires: ["training.completionRate"],
+  },
+  {
+    code: "CTL-HR-002", title: "Leavers deprovisioned on time", objective: "No departed employee or contractor still holds access beyond the allowed delay, as reported by the HR system.", connector: "people", frequency: "monthly", validForDays: 35,
+    policy: { all: [{ path: "hr.overdueDeprovisioning", op: "eq", value: 0 }] },
+    requires: ["hr.overdueDeprovisioning"],
+  },
+  {
+    code: "CTL-HR-003", title: "Screening completed before start", objective: "Every active starter completed background screening before their start date, as reported by the HR system.", connector: "people", frequency: "monthly", validForDays: 35,
+    policy: { all: [{ path: "hr.unscreenedActiveStarters", op: "eq", value: 0 }] },
+    requires: ["hr.unscreenedActiveStarters"],
+  },
 ];
 
 /** Which executable controls provide machine evidence for which unified control. Suggestions, applied on request. */
@@ -94,7 +111,9 @@ export const SUGGESTED_LINKS: Record<string, string[]> = {
   "UC-OPS-04": ["CTL-AWS-003"],
   "UC-DAT-04": ["CTL-AWS-003"],
   "UC-OPS-05": ["CTL-AWS-005"],
-  "UC-IAM-01": ["CTL-OKTA-002"],
+  "UC-IAM-01": ["CTL-OKTA-002", "CTL-HR-002"],
+  "UC-HR-01": ["CTL-HR-003"],
+  "UC-HR-02": ["CTL-HR-001"],
   "UC-IAM-02": ["CTL-AWS-001", "CTL-AWS-002", "CTL-OKTA-001", "CTL-OKTA-003", "CTL-GH-005"],
   "UC-IAM-03": ["CTL-AWS-001", "CTL-OKTA-001"],
 };
