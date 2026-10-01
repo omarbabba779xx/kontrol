@@ -16,7 +16,9 @@
     "test:opa": "opa test infra/opa && opa check infra/opa --strict",
     "ingest:secret": "node --import tsx scripts/ingest-secret.ts",
     "export:crosswalk": "node --conditions=react-server --import tsx scripts/export-crosswalk.ts",
-    "test:live": "node --conditions=react-server --import tsx --test tests/live/live.test.ts"
+    "test:live": "node --conditions=react-server --import tsx --test tests/live/live.test.ts",
+    "db:status": "node --conditions=react-server --import tsx scripts/db.ts status",
+    "db:upgrade": "node --conditions=react-server --import tsx scripts/db.ts upgrade"
   },
   "dependencies": {
     "@aws-sdk/client-cloudtrail": "^3.1144.0",

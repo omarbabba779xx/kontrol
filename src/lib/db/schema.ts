@@ -1,6 +1,7 @@
 import { DDL, TABLES } from "@/lib/db/ddl.generated";
 import type { Dialect } from "@/lib/db/types";
 
+/** Tables of the baseline schema (migration 1). Later tables are declared by their own migrations. */
 export { TABLES };
 export const APP_ROLE = "kontrol_app";
 
@@ -9,7 +10,8 @@ const tokens: Record<Dialect, Record<string, string>> = {
   postgres: { REAL: "DOUBLE PRECISION", BIGINT: "BIGINT", SEQUENCE: "BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY" },
 };
 
-function resolve(statement: string, dialect: Dialect) {
+/** Resolves the portable tokens ({{REAL}}, {{BIGINT}}, {{SEQUENCE}}) of a statement for a dialect. */
+export function resolve(statement: string, dialect: Dialect) {
   return statement.replace(/\{\{(\w+)\}\}/g, (_, key: string) => tokens[dialect][key]);
 }
 
@@ -30,13 +32,13 @@ const postgresIntegrity = [
 ];
 
 /** Tenant isolation. Every tenant table is forced under row-level security keyed on `app.tenant_id`. */
-function postgresRls() {
+export function rlsStatements(tables: readonly string[]) {
   const statements = [
     `DO $do$ BEGIN IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = '${APP_ROLE}') THEN CREATE ROLE ${APP_ROLE} NOLOGIN NOBYPASSRLS; END IF; END $do$`,
     `DO $do$ BEGIN EXECUTE format('GRANT %I TO %I', '${APP_ROLE}', current_user); END $do$`,
     `GRANT USAGE ON SCHEMA public TO ${APP_ROLE}`,
   ];
-  for (const table of TABLES) {
+  for (const table of tables) {
     const column = table === "tenants" ? "id" : "tenant_id";
     const predicate = `${column} = current_setting('app.tenant_id', true) OR current_setting('app.system', true) = 'on'`;
     statements.push(
@@ -47,12 +49,18 @@ function postgresRls() {
       table === "audit_log" ? `GRANT SELECT, INSERT ON ${table} TO ${APP_ROLE}` : `GRANT SELECT, INSERT, UPDATE, DELETE ON ${table} TO ${APP_ROLE}`,
     );
   }
-  statements.push(`REVOKE UPDATE, DELETE, TRUNCATE ON audit_log FROM ${APP_ROLE}`);
+  if (tables.includes("audit_log")) statements.push(`REVOKE UPDATE, DELETE, TRUNCATE ON audit_log FROM ${APP_ROLE}`);
   statements.push(`GRANT USAGE, SELECT ON ALL SEQUENCES IN SCHEMA public TO ${APP_ROLE}`);
   return statements;
 }
 
-export function renderSchema(dialect: Dialect) {
+/** The statements of the baseline schema without row-level security (that is applied per migration). */
+export function baselineStatements(dialect: Dialect) {
   const base = DDL.map((statement) => resolve(statement, dialect));
-  return dialect === "sqlite" ? [...base, ...sqliteIntegrity] : [...base, ...postgresIntegrity, ...postgresRls()];
+  return dialect === "sqlite" ? [...base, ...sqliteIntegrity] : [...base, ...postgresIntegrity];
+}
+
+/** Baseline schema plus, on PostgreSQL, its row-level security. Kept for tools that need the append-only triggers back. */
+export function renderSchema(dialect: Dialect) {
+  return dialect === "sqlite" ? baselineStatements("sqlite") : [...baselineStatements("postgres"), ...rlsStatements(TABLES)];
 }

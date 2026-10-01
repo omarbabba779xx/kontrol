@@ -1,7 +1,8 @@
 import "server-only";
 
 import postgres, { type Sql } from "postgres";
-import { APP_ROLE, renderSchema } from "@/lib/db/schema";
+import { applyPostgres } from "@/lib/db/migrations/apply";
+import { APP_ROLE } from "@/lib/db/schema";
 import type { Db, Scope, Tx } from "@/lib/db/types";
 
 /** Converts `?` placeholders to `$n`, leaving quoted string literals untouched. */
@@ -37,7 +38,7 @@ export async function createPostgresDb(url: string, options: { max?: number } = 
   });
 
   // Migrations run as the connecting (owner) role; the runtime then drops to the non-bypass application role.
-  await sql.begin(async (tx) => { for (const statement of renderSchema("postgres")) await tx.unsafe(statement); });
+  await applyPostgres(sql, { check: process.env.KONTROL_AUTO_MIGRATE === "false" });
 
   async function inTenant<T>(tenantId: string | null, fn: (tx: Tx) => Promise<T>) {
     return sql.begin(async (handle) => {

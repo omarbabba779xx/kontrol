@@ -47,8 +47,8 @@ test("the audit chains of different tenants are independent and verify", { skip 
 
 test("readiness reports row-level security forced on every tenant table", { skip }, async () => {
   const { runtimeReadiness } = await import("../src/lib/core/enterprise-engine");
-  const { TABLES } = await import("../src/lib/db/schema");
+  const { allTables } = await import("../src/lib/db/migrations");
   const check = (await runtimeReadiness()).find((entry) => entry.service === "PostgreSQL + RLS");
   assert.equal(check?.status, "active");
-  assert.match(check!.detail, new RegExp(`forced on ${TABLES.length} tables`));
+  assert.match(check!.detail, new RegExp(`forced on ${allTables().length} tables`));
 });
