@@ -2,7 +2,7 @@ import "server-only";
 
 import { randomUUID } from "node:crypto";
 import type { Actor } from "@/lib/core/auth";
-import { getDb } from "@/lib/core/database";
+import { getDb } from "@/lib/db";
 import { appendAudit, canonicalJson, sha256 } from "@/lib/core/integrity";
 
 type Operator = "eq" | "neq" | "gte" | "lte" | "includes" | "exists";
@@ -36,11 +36,11 @@ export function evaluatePolicy(policy: Policy, facts: Record<string, unknown>) {
   return { passed, tests: [...allResults, ...anyResults], failed: [...allResults, ...anyResults].filter((result) => !result.passed) };
 }
 
-export function evaluateControl(actor: Actor, input: { controlCode: string; assetId: string; facts: Record<string, unknown>; source: string; periodStart?: string; periodEnd?: string }) {
-  const db = getDb();
-  const control = db.prepare("SELECT * FROM controls WHERE tenant_id = ? AND code = ? AND valid_to IS NULL").get(actor.tenantId, input.controlCode) as { id: string; code: string; title: string; objective: string; policy_json: string } | undefined;
+export async function evaluateControl(actor: Actor, input: { controlCode: string; assetId: string; facts: Record<string, unknown>; source: string; periodStart?: string; periodEnd?: string }) {
+  const db = (await getDb()).scope(actor.tenantId);
+  const control = await db.get<{ id: string; code: string; title: string; objective: string; policy_json: string }>("SELECT * FROM controls WHERE tenant_id = ? AND code = ? AND valid_to IS NULL", actor.tenantId, input.controlCode);
   if (!control) throw new Error(`Control ${input.controlCode} not found`);
-  const asset = db.prepare("SELECT id, name FROM assets WHERE tenant_id = ? AND id = ? AND valid_to IS NULL").get(actor.tenantId, input.assetId) as { id: string; name: string } | undefined;
+  const asset = await db.get<{ id: string; name: string }>("SELECT id, name FROM assets WHERE tenant_id = ? AND id = ? AND valid_to IS NULL", actor.tenantId, input.assetId);
   if (!asset) throw new Error(`Asset ${input.assetId} not found`);
 
   const evaluatedAt = new Date().toISOString();
@@ -49,30 +49,30 @@ export function evaluateControl(actor: Actor, input: { controlCode: string; asse
   const evidencePayload = { control: control.code, asset: asset.id, facts: input.facts, result, evaluatedAt };
   const content = canonicalJson(evidencePayload);
 
-  const transaction = db.transaction(() => {
-    db.prepare(`INSERT INTO evidence (id,tenant_id,control_id,asset_id,name,source,collection_method,content_type,content_json,content_hash,period_start,period_end,collected_at,expires_at,status,created_by) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`).run(
-      evidenceId, actor.tenantId, control.id, asset.id, `${control.title} evaluation`, input.source, "automated policy evaluation", "application/vnd.kontrol.control-result+json", content, sha256(content), input.periodStart ?? null, input.periodEnd ?? null, evaluatedAt, new Date(Date.now() + 86_400_000).toISOString(), result.passed ? "healthy" : "failed", actor.userId,
-    );
+  const finding = await db.transaction(async (tx) => {
+    await tx.run(`INSERT INTO evidence (id,tenant_id,control_id,asset_id,name,source,collection_method,content_type,content_json,content_hash,period_start,period_end,collected_at,expires_at,status,created_by) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+      evidenceId, actor.tenantId, control.id, asset.id, `${control.title} evaluation`, input.source, "automated policy evaluation", "application/vnd.kontrol.control-result+json", content, sha256(content), input.periodStart ?? null, input.periodEnd ?? null, evaluatedAt, new Date(Date.now() + 86_400_000).toISOString(), result.passed ? "healthy" : "failed", actor.userId);
 
+    let outcome: string | string[];
     if (!result.passed) {
-      const existing = db.prepare("SELECT id FROM findings WHERE tenant_id = ? AND control_id = ? AND asset_id = ? AND status IN ('open','remediating') LIMIT 1").get(actor.tenantId, control.id, asset.id) as { id: string } | undefined;
+      const existing = await tx.get<{ id: string }>("SELECT id FROM findings WHERE tenant_id = ? AND control_id = ? AND asset_id = ? AND status IN ('open','remediating') LIMIT 1", actor.tenantId, control.id, asset.id);
       if (existing) {
-        db.prepare("UPDATE findings SET evidence_id = ?, reason = ?, opened_at = ? WHERE id = ?").run(evidenceId, JSON.stringify(result.failed), evaluatedAt, existing.id);
-        return existing.id;
+        await tx.run("UPDATE findings SET evidence_id = ?, reason = ?, opened_at = ? WHERE id = ?", evidenceId, JSON.stringify(result.failed), evaluatedAt, existing.id);
+        outcome = existing.id;
+      } else {
+        const findingId = `finding_${randomUUID()}`;
+        await tx.run(`INSERT INTO findings (id,tenant_id,control_id,asset_id,evidence_id,title,severity,status,reason,remediation,owner_id,due_at,opened_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+          findingId, actor.tenantId, control.id, asset.id, evidenceId, `${control.title} failed on ${asset.name}`, "high", "open", JSON.stringify(result.failed), `Remediate failed policy conditions for ${control.code}, then trigger a re-test.`, actor.userId, new Date(Date.now() + 14 * 86_400_000).toISOString(), evaluatedAt);
+        outcome = findingId;
       }
-      const findingId = `finding_${randomUUID()}`;
-      db.prepare(`INSERT INTO findings (id,tenant_id,control_id,asset_id,evidence_id,title,severity,status,reason,remediation,owner_id,due_at,opened_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)`).run(
-        findingId, actor.tenantId, control.id, asset.id, evidenceId, `${control.title} failed on ${asset.name}`, "high", "open", JSON.stringify(result.failed), `Remediate failed policy conditions for ${control.code}, then trigger a re-test.`, actor.userId, new Date(Date.now() + 14 * 86_400_000).toISOString(), evaluatedAt,
-      );
-      return findingId;
+    } else {
+      const openFindings = await tx.all<{ id: string }>("SELECT id FROM findings WHERE tenant_id = ? AND control_id = ? AND asset_id = ? AND status IN ('open','remediating')", actor.tenantId, control.id, asset.id);
+      for (const item of openFindings) await tx.run("UPDATE findings SET status = 'closed', closed_at = ?, evidence_id = ? WHERE id = ?", evaluatedAt, evidenceId, item.id);
+      outcome = openFindings.map((item) => item.id);
     }
-
-    const openFindings = db.prepare("SELECT id FROM findings WHERE tenant_id = ? AND control_id = ? AND asset_id = ? AND status IN ('open','remediating')").all(actor.tenantId, control.id, asset.id) as Array<{ id: string }>;
-    for (const finding of openFindings) db.prepare("UPDATE findings SET status = 'closed', closed_at = ?, evidence_id = ? WHERE id = ?").run(evaluatedAt, evidenceId, finding.id);
-    return openFindings.map((finding) => finding.id);
+    await appendAudit({ tenantId: actor.tenantId, actorId: actor.userId, action: "control.evaluated", objectType: "control", objectId: control.id, payload: { assetId: asset.id, evidenceId, result, finding: outcome } }, tx);
+    return outcome;
   });
 
-  const finding = transaction();
-  appendAudit({ tenantId: actor.tenantId, actorId: actor.userId, action: "control.evaluated", objectType: "control", objectId: control.id, payload: { assetId: asset.id, evidenceId, result, finding } });
   return { control: { id: control.id, code: control.code, title: control.title }, asset, evidenceId, finding, ...result, evaluatedAt };
 }

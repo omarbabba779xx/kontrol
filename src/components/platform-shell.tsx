@@ -1,7 +1,8 @@
 "use client";
 
+import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
-import { usePathname } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import {
   Archive,
   ArrowUpRight,
@@ -54,12 +55,57 @@ function Mark() {
   );
 }
 
+function PageJump() {
+  const router = useRouter();
+  const inputRef = useRef<HTMLInputElement>(null);
+  const [value, setValue] = useState("");
+
+  useEffect(() => {
+    const onKey = (event: KeyboardEvent) => {
+      if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === "k") {
+        event.preventDefault();
+        inputRef.current?.focus();
+      }
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, []);
+
+  function submit(event: React.FormEvent) {
+    event.preventDefault();
+    const query = value.trim().toLowerCase();
+    const match = navigation.find((item) => item.name.toLowerCase() === query) ?? navigation.find((item) => item.name.toLowerCase().includes(query));
+    if (!match) return;
+    router.push(match.href);
+    setValue("");
+    inputRef.current?.blur();
+  }
+
+  return (
+    <form onSubmit={submit} role="search" className="relative hidden md:block">
+      <Search aria-hidden="true" className="absolute start-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-[#96938b]" />
+      <Input
+        ref={inputRef}
+        type="search"
+        list="kontrol-pages"
+        value={value}
+        onChange={(event) => setValue(event.target.value)}
+        aria-label="Jump to a page"
+        placeholder="Jump to a page…"
+        className="h-8 w-[220px] rounded-none border-[#cbc7bd] bg-transparent ps-8 pe-9 text-[10px] shadow-none placeholder:text-[#9d9a92]"
+      />
+      <datalist id="kontrol-pages">{navigation.map((item) => <option key={item.href} value={item.name} />)}</datalist>
+      <span aria-hidden="true" className="pointer-events-none absolute end-2 top-1/2 flex -translate-y-1/2 items-center gap-1 font-mono text-[8px] text-[#aaa79e]"><Command className="h-2.5 w-2.5" />K</span>
+    </form>
+  );
+}
+
 function Navigation({ onNavigate }: { onNavigate?: () => void }) {
   const pathname = usePathname();
   return (
     <nav aria-label="Primary navigation" className="mt-10">
       <div className="mb-3 flex items-center justify-between px-2 font-mono text-[8px] uppercase tracking-[.16em] text-[#96938b]">
-        <span>Workspace</span><span>Acme / EU</span>
+        <span>Workspace</span><span>Demo / EU</span>
       </div>
       <div className="border-t border-[#d7d3c9]">
         {navigation.map((item) => {
@@ -68,6 +114,7 @@ function Navigation({ onNavigate }: { onNavigate?: () => void }) {
             <Link
               key={item.href}
               href={item.href}
+              aria-current={active ? "page" : undefined}
               onClick={onNavigate}
               className={cn(
                 "group grid min-h-11 grid-cols-[24px_1fr_16px] items-center gap-2 border-b border-[#d7d3c9] px-2 text-[11px] transition-colors",
@@ -90,8 +137,8 @@ function Sidebar() {
     <aside className="fixed inset-y-0 start-0 z-30 hidden w-[224px] border-e border-[#cbc7bd] bg-[#efebe2] lg:flex lg:flex-col">
       <div className="px-5 pt-5"><Mark /><Navigation /></div>
       <div className="mt-auto border-t border-[#cbc7bd] p-4">
-        <div className="mb-4 flex items-center justify-between font-mono text-[8px] uppercase tracking-wider text-[#8c8981]"><span>Data state</span><span className="flex items-center gap-1.5 text-[#2d6a4f]"><span className="h-1.5 w-1.5 rounded-full bg-[#2d6a4f]" />Current</span></div>
-        <button className="flex w-full items-center gap-3 border-t border-[#d7d3c9] pt-3 text-start">
+        <div className="mb-4 flex items-center justify-between font-mono text-[8px] uppercase tracking-wider text-[#8c8981]"><span>Data state</span><span className="flex items-center gap-1.5 text-[#8c6a25]"><span className="h-1.5 w-1.5 rounded-full bg-[#a98a45]" aria-hidden="true" />Sample data</span></div>
+        <button type="button" className="flex w-full items-center gap-3 border-t border-[#d7d3c9] pt-3 text-start">
           <span className="grid h-7 w-7 place-items-center rounded-full bg-[#d9d4c8] font-mono text-[9px] text-[#34332e]">LM</span>
           <span className="min-w-0"><span className="block truncate text-[10px] font-semibold text-[#34332e]">Leila Mansour</span><span className="block truncate text-[8px] text-[#8f8c84]">AI Risk Owner</span></span>
           <ChevronDown className="ms-auto h-3 w-3 text-[#9c9990]" />
@@ -102,32 +149,36 @@ function Sidebar() {
 }
 
 export function PlatformShell({ children }: { children: React.ReactNode }) {
+  const [menuOpen, setMenuOpen] = useState(false);
   return (
     <TooltipProvider>
       <div className="min-h-screen w-full bg-[#f4f1e9] text-[#1c1c18]">
+        <a href="#main-content" className="sr-only z-50 bg-[#171713] px-3 py-2 text-[10px] text-white focus:not-sr-only focus:fixed focus:start-2 focus:top-2">Skip to content</a>
         <Sidebar />
         <div className="min-w-0 lg:ps-[224px]">
           <header className="sticky top-0 z-20 flex h-14 items-center border-b border-[#cbc7bd] bg-[#f4f1e9]/95 px-4 backdrop-blur-sm sm:px-6 lg:px-8">
-            <Sheet>
-              <SheetTrigger render={<Button variant="ghost" size="icon" className="me-3 h-8 w-8 rounded-none lg:hidden" />}><Menu className="h-4 w-4" /></SheetTrigger>
-              <SheetContent side="left" className="w-[278px] border-[#cbc7bd] bg-[#efebe2] p-5 text-[#171713]"><SheetTitle className="sr-only">Navigation</SheetTitle><Mark /><Navigation /></SheetContent>
+            <Sheet open={menuOpen} onOpenChange={setMenuOpen}>
+              <SheetTrigger render={<Button variant="ghost" size="icon" className="me-3 h-8 w-8 rounded-none lg:hidden" aria-label="Open navigation" />}><Menu className="h-4 w-4" /></SheetTrigger>
+              <SheetContent side="left" className="w-[278px] border-[#cbc7bd] bg-[#efebe2] p-5 text-[#171713]"><SheetTitle className="sr-only">Navigation</SheetTitle><Mark /><Navigation onNavigate={() => setMenuOpen(false)} /></SheetContent>
             </Sheet>
             <div className="hidden items-center gap-3 sm:flex">
               <span className="font-mono text-[8px] uppercase tracking-[.16em] text-[#8e8b83]">Portfolio</span>
               <span className="text-[10px] font-medium text-[#2d2c28]">EU Consumer Lending</span>
               <span className="h-3 w-px bg-[#cbc7bd]" />
-              <span className="font-mono text-[8px] text-[#8e8b83]">AS OF 30 SEP 2026 · 18:42 CET</span>
+              <span className="font-mono text-[8px] text-[#8e8b83]">SAMPLE PORTFOLIO · ILLUSTRATIVE DATA</span>
             </div>
             <div className="ms-auto flex items-center gap-2">
-              <div className="relative hidden md:block">
-                <Search className="absolute start-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-[#96938b]" />
-                <Input placeholder="Trace any object…" className="h-8 w-[220px] rounded-none border-[#cbc7bd] bg-transparent ps-8 pe-9 text-[10px] shadow-none placeholder:text-[#9d9a92]" />
-                <span className="absolute end-2 top-1/2 flex -translate-y-1/2 items-center gap-1 font-mono text-[8px] text-[#aaa79e]"><Command className="h-2.5 w-2.5" />K</span>
-              </div>
-              <Button variant="outline" className="h-8 rounded-none border-[#171713] bg-transparent px-3 text-[9px] font-semibold text-[#171713] shadow-none hover:bg-[#171713] hover:text-white">Export brief <ArrowUpRight className="ms-1.5 h-3 w-3" /></Button>
+              <PageJump />
+              <a
+                href="/api/oscal/export"
+                download
+                className="inline-flex h-8 items-center border border-[#171713] bg-transparent px-3 text-[9px] font-semibold text-[#171713] transition-colors hover:bg-[#171713] hover:text-white focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#171713]"
+              >
+                Export OSCAL <ArrowUpRight aria-hidden="true" className="ms-1.5 h-3 w-3" />
+              </a>
             </div>
           </header>
-          <main className="min-h-[calc(100vh-56px)] min-w-0 overflow-x-hidden">{children}</main>
+          <main id="main-content" className="min-h-[calc(100vh-56px)] min-w-0 overflow-x-hidden">{children}</main>
         </div>
       </div>
     </TooltipProvider>
@@ -141,7 +192,7 @@ export function PageHeading({ index, title, description, meta, action }: { index
         <span className="mt-1 font-mono text-[9px] text-[#f05a32]">{index}</span>
         <div><h1 className="text-[28px] font-medium leading-none tracking-[-.045em] text-[#171713] sm:text-[36px]">{title}</h1><p className="mt-3 max-w-2xl text-[11px] leading-5 text-[#6f6c64]">{description}</p></div>
       </div>
-      <div className="flex items-end gap-3">{meta ? <span className="font-mono text-[8px] uppercase tracking-[.13em] text-[#918e86]">{meta}</span> : null}{action}</div>
+      <div className="flex items-end gap-3">{meta ? <span role="status" aria-live="polite" className="font-mono text-[8px] uppercase tracking-[.13em] text-[#918e86]">{meta}</span> : null}{action}</div>
     </div>
   );
 }

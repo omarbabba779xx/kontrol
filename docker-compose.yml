@@ -1,44 +1,77 @@
+# Production-like stack. Start the supporting services only with:
+#   docker compose up -d postgres minio minio-init opa
+# or the full stack (application on PostgreSQL with row-level security) with:
+#   docker compose --profile app up -d --build
+#
+# Credentials are read from the environment (see .env.example); the defaults below are for local evaluation only.
 services:
   postgres:
     image: postgres:17-alpine
     environment:
       POSTGRES_DB: kontrol
       POSTGRES_USER: kontrol
-      POSTGRES_PASSWORD: kontrol
-    ports: ["5432:5432"]
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-kontrol}
+    ports: ["127.0.0.1:5432:5432"]
     volumes:
       - kontrol-postgres:/var/lib/postgresql/data
-      - ./infra/postgres/schema.sql:/docker-entrypoint-initdb.d/001-schema.sql:ro
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U kontrol"]
+      test: ["CMD-SHELL", "pg_isready -U kontrol -d kontrol"]
       interval: 5s
       timeout: 3s
       retries: 10
+
   minio:
     image: minio/minio:RELEASE.2025-04-22T22-12-26Z
     command: server /data --console-address ":9001"
     environment:
-      MINIO_ROOT_USER: kontrol
-      MINIO_ROOT_PASSWORD: change-me-now
-    ports: ["9000:9000", "9001:9001"]
+      MINIO_ROOT_USER: ${S3_ACCESS_KEY:-kontrol}
+      MINIO_ROOT_PASSWORD: ${S3_SECRET_KEY:-change-me-now}
+    ports: ["127.0.0.1:9000:9000", "127.0.0.1:9001:9001"]
     volumes: ["kontrol-evidence:/data"]
 
   minio-init:
     image: minio/mc:RELEASE.2025-04-16T18-13-26Z
     depends_on: [minio]
+    restart: "no"
     entrypoint: ["/bin/sh", "-c"]
     command:
       - >-
-        until mc alias set local http://minio:9000 kontrol change-me-now; do sleep 2; done;
-        mc mb --ignore-existing local/kontrol-evidence;
-        mc version enable local/kontrol-evidence;
-        mc retention set --default GOVERNANCE 365d local/kontrol-evidence;
+        until mc alias set local http://minio:9000 "${S3_ACCESS_KEY:-kontrol}" "${S3_SECRET_KEY:-change-me-now}"; do sleep 2; done;
+        mc mb --ignore-existing --with-lock local/${S3_BUCKET:-kontrol-evidence};
+        mc retention set --default GOVERNANCE 365d local/${S3_BUCKET:-kontrol-evidence};
         exit 0
+
   opa:
     image: openpolicyagent/opa:1.4.2-static
     command: run --server --addr=0.0.0.0:8181 /policies
-    ports: ["8181:8181"]
+    ports: ["127.0.0.1:8181:8181"]
     volumes: ["./infra/opa:/policies:ro"]
+
+  app:
+    profiles: ["app"]
+    build: .
+    depends_on:
+      postgres: { condition: service_healthy }
+    ports: ["3000:3000"]
+    environment:
+      KONTROL_DB_DRIVER: postgres
+      POSTGRES_URL: postgres://kontrol:${POSTGRES_PASSWORD:-kontrol}@postgres:5432/kontrol
+      KONTROL_AUTH_MODE: ${KONTROL_AUTH_MODE:-oidc}
+      KONTROL_AUTH_SECRET: ${KONTROL_AUTH_SECRET:?set KONTROL_AUTH_SECRET to 32+ random characters}
+      KONTROL_SIGNING_SECRET: ${KONTROL_SIGNING_SECRET:?set KONTROL_SIGNING_SECRET to a different 32+ character secret}
+      CRON_SECRET: ${CRON_SECRET:-}
+      KONTROL_SEED: ${KONTROL_SEED:-false}
+      OPA_URL: http://opa:8181
+      S3_ENDPOINT: http://minio:9000
+      S3_BUCKET: ${S3_BUCKET:-kontrol-evidence}
+      S3_ACCESS_KEY: ${S3_ACCESS_KEY:-kontrol}
+      S3_SECRET_KEY: ${S3_SECRET_KEY:-change-me-now}
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:3000/api/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+
 volumes:
   kontrol-postgres:
   kontrol-evidence:

@@ -11,8 +11,9 @@ const run = async (facts: Record<string, unknown>) => {
   return evaluateControl(admin, { controlCode: "CTL-SDLC-004", assetId: "asset_repo_lending", facts, source: "test" });
 };
 const openFindings = async () => {
-  const { getDb } = await import("../src/lib/core/database");
-  return (getDb().prepare("SELECT COUNT(*) AS n FROM findings WHERE control_id = 'control_branch_protection' AND status = 'open'").get() as { n: number }).n;
+  const { getDb } = await import("../src/lib/db");
+  const row = await (await getDb()).system().get<{ n: number }>("SELECT COUNT(*) AS n FROM findings WHERE control_id = 'control_branch_protection' AND status = 'open'");
+  return Number(row?.n);
 };
 
 test("a failing control opens exactly one finding and re-evaluation updates it", async () => {
@@ -31,22 +32,22 @@ test("a passing evaluation closes the open finding", async () => {
 });
 
 test("evidence is stored with a hash that matches its content", async () => {
-  const { getDb } = await import("../src/lib/core/database");
+  const { getDb } = await import("../src/lib/db");
   const { sha256 } = await import("../src/lib/core/integrity");
   const result = await run(passing);
-  const row = getDb().prepare("SELECT content_json, content_hash FROM evidence WHERE id = ?").get(result.evidenceId) as { content_json: string; content_hash: string };
+  const row = (await (await getDb()).system().get<{ content_json: string; content_hash: string }>("SELECT content_json, content_hash FROM evidence WHERE id = ?", result.evidenceId))!;
   assert.equal(sha256(row.content_json), row.content_hash);
 });
 
 test("unknown controls and assets are rejected", async () => {
   const { evaluateControl } = await import("../src/lib/core/policy-engine");
-  assert.throws(() => evaluateControl(admin, { controlCode: "CTL-NOPE", assetId: "asset_repo_lending", facts: {}, source: "t" }), /not found/);
-  assert.throws(() => evaluateControl(admin, { controlCode: "CTL-SDLC-004", assetId: "asset_nope", facts: {}, source: "t" }), /not found/);
+  await assert.rejects(evaluateControl(admin, { controlCode: "CTL-NOPE", assetId: "asset_repo_lending", facts: {}, source: "t" }), /not found/);
+  await assert.rejects(evaluateControl(admin, { controlCode: "CTL-SDLC-004", assetId: "asset_nope", facts: {}, source: "t" }), /not found/);
 });
 
 test("controls are tenant scoped", async () => {
   const { evaluateControl } = await import("../src/lib/core/policy-engine");
-  assert.throws(() => evaluateControl({ ...admin, tenantId: "tenant_other" }, { controlCode: "CTL-SDLC-004", assetId: "asset_repo_lending", facts: passing, source: "t" }), /not found/);
+  await assert.rejects(evaluateControl({ ...admin, tenantId: "tenant_other" }, { controlCode: "CTL-SDLC-004", assetId: "asset_repo_lending", facts: passing, source: "t" }), /not found/);
 });
 
 test("policy operators behave as documented", async () => {

@@ -2,7 +2,8 @@ import "server-only";
 
 import { jwtVerify, SignJWT } from "jose";
 import { authSecret, demoAuthAllowed } from "@/lib/core/config";
-import { DEFAULT_TENANT_ID, DEFAULT_USER_ID, getDb } from "@/lib/core/database";
+import { consumeRateLimit } from "@/lib/core/rate-limit";
+import { DEFAULT_TENANT_ID, DEFAULT_USER_ID, getDb } from "@/lib/db";
 
 export type Role = "admin" | "risk_owner" | "control_owner" | "auditor" | "viewer";
 export type Permission =
@@ -59,8 +60,8 @@ export async function issueSessionToken(actor: Actor) {
     .sign(sessionKey());
 }
 
-function demoActor(): Actor {
-  const row = getDb().prepare("SELECT id, tenant_id, email, name, role FROM users WHERE id = ?").get(DEFAULT_USER_ID) as { id: string; tenant_id: string; email: string; name: string; role: Role };
+async function demoActor(): Promise<Actor> {
+  const row = (await (await getDb()).system().get<{ id: string; tenant_id: string; email: string; name: string; role: Role }>("SELECT id, tenant_id, email, name, role FROM users WHERE id = ?", DEFAULT_USER_ID))!;
   return { userId: row.id, tenantId: row.tenant_id, email: row.email, name: row.name, role: row.role };
 }
 
@@ -87,6 +88,7 @@ export async function authenticate(request: Request): Promise<Actor | null> {
 export async function requireActor(request: Request, permission: Permission): Promise<Actor> {
   const actor = await authenticate(request);
   if (!actor) throw new AuthError("Authentication required", 401);
+  if (!consumeRateLimit(`actor:${actor.tenantId}:${actor.userId}`).allowed) throw new AuthError("Rate limit exceeded", 429);
   if (!permissions[actor.role]?.includes(permission)) throw new AuthError(`Role ${actor.role} cannot perform ${permission}`, 403);
   return actor;
 }

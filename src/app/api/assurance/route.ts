@@ -14,7 +14,7 @@ const actionSchema = z.discriminatedUnion("action", [
 export const runtime = "nodejs";
 
 export async function GET(request: Request) {
-  try { const actor = await requireActor(request, "evidence:read"); return Response.json(getAssuranceSnapshot(actor.tenantId)); }
+  try { const actor = await requireActor(request, "evidence:read"); return Response.json(await getAssuranceSnapshot(actor.tenantId)); }
   catch (error) { return apiError(error); }
 }
 
@@ -22,10 +22,10 @@ export async function POST(request: Request) {
   try {
     const input = actionSchema.parse(await request.json());
     const actor = await requireActor(request, input.action === "simulate_twin" ? "risks:simulate" : input.action === "auditor_request" ? "controls:evaluate" : "controls:evaluate");
-    if (input.action === "scan") return Response.json(runAssuranceScan(actor));
-    if (input.action === "assess_vendors") return Response.json({ assessments: assessVendors(actor) });
-    if (input.action === "simulate_twin") return Response.json(simulateDigitalTwin(actor, input));
-    if (input.action === "auditor_respond") return Response.json(respondToAuditor(actor, input));
-    return Response.json(createAuditorRequest(actor, input), { status: 201 });
+    if (input.action === "scan") return Response.json(await runAssuranceScan(actor));
+    if (input.action === "assess_vendors") return Response.json({ assessments: await assessVendors(actor) });
+    if (input.action === "simulate_twin") return Response.json(await simulateDigitalTwin(actor, input));
+    if (input.action === "auditor_respond") return Response.json(await respondToAuditor(actor, input));
+    return Response.json(await createAuditorRequest(actor, input), { status: 201 });
   } catch (error) { return apiError(error); }
 }

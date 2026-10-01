@@ -19,4 +19,5 @@ COPY --from=deps --chown=nextjs:nodejs /app/node_modules ./node_modules
 RUN mkdir -p /app/.data && chown nextjs:nodejs /app/.data
 USER nextjs
 EXPOSE 3000
+HEALTHCHECK --interval=30s --timeout=5s --retries=3 CMD node -e "fetch('http://127.0.0.1:3000/api/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"
 CMD ["npm", "start"]

@@ -8,7 +8,8 @@ Kontrol handles evidence, control results and approval records. Treat deployment
 - Supply unique high-entropy authentication, signing and cron secrets through a secret manager.
 - Use least-privilege GitHub, AWS and Okta service identities; never expose connector tokens to the browser.
 - Put evidence objects in versioned, retention-locked object storage and encrypt data in transit and at rest.
-- Use the PostgreSQL profile with row-level security for multi-tenant production deployments.
+- Run `KONTROL_DB_DRIVER=postgres` for multi-tenant production deployments and connect with a role that is not a superuser. The application drops to a non-bypass role and every tenant table is under forced row-level security.
+- Set `KONTROL_SEED=false` so the demonstration tenant is never created.
 
 ## Built-in protections
 
@@ -17,6 +18,9 @@ Kontrol handles evidence, control results and approval records. Treat deployment
 - Decision signatures are compared in constant time; the cron bearer token likewise.
 - Approvals enforce separation of duties: the requester of a workflow cannot approve it.
 - Outbound regulatory fetches are HTTPS-only, refuse credentials, private and internal addresses, and do not follow redirects.
+- The audit log is append-only (triggers; the runtime role has no `UPDATE`/`DELETE` privilege on PostgreSQL) and chains cannot fork under concurrent writers.
+- Tenant isolation is enforced by the database on PostgreSQL, not only by query filters.
+- Requests are rate limited per actor (`KONTROL_RATE_LIMIT_PER_MINUTE`).
 - OIDC-provisioned users default to `viewer` unless `OIDC_TRUST_ROLE_CLAIM=true`.
 
 ## Trust boundaries

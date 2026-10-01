@@ -1,7 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { createRemoteJWKSet, jwtVerify } from "jose";
 import { issueSessionToken, type Role } from "@/lib/core/auth";
-import { DEFAULT_TENANT_ID, getDb } from "@/lib/core/database";
+import { DEFAULT_TENANT_ID, getDb } from "@/lib/db";
 
 export const runtime = "nodejs";
 const allowedRoles = new Set<Role>(["admin", "risk_owner", "control_owner", "auditor", "viewer"]);
@@ -34,11 +34,11 @@ export async function GET(request: Request) {
     // Role claims are only honoured when the deployer explicitly trusts the identity provider to assign them.
     const requestedRole = String(process.env.OIDC_TRUST_ROLE_CLAIM === "true" ? payload.kontrol_role ?? "viewer" : "viewer") as Role;
     const role: Role = allowedRoles.has(requestedRole) ? requestedRole : "viewer";
-    const db = getDb();
-    let user = db.prepare("SELECT id,tenant_id,email,name,role FROM users WHERE tenant_id=? AND email=?").get(tenantId, email) as { id: string; tenant_id: string; email: string; name: string; role: Role } | undefined;
+    const db = (await getDb()).system();
+    let user = await db.get<{ id: string; tenant_id: string; email: string; name: string; role: Role }>("SELECT id,tenant_id,email,name,role FROM users WHERE tenant_id=? AND email=?", tenantId, email);
     if (!user) {
       const id = `usr_oidc_${randomUUID()}`;
-      db.prepare("INSERT INTO users (id,tenant_id,email,name,role,created_at) VALUES (?,?,?,?,?,?)").run(id, tenantId, email, String(payload.name ?? email), role, new Date().toISOString());
+      await db.run("INSERT INTO users (id,tenant_id,email,name,role,created_at) VALUES (?,?,?,?,?,?)", id, tenantId, email, String(payload.name ?? email), role, new Date().toISOString());
       user = { id, tenant_id: tenantId, email, name: String(payload.name ?? email), role };
     }
     const token = await issueSessionToken({ userId: user.id, tenantId: user.tenant_id, email: user.email, name: user.name, role: user.role });

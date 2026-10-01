@@ -12,7 +12,7 @@ export async function POST(request: Request) {
     if (process.env.CRON_SECRET && supplied && safeEqual(supplied, process.env.CRON_SECRET)) actor = { userId: "system:cron", tenantId: "tenant_acme", email: "system@kontrol.local", name: "Kontrol Scheduler", role: "admin" } satisfies Actor;
     if (!actor) return Response.json({ error: "Unauthorized" }, { status: 401 });
     const processed = await runDueWorkflows(actor, 25);
-    const assurance = runAssuranceScan(actor);
+    const assurance = await runAssuranceScan(actor);
     return Response.json({ processed, assurance });
   } catch (error) { return apiError(error); }
 }

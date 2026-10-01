@@ -8,7 +8,10 @@
     "start": "next start",
     "lint": "eslint",
     "test": "node --conditions=react-server --import tsx --test \"tests/**/*.test.ts\"",
-    "check": "npm run lint && npm run test && npm run build"
+    "typecheck": "tsc --noEmit",
+    "test:postgres": "cross-env KONTROL_TEST_DB=postgres node --conditions=react-server --import tsx --test \"tests/**/*.test.ts\"",
+    "db:migrate": "node --conditions=react-server --import tsx scripts/migrate-sqlite-to-postgres.ts",
+    "check": "npm run lint && npm run typecheck && npm run test && npm run test:postgres && npm run build"
   },
   "dependencies": {
     "@aws-sdk/client-config-service": "^3.1143.0",
@@ -33,11 +36,14 @@
     "zod": "^4.6.5"
   },
   "devDependencies": {
+    "@electric-sql/pglite": "^0.5.8",
+    "@electric-sql/pglite-socket": "^0.2.11",
     "@tailwindcss/postcss": "^4",
     "@types/better-sqlite3": "^9.6.0",
     "@types/node": "^20",
     "@types/react": "^19",
     "@types/react-dom": "^19",
+    "cross-env": "^10.1.0",
     "eslint": "^9",
     "eslint-config-next": "16.3.8",
     "tailwindcss": "^4",

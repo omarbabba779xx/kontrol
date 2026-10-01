@@ -19,7 +19,11 @@ jobs:
           cache: npm
       - run: npm ci
       - run: npm run lint
-      - run: npm test
+      - run: npm run typecheck
+      - name: Tests (SQLite)
+        run: npm test
+      - name: Tests (PostgreSQL with row-level security)
+        run: npm run test:postgres
       - run: npm run build
         env:
           NEXT_TELEMETRY_DISABLED: "1"

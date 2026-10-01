@@ -1,14 +1,14 @@
 import "server-only";
 
 import { randomUUID } from "node:crypto";
-import { getDb } from "@/lib/core/database";
+import { getDb } from "@/lib/db";
 
-export function exportOscalAssessmentResults(tenantId: string) {
-  const db = getDb();
-  const tenant = db.prepare("SELECT * FROM tenants WHERE id = ?").get(tenantId) as { name: string };
-  const evidence = db.prepare("SELECT * FROM evidence WHERE tenant_id = ? ORDER BY collected_at DESC").all(tenantId) as Array<Record<string, unknown>>;
-  const findings = db.prepare("SELECT * FROM findings WHERE tenant_id = ? ORDER BY opened_at DESC").all(tenantId) as Array<Record<string, unknown>>;
-  const controls = db.prepare("SELECT * FROM controls WHERE tenant_id = ? AND valid_to IS NULL").all(tenantId) as Array<Record<string, unknown>>;
+export async function exportOscalAssessmentResults(tenantId: string) {
+  const db = (await getDb()).scope(tenantId);
+  const tenant = (await db.get<{ name: string }>("SELECT * FROM tenants WHERE id = ?", tenantId)) ?? { name: tenantId };
+  const evidence = await db.all<Record<string, unknown>>("SELECT * FROM evidence WHERE tenant_id = ? ORDER BY collected_at DESC", tenantId);
+  const findings = await db.all<Record<string, unknown>>("SELECT * FROM findings WHERE tenant_id = ? ORDER BY opened_at DESC", tenantId);
+  const controls = await db.all<Record<string, unknown>>("SELECT * FROM controls WHERE tenant_id = ? AND valid_to IS NULL", tenantId);
   const now = new Date().toISOString();
 
   return {

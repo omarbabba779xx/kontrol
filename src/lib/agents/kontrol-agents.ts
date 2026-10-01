@@ -3,7 +3,7 @@ import "server-only";
 import { ToolLoopAgent, gateway, isStepCount, tool } from "ai";
 import { z } from "zod";
 import type { Actor } from "@/lib/core/auth";
-import { getDb } from "@/lib/core/database";
+import { getDb } from "@/lib/db";
 import { simulateRisk } from "@/lib/core/risk-engine";
 
 export type AgentKind = "regulatory_analyst" | "control_engineer" | "evidence_analyst" | "risk_quantifier" | "audit_assistant" | "contradiction_detector";
@@ -17,34 +17,34 @@ const missions: Record<AgentKind, string> = {
   contradiction_detector: "Recherche les incohérences entre politiques, contrôles, preuves, constats et décisions.",
 };
 
-function provenance(actor: Actor, subjectId?: string) {
-  const db = getDb();
-  const evidence = db.prepare("SELECT id, name, source, collection_method, collected_at, content_hash, status FROM evidence WHERE tenant_id = ? ORDER BY collected_at DESC LIMIT 12").all(actor.tenantId);
-  const findings = db.prepare("SELECT id, control_id, status, severity, title, opened_at, closed_at FROM findings WHERE tenant_id = ? ORDER BY opened_at DESC LIMIT 12").all(actor.tenantId);
-  const obligations = db.prepare("SELECT id, framework, citation, title, version_hash, effective_from FROM obligations WHERE tenant_id = ? ORDER BY recorded_at DESC LIMIT 12").all(actor.tenantId);
-  const subject = subjectId ? db.prepare("SELECT id, type, name, attributes_json FROM assets WHERE tenant_id = ? AND id = ?").get(actor.tenantId, subjectId) : null;
+async function provenance(actor: Actor, subjectId?: string) {
+  const db = (await getDb()).scope(actor.tenantId);
+  const evidence = await db.all("SELECT id, name, source, collection_method, collected_at, content_hash, status FROM evidence WHERE tenant_id = ? ORDER BY collected_at DESC LIMIT 12", actor.tenantId);
+  const findings = await db.all("SELECT id, control_id, status, severity, title, opened_at, closed_at FROM findings WHERE tenant_id = ? ORDER BY opened_at DESC LIMIT 12", actor.tenantId);
+  const obligations = await db.all("SELECT id, framework, citation, title, version_hash, effective_from FROM obligations WHERE tenant_id = ? ORDER BY recorded_at DESC LIMIT 12", actor.tenantId);
+  const subject = subjectId ? (await db.get("SELECT id, type, name, attributes_json FROM assets WHERE tenant_id = ? AND id = ?", actor.tenantId, subjectId)) ?? null : null;
   return { subject, evidence, findings, obligations };
 }
 
-function createTools(actor: Actor) {
-  const db = getDb();
+async function createTools(actor: Actor) {
+  const db = (await getDb()).scope(actor.tenantId);
   return {
     graph: tool({
       description: "Retourne les relations du graphe GRC autour d'un objet.",
       inputSchema: z.object({ objectId: z.string() }),
-      execute: async ({ objectId }) => db.prepare("SELECT * FROM graph_edges WHERE tenant_id = ? AND (source_id = ? OR target_id = ?) LIMIT 100").all(actor.tenantId, objectId, objectId),
+      execute: async ({ objectId }) => db.all("SELECT * FROM graph_edges WHERE tenant_id = ? AND (source_id = ? OR target_id = ?) LIMIT 100", actor.tenantId, objectId, objectId),
     }),
     findings: tool({
       description: "Liste les constats ouverts avec leur sévérité et leur contrôle.",
       inputSchema: z.object({ severity: z.string().optional() }),
       execute: async ({ severity }) => severity
-        ? db.prepare("SELECT * FROM findings WHERE tenant_id = ? AND status = 'open' AND severity = ? LIMIT 50").all(actor.tenantId, severity)
-        : db.prepare("SELECT * FROM findings WHERE tenant_id = ? AND status = 'open' LIMIT 50").all(actor.tenantId),
+        ? db.all("SELECT * FROM findings WHERE tenant_id = ? AND status = 'open' AND severity = ? LIMIT 50", actor.tenantId, severity)
+        : db.all("SELECT * FROM findings WHERE tenant_id = ? AND status = 'open' LIMIT 50", actor.tenantId),
     }),
     evidence: tool({
       description: "Lit les métadonnées et le contenu structuré d'une preuve.",
       inputSchema: z.object({ evidenceId: z.string() }),
-      execute: async ({ evidenceId }) => db.prepare("SELECT id,name,source,collection_method,content_json,content_hash,collected_at,period_start,period_end,status FROM evidence WHERE tenant_id = ? AND id = ?").get(actor.tenantId, evidenceId),
+      execute: async ({ evidenceId }) => (await db.get("SELECT id,name,source,collection_method,content_json,content_hash,collected_at,period_start,period_end,status FROM evidence WHERE tenant_id = ? AND id = ?", actor.tenantId, evidenceId)) ?? null,
     }),
     riskScenario: tool({
       description: "Exécute une simulation de risque reproductible et retourne les percentiles.",
@@ -55,7 +55,7 @@ function createTools(actor: Actor) {
 }
 
 export async function runKontrolAgent(actor: Actor, kind: AgentKind, question: string, subjectId?: string) {
-  const sources = provenance(actor, subjectId);
+  const sources = await provenance(actor, subjectId);
   const modelId = process.env.KONTROL_AGENT_MODEL;
   if (!process.env.AI_GATEWAY_API_KEY || !modelId) {
     const openFindings = (sources.findings as Array<{ status: string }>).filter((item) => item.status === "open").length;
@@ -72,7 +72,7 @@ export async function runKontrolAgent(actor: Actor, kind: AgentKind, question: s
   const agent = new ToolLoopAgent({
     model: gateway(modelId),
     instructions: `Tu es un agent spécialisé de la plateforme Kontrol. ${missions[kind]} Tu dois citer uniquement les identifiants retournés par les outils, signaler les lacunes, donner un niveau de confiance de 0 à 1 et expliciter les hypothèses. Tu es en lecture seule. Toute mutation ou décision finale doit être proposée pour approbation humaine. Réponds en français, de façon concise et structurée.`,
-    tools: createTools(actor),
+    tools: await createTools(actor),
     stopWhen: isStepCount(6),
   });
   const result = await agent.generate({ prompt: `${question}\nSujet: ${subjectId ?? "non spécifié"}` });

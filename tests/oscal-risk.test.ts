@@ -7,8 +7,8 @@ isolateDatabase();
 test("OSCAL export is structurally valid and includes findings and evidence", async () => {
   const { exportOscalAssessmentResults } = await import("../src/lib/core/oscal");
   const { evaluateControl } = await import("../src/lib/core/policy-engine");
-  evaluateControl(admin, { controlCode: "CTL-SDLC-004", assetId: "asset_repo_lending", facts: { production: true, branchProtection: { enabled: false, requiredReviews: 0 } }, source: "test" });
-  const doc = exportOscalAssessmentResults(admin.tenantId) as { "assessment-results": { uuid: string; metadata: { "oscal-version": string }; results: Array<Record<string, unknown>> } };
+  await evaluateControl(admin, { controlCode: "CTL-SDLC-004", assetId: "asset_repo_lending", facts: { production: true, branchProtection: { enabled: false, requiredReviews: 0 } }, source: "test" });
+  const doc = (await exportOscalAssessmentResults(admin.tenantId)) as { "assessment-results": { uuid: string; metadata: { "oscal-version": string }; results: Array<Record<string, unknown>> } };
   const root = doc["assessment-results"];
   assert.match(root.uuid, /^[0-9a-f-]{36}$/);
   assert.equal(root.metadata["oscal-version"], "1.1.3");

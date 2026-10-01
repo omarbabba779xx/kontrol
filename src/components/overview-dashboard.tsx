@@ -62,8 +62,8 @@ export function OverviewDashboard() {
         index="01 / 08"
         title="Decision room"
         description="One decision packet that joins regulation, operational reality, risk, controls and evidence. Every conclusion below is traceable to its source."
-        meta="CASE 24–017 · OWNER L. MANSOUR"
-        action={<span className={cn("border px-2.5 py-1.5 font-mono text-[8px] uppercase tracking-wider", decision === "approved" ? "border-[#2d6a4f] bg-[#e2eee6] text-[#2d6a4f]" : decision === "rejected" ? "border-[#b8322a] bg-[#f4e4e0] text-[#9f2923]" : "border-[#e4582f] bg-[#f7e5dc] text-[#a63b1c]")}>{decision === "pending" ? "Decision due · 8 days" : decision}</span>}
+        meta="SAMPLE CASE 24–017 · ILLUSTRATIVE DATA"
+        action={<span role="status" className={cn("border px-2.5 py-1.5 font-mono text-[8px] uppercase tracking-wider", decision === "approved" ? "border-[#2d6a4f] bg-[#e2eee6] text-[#2d6a4f]" : decision === "rejected" ? "border-[#b8322a] bg-[#f4e4e0] text-[#9f2923]" : "border-[#e4582f] bg-[#f7e5dc] text-[#a63b1c]")}>{decision === "pending" ? "Decision due · 8 days" : decision}</span>}
       />
 
       <section className="grid border-b border-[#cbc7bd] sm:grid-cols-2 xl:grid-cols-4">
@@ -83,7 +83,7 @@ export function OverviewDashboard() {
             <div className="flex min-w-[820px] items-stretch">
               {nodes.map((node, index) => (
                 <div key={node.key} className="flex min-w-0 flex-1 items-center">
-                  <button onClick={() => setSelected(node.key)} className={cn("relative h-[118px] w-full border bg-[#f8f5ed] p-3 text-start transition-all hover:-translate-y-1 hover:shadow-[4px_4px_0_#cbc7bd]", toneStyle[node.tone], selected === node.key && "-translate-y-1 bg-white shadow-[4px_4px_0_#171713]")}>
+                  <button type="button" aria-pressed={selected === node.key} onClick={() => setSelected(node.key)} className={cn("relative h-[118px] w-full border bg-[#f8f5ed] p-3 text-start transition-all hover:-translate-y-1 hover:shadow-[4px_4px_0_#cbc7bd]", toneStyle[node.tone], selected === node.key && "-translate-y-1 bg-white shadow-[4px_4px_0_#171713]")}>
                     <div className="flex items-center justify-between font-mono text-[7px] uppercase tracking-wider"><span>{node.type}</span><span>{node.code}</span></div>
                     <div className="mt-6 text-[12px] font-semibold text-[#24231f]">{node.title}</div>
                     <div className="absolute bottom-3 start-3 font-mono text-[8px] uppercase tracking-wider">{node.state}</div>
@@ -99,7 +99,7 @@ export function OverviewDashboard() {
           </div>
         </div>
 
-        <aside className="bg-[#ebe7dd]">
+        <aside aria-label="Object inspector" aria-live="polite" className="bg-[#ebe7dd]">
           <div className="border-b border-[#cbc7bd] p-5"><div className="flex items-center justify-between"><MicroLabel>Object inspector</MicroLabel><span className="font-mono text-[8px] text-[#89867e]">{selectedNode.code}</span></div><h2 className="mt-5 text-[20px] font-medium tracking-[-.035em] text-[#171713]">{selectedNode.title}</h2><span className={cn("mt-2 inline-block border px-2 py-1 font-mono text-[7px] uppercase tracking-wider", toneStyle[selectedNode.tone])}>{selectedNode.state}</span></div>
           <div className="border-b border-[#cbc7bd] p-5"><MicroLabel>Assertion</MicroLabel><p className="mt-3 text-[11px] leading-[1.65] text-[#4f4d46]">{selectedDetail.summary}</p></div>
           <div className="border-b border-[#cbc7bd] p-5"><MicroLabel>Basis</MicroLabel><div className="mt-3 space-y-2">{selectedDetail.basis.map((item) => <div key={item} className="flex items-start gap-2 text-[9px] text-[#5f5c55]"><Link2 className="mt-0.5 h-3 w-3 shrink-0 text-[#817e76]" /><span>{item}</span></div>)}</div></div>
@@ -135,8 +135,8 @@ export function OverviewDashboard() {
           ].map((event, index, all) => <div key={event.label} className="flex flex-1 items-start"><div className="w-24 text-center"><span className={cn("mx-auto grid h-7 w-7 place-items-center rounded-full border bg-[#f4f1e9]", event.ok ? "border-[#2d6a4f] text-[#2d6a4f]" : "border-[#b8322a] bg-[#f4e4e0] text-[#b8322a]")}><event.icon className="h-3 w-3" /></span><p className="mt-2 text-[8px] font-medium text-[#4b4943]">{event.label}</p><p className="mt-1 font-mono text-[7px] text-[#99968e]">{event.time}</p></div>{index < all.length - 1 ? <div className="mt-3.5 h-px flex-1 bg-[#bdb9af]" /> : null}</div>)}</div></div>
         </div>
         <div className="bg-[#e9e5db] p-5">
-          <MicroLabel>Record decision</MicroLabel>
-          {decision === "pending" ? <><p className="mt-3 text-[10px] leading-5 text-[#625f58]">Your decision, conditions and the evidence snapshot will be sealed into the audit log.</p><div className="mt-5 grid grid-cols-2 gap-2"><Button onClick={() => setDecision("rejected")} variant="outline" className="h-9 rounded-none border-[#171713] bg-transparent text-[9px] shadow-none hover:bg-[#f0ddd8]">Reject</Button><Button onClick={() => setDecision("approved")} className="h-9 rounded-none bg-[#171713] text-[9px] text-white shadow-none hover:bg-[#2d2d27]">Approve conditions</Button></div></> : <div className="mt-4 border border-[#2d6a4f] bg-[#e2eee6] p-4"><div className="flex items-center gap-2 text-[#2d6a4f]"><ShieldCheck className="h-4 w-4" /><span className="text-[10px] font-semibold">Decision sealed</span></div><p className="mt-2 font-mono text-[7px] uppercase leading-4 text-[#4b725c]">30 SEP 2026 · LM-2041 · SHA 81CE…220F</p><button onClick={() => setDecision("pending")} className="mt-3 text-[8px] underline underline-offset-2">Undo demo action</button></div>}
+          <MicroLabel>Record decision (demo)</MicroLabel>
+          {decision === "pending" ? <><p className="mt-3 text-[10px] leading-5 text-[#625f58]">Your decision, conditions and the evidence snapshot will be sealed into the audit log.</p><div className="mt-5 grid grid-cols-2 gap-2"><Button onClick={() => setDecision("rejected")} variant="outline" className="h-9 rounded-none border-[#171713] bg-transparent text-[9px] shadow-none hover:bg-[#f0ddd8]">Reject</Button><Button onClick={() => setDecision("approved")} className="h-9 rounded-none bg-[#171713] text-[9px] text-white shadow-none hover:bg-[#2d2d27]">Approve conditions</Button></div></> : <div className="mt-4 border border-[#2d6a4f] bg-[#e2eee6] p-4"><div className="flex items-center gap-2 text-[#2d6a4f]"><ShieldCheck className="h-4 w-4" /><span className="text-[10px] font-semibold">Decision sealed</span></div><p className="mt-2 font-mono text-[7px] uppercase leading-4 text-[#4b725c]">30 SEP 2026 · LM-2041 · SHA 81CE…220F</p><button type="button" onClick={() => setDecision("pending")} className="mt-3 text-[8px] underline underline-offset-2">Undo demo action</button></div>}
         </div>
       </section>
     </div>

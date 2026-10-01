@@ -2,7 +2,7 @@ import "server-only";
 
 import { randomUUID } from "node:crypto";
 import type { Actor } from "@/lib/core/auth";
-import { getDb } from "@/lib/core/database";
+import { getDb } from "@/lib/db";
 import { appendAudit, sha256 } from "@/lib/core/integrity";
 
 type RegulatoryInput = { framework: string; citation: string; title: string; text: string; sourceUrl: string; effectiveFrom?: string; supersedesId?: string };
@@ -17,21 +17,21 @@ function diffText(previous: string, current: string) {
   return { added: [...after].filter((word) => !before.has(word)), removed: [...before].filter((word) => !after.has(word)), similarity: Number((([...after].filter((word) => before.has(word)).length / Math.max(1, new Set([...before, ...after]).size))).toFixed(3)) };
 }
 
-export function ingestRegulation(actor: Actor, input: RegulatoryInput) {
+export async function ingestRegulation(actor: Actor, input: RegulatoryInput) {
   const host = new URL(input.sourceUrl).hostname.toLowerCase();
   if (!trustedHosts.has(host)) throw new Error(`Source host ${host} is not approved`);
-  const db = getDb();
+  const db = (await getDb()).scope(actor.tenantId);
   const now = new Date().toISOString();
   const previous = input.supersedesId
-    ? db.prepare("SELECT * FROM obligations WHERE tenant_id = ? AND id = ?").get(actor.tenantId, input.supersedesId) as { id: string; text: string } | undefined
-    : db.prepare("SELECT * FROM obligations WHERE tenant_id = ? AND framework = ? AND citation = ? ORDER BY recorded_at DESC LIMIT 1").get(actor.tenantId, input.framework, input.citation) as { id: string; text: string } | undefined;
+    ? await db.get<{ id: string; text: string }>("SELECT * FROM obligations WHERE tenant_id = ? AND id = ?", actor.tenantId, input.supersedesId)
+    : await db.get<{ id: string; text: string }>("SELECT * FROM obligations WHERE tenant_id = ? AND framework = ? AND citation = ? ORDER BY recorded_at DESC LIMIT 1", actor.tenantId, input.framework, input.citation);
   const id = `obligation_${randomUUID()}`;
   const versionHash = sha256(input.text);
   const diff = diffText(previous?.text ?? "", input.text);
-  const duplicate = db.prepare("SELECT id FROM obligations WHERE tenant_id = ? AND version_hash = ?").get(actor.tenantId, versionHash) as { id: string } | undefined;
+  const duplicate = await db.get<{ id: string }>("SELECT id FROM obligations WHERE tenant_id = ? AND version_hash = ?", actor.tenantId, versionHash);
   if (duplicate) return { id: duplicate.id, duplicate: true, diff };
 
-  const controls = db.prepare("SELECT id, code, title, objective FROM controls WHERE tenant_id = ? AND valid_to IS NULL").all(actor.tenantId) as Array<{ id: string; code: string; title: string; objective: string }>;
+  const controls = await db.all<{ id: string; code: string; title: string; objective: string }>("SELECT id, code, title, objective FROM controls WHERE tenant_id = ? AND valid_to IS NULL", actor.tenantId);
   const inputTerms = tokenize(`${input.title} ${input.text}`);
   const mappings = controls.map((control) => {
     const terms = tokenize(`${control.title} ${control.objective}`);
@@ -39,22 +39,20 @@ export function ingestRegulation(actor: Actor, input: RegulatoryInput) {
     return { control, overlap, confidence: Math.min(.95, .45 + overlap.length * .08) };
   }).filter((mapping) => mapping.overlap.length > 0).sort((a, b) => b.confidence - a.confidence).slice(0, 8);
 
-  const transaction = db.transaction(() => {
-    if (previous) db.prepare("UPDATE obligations SET effective_to = ? WHERE id = ?").run(input.effectiveFrom ?? now.slice(0, 10), previous.id);
-    db.prepare(`INSERT INTO obligations (id,tenant_id,framework,citation,title,text,source_url,effective_from,version_hash,confidence,recorded_at) VALUES (?,?,?,?,?,?,?,?,?,?,?)`).run(
+  await db.transaction(async (tx) => {
+    if (previous) await tx.run("UPDATE obligations SET effective_to = ? WHERE id = ?", input.effectiveFrom ?? now.slice(0, 10), previous.id);
+    await tx.run(`INSERT INTO obligations (id,tenant_id,framework,citation,title,text,source_url,effective_from,version_hash,confidence,recorded_at) VALUES (?,?,?,?,?,?,?,?,?,?,?)`,
       id, actor.tenantId, input.framework, input.citation, input.title, input.text, input.sourceUrl, input.effectiveFrom ?? null, versionHash, 1, now,
     );
-    const edge = db.prepare(`INSERT INTO graph_edges (id,tenant_id,source_type,source_id,relation,target_type,target_id,confidence,rationale,source_ref,valid_from,recorded_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?)`);
-    for (const mapping of mappings) edge.run(randomUUID(), actor.tenantId, "obligation", id, "candidate_mapping", "control", mapping.control.id, mapping.confidence, `Keyword overlap: ${mapping.overlap.join(", ")}. Human approval required.`, input.sourceUrl, now, now);
+    for (const mapping of mappings) await tx.run(`INSERT INTO graph_edges (id,tenant_id,source_type,source_id,relation,target_type,target_id,confidence,rationale,source_ref,valid_from,recorded_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?)`, randomUUID(), actor.tenantId, "obligation", id, "candidate_mapping", "control", mapping.control.id, mapping.confidence, `Keyword overlap: ${mapping.overlap.join(", ")}. Human approval required.`, input.sourceUrl, now, now);
   });
-  transaction();
-  appendAudit({ tenantId: actor.tenantId, actorId: actor.userId, action: "regulation.ingested", objectType: "obligation", objectId: id, payload: { sourceUrl: input.sourceUrl, versionHash, diff, candidateMappings: mappings.map((mapping) => ({ control: mapping.control.code, confidence: mapping.confidence })) } });
+  await appendAudit({ tenantId: actor.tenantId, actorId: actor.userId, action: "regulation.ingested", objectType: "obligation", objectId: id, payload: { sourceUrl: input.sourceUrl, versionHash, diff, candidateMappings: mappings.map((mapping) => ({ control: mapping.control.code, confidence: mapping.confidence })) } });
   return { id, duplicate: false, diff, candidateMappings: mappings.map((mapping) => ({ controlId: mapping.control.id, code: mapping.control.code, confidence: mapping.confidence, rationale: mapping.overlap })) };
 }
 
-export function getRegulatoryImpact(tenantId: string, obligationId: string) {
-  const db = getDb();
-  const obligation = db.prepare("SELECT * FROM obligations WHERE tenant_id = ? AND id = ?").get(tenantId, obligationId);
-  const edges = db.prepare("SELECT * FROM graph_edges WHERE tenant_id = ? AND source_type = 'obligation' AND source_id = ? AND valid_to IS NULL ORDER BY confidence DESC").all(tenantId, obligationId);
+export async function getRegulatoryImpact(tenantId: string, obligationId: string) {
+  const db = (await getDb()).scope(tenantId);
+  const obligation = await db.get("SELECT * FROM obligations WHERE tenant_id = ? AND id = ?", tenantId, obligationId);
+  const edges = await db.all("SELECT * FROM graph_edges WHERE tenant_id = ? AND source_type = 'obligation' AND source_id = ? AND valid_to IS NULL ORDER BY confidence DESC", tenantId, obligationId);
   return { obligation, edges };
 }

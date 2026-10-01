@@ -1,7 +1,7 @@
 import "server-only";
 
 import { createHash, randomUUID } from "node:crypto";
-import { getDb } from "@/lib/core/database";
+import { getDb } from "@/lib/db";
 import { appendAudit } from "@/lib/core/integrity";
 import type { Actor } from "@/lib/core/auth";
 import type { z } from "zod";
@@ -68,12 +68,13 @@ export function simulateRisk(scenario: Scenario) {
   };
 }
 
-export function persistRiskSimulation(actor: Actor, scenario: Scenario, result: ReturnType<typeof simulateRisk>) {
+export async function persistRiskSimulation(actor: Actor, scenario: Scenario, result: ReturnType<typeof simulateRisk>): Promise<string> {
   const id = `risk_${randomUUID()}`;
   const now = new Date().toISOString();
-  getDb().prepare(`INSERT INTO risks (id,tenant_id,title,scenario,asset_id,owner_id,status,likelihood,impact,p50_loss,p90_loss,currency,assumptions_json,valid_from,recorded_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`).run(
+  const db = (await getDb()).scope(actor.tenantId);
+  await db.run(`INSERT INTO risks (id,tenant_id,title,scenario,asset_id,owner_id,status,likelihood,impact,p50_loss,p90_loss,currency,assumptions_json,valid_from,recorded_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
     id, actor.tenantId, scenario.name, `Loss arising from ${result.classification} AI deployment`, "asset_ai_014", actor.userId, "open", result.factors.baseFrequency, result.factors.baseMagnitude, result.annualizedLoss.p50, result.annualizedLoss.p90, "EUR", JSON.stringify(scenario), now, now,
   );
-  appendAudit({ tenantId: actor.tenantId, actorId: actor.userId, action: "risk.simulated", objectType: "risk", objectId: id, payload: { scenario, result } });
+  await appendAudit({ tenantId: actor.tenantId, actorId: actor.userId, action: "risk.simulated", objectType: "risk", objectId: id, payload: { scenario, result } });
   return id;
 }

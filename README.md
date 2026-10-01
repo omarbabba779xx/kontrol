@@ -1,92 +1,146 @@
-# Kontrol — continuous decision assurance
+# Kontrol
 
-Kontrol is an advanced GRC control plane. It turns regulatory obligations and live operational facts into executable controls, traceable findings, quantified risk and signed decisions.
+**Continuous decision assurance.** Kontrol turns regulatory obligations and live operational facts into executable controls, traceable findings, quantified risk and cryptographically signed decisions.
 
-This is not a static dashboard. The application includes a persistent domain model, authenticated APIs, automated collectors, a policy engine, durable workflows, evidence integrity, OSCAL export and grounded specialist agents.
+[![CI](https://github.com/omarbabba779xx/kontrol/actions/workflows/ci.yml/badge.svg)](https://github.com/omarbabba779xx/kontrol/actions/workflows/ci.yml)
+![Next.js 16](https://img.shields.io/badge/Next.js-16-black)
+![TypeScript](https://img.shields.io/badge/TypeScript-strict-3178c6)
+![Storage](https://img.shields.io/badge/storage-SQLite%20%7C%20PostgreSQL%20RLS-2f6f4f)
 
-## Implemented capabilities
+![Control plane](docs/screenshots/control-plane.png)
 
-- bitemporal obligation, asset and control records with an explicit relationship graph
-- GitHub, AWS and Okta collectors with live credential mode and deterministic demo mode
-- executable control policies that generate hashed evidence and open or close findings
-- FAIR-inspired Monte Carlo simulation with reproducible P50/P90/P95 exposure
-- regulatory version ingestion, text diff and candidate control mappings requiring human review
-- durable workflows with retries and approval gates
-- signed decision manifests and a verifiable append-only audit hash chain
-- OSCAL 1.1.3 assessment-results export
-- six read-only GRC agents with provenance and deterministic fallback
-- multi-tenant RBAC, JWT sessions and server-side secret isolation
-- an operational control plane at `/operations`
-- evidence trust scoring, compliance drift and contradiction detection
-- interactive assurance graph and digital-twin change simulations
-- fourth-party concentration and exit-readiness assessment
-- secure auditor request room with downloadable integrity packs
-- decision-intelligence briefs and optional standards-based OIDC SSO with PKCE
-- a live Assurance Studio at `/assurance`
+Most GRC tools stop at a checklist. Kontrol connects the whole chain and keeps it verifiable:
 
-## Maturity
+```mermaid
+flowchart LR
+    O[Obligation] -->|satisfied by| C[Executable control]
+    C -->|evaluated on| F[Live facts<br/>GitHub · AWS · Okta]
+    F --> E[Hashed evidence]
+    E --> X{Policy result}
+    X -->|fail| N[Finding]
+    X -->|pass| K[Closed finding]
+    N --> R[Quantified risk<br/>P50 / P90 / P95]
+    R --> D[Signed decision]
+    D --> A[(Append-only<br/>hash-chained audit log)]
+    E --> A
+    N --> A
+```
+
+## Highlights
+
+- **Executable controls.** Policies are data: conditions over facts with explained failures (`all` / `any`, typed operators that fail closed). Every evaluation produces SHA-256 hashed evidence and opens, updates or closes a finding atomically.
+- **Tamper-evident ledger.** Every material event joins a per-tenant hash chain. Rows are append-only (triggers on both drivers, privileges on PostgreSQL), chains cannot fork under concurrency, and verification is one call.
+- **Signed decisions.** Decisions seal their evidence manifest, conditions and rationale with an HMAC signature that is verified in constant time.
+- **Real multi-tenancy.** On PostgreSQL every tenant table is under *forced* row-level security; a query that forgets its `WHERE` still cannot cross tenants. This is tested against a real PostgreSQL engine.
+- **Human accountability.** Workflows pause for approval; the requester cannot approve their own request and an approval can only happen once. Agents are read-only and advisory.
+- **Standards.** OSCAL 1.1.3 assessment-results export, OIDC with PKCE, FAIR-inspired Monte Carlo risk quantification with reproducible seeds.
+- **Honest about what is real.** Unconfigured services show as *standby*, demo-sourced evidence is tagged and scored lower, benchmark cohorts are labelled synthetic.
+
+## What is inside
 
 | Area | Status | Notes |
 | --- | --- | --- |
-| Domain model, policy engine, evidence hashing, findings | Implemented | SQLite (WAL) kernel, covered by tests |
-| Audit hash chain, signed decisions | Implemented | Tamper detection covered by tests |
-| RBAC, JWT sessions, OIDC (PKCE) | Implemented | Fails closed in production without strong secrets |
-| Workflows with approval gates | Implemented | Separation of duties enforced (requester cannot approve) |
-| GitHub / AWS / Okta collectors | Live with credentials, demo otherwise | Evidence from demo sources is tagged and scored lower |
-| Regulatory feeds | Implemented | HTTPS only, SSRF-guarded |
-| PostgreSQL + RLS, S3 Object Lock, OPA | Probed, not the system of record | Reported as standby unless reachable; data still lives in SQLite |
-| Benchmarking | Synthetic cohort | Clearly labelled; no external peer data |
-| Agents | Deterministic by default | Optional model gateway; read-only tools |
+| Domain model, policy engine, evidence hashing, findings | Implemented | Bitemporal obligation, asset and control records with a relationship graph |
+| Audit hash chain, signed decisions | Implemented | Append-only, fork-proof, covered by tamper tests |
+| RBAC, JWT sessions, OIDC (PKCE), rate limiting | Implemented | Fails closed in production without strong secrets |
+| Durable workflows with approval gates | Implemented | Retries with back-off, separation of duties |
+| GitHub / AWS / Okta collectors | Live with credentials, demo otherwise | Demo evidence is tagged and trust-scored lower |
+| Evidence trust, drift, contradictions, digital twin, third-party concentration | Implemented | Assurance Studio at `/assurance` |
+| Regulatory feeds and diff, policy compiler (NL → Rego + tests) | Implemented | HTTPS-only, SSRF-guarded; mappings require human review |
+| Evidence vault, case management, continuous authorization, attack paths, benchmarks | Implemented | Enterprise workspace at `/enterprise`; S3 Object Lock when configured |
+| **PostgreSQL with forced RLS** | **Implemented** | `KONTROL_DB_DRIVER=postgres`; migration tool from SQLite included |
+| OPA, S3 Object Lock | Probed, optional | Reported as standby unless reachable |
+| Specialist agents | Deterministic by default | Optional model gateway; read-only tools |
 
-## Run locally
+![Enterprise platform](docs/screenshots/enterprise-platform.png)
+
+## Quick start
 
 ```bash
 npm install
-copy .env.example .env.local
+cp .env.example .env.local      # on Windows: copy .env.example .env.local
 npm run dev
 ```
 
-Open `http://localhost:3000`. Local development defaults to the seeded Acme tenant. Never keep the example secrets or demo authentication in production.
-
-Run the full quality gate (lint, tests, production build):
-
-```bash
-npm run check
-```
-
-Start the production support services:
-
-```bash
-docker compose up -d postgres minio opa
-```
-
-## API examples
+Open <http://localhost:3000>. Development uses embedded SQLite, the seeded *Acme* tenant and demo authentication. Nothing else is required.
 
 ```bash
 curl http://localhost:3000/api/health
-curl -X POST http://localhost:3000/api/connectors/github/sync -H "Content-Type: application/json" -d '{"owner":"acme","repository":"lending-decision-service","assetId":"asset_repo_lending","demo":true}'
+curl -X POST http://localhost:3000/api/connectors/github/sync \
+  -H "Content-Type: application/json" \
+  -d '{"owner":"acme","repository":"lending-decision-service","assetId":"asset_repo_lending","demo":true}'
 curl http://localhost:3000/api/oscal/export -o assessment-results.json
 ```
 
-## Configuration and hardening
+## Run on PostgreSQL
 
-In production the server refuses to sign or verify anything unless `KONTROL_AUTH_SECRET` and `KONTROL_SIGNING_SECRET` are distinct, at least 32 characters long and not placeholders. Demo authentication is ignored when `NODE_ENV=production`. Cookie-authenticated mutations must come from the same origin, regulatory feeds cannot target private networks, and OIDC role claims are only honoured when `OIDC_TRUST_ROLE_CLAIM=true`. Responses carry strict security headers. See [`.env.example`](.env.example) for every setting.
+```bash
+docker compose up -d postgres minio minio-init opa
+POSTGRES_URL=postgres://kontrol:kontrol@localhost:5432/kontrol KONTROL_DB_DRIVER=postgres npm run dev
+```
 
-See [architecture](docs/ARCHITECTURE.md), [security policy](SECURITY.md), and `.env.example`.
+Or run the whole stack, with the application on PostgreSQL:
 
-## Enterprise platform — ten implemented capabilities
+```bash
+export KONTROL_AUTH_SECRET=$(openssl rand -hex 32) KONTROL_SIGNING_SECRET=$(openssl rand -hex 32)
+docker compose --profile app up -d --build
+```
 
-The `/enterprise` workspace exposes the ten capabilities as first-class modules, in this order:
+Already have data in SQLite? Move it, with row counts and audit chains re-verified on the target:
 
-1. **Production réelle** — live readiness checks for PostgreSQL/RLS, OPA, immutable S3 storage and secret configuration. Unconfigured services are shown as standby, never as healthy.
-2. **Regulatory Intelligence** — official HTTPS feeds, content hashing, change detection, cadence and application calendar.
-3. **Policy Compiler** — natural-language requirements compiled into Rego, executable JSON conditions, required data and tests.
-4. **Evidence Vault** — upload, SHA-256, signing, duplicate detection, version chains, retention and S3 Object Lock or explicit local fallback.
-5. **Case Management** — investigation records with owners, severity-based SLAs, remediation, comments and attachment contracts.
-6. **Continuous Authorization** — recurring evaluation of evidence trust and open high findings, with automatic revocation and reason.
-7. **Attack-path GRC** — identity/repository entry points propagated to cloud, business assets, obligations and quantified loss.
-8. **Workflow Designer** — validated trigger/node/edge definitions requiring a human approval node for material workflows.
-9. **Executive Risk Cockpit** — P50/P90 exposure, control effectiveness, cases, conditional decisions and audit-chain integrity.
-10. **Benchmarking confidentiel** — disclosed synthetic reference cohorts and percentile calculations; no fabricated external peer data.
+```bash
+POSTGRES_URL=postgres://… npm run db:migrate
+```
+
+## Configuration
+
+Every setting is documented in [`.env.example`](.env.example). The ones that matter most:
+
+| Variable | Purpose |
+| --- | --- |
+| `KONTROL_AUTH_SECRET`, `KONTROL_SIGNING_SECRET` | Session and decision signing. **Required in production**, distinct, 32+ characters |
+| `KONTROL_DB_DRIVER`, `POSTGRES_URL` | Storage driver (`sqlite` default, `postgres` for production) |
+| `KONTROL_SEED` | Seed the demo tenant into an empty database (`false` in production) |
+| `KONTROL_AUTH_MODE` | `demo` is honoured only outside production |
+| `OIDC_*`, `OIDC_TRUST_ROLE_CLAIM` | Single sign-on; new users are `viewer` unless the IdP is trusted for roles |
+| `GITHUB_TOKEN`, `AWS_*`, `OKTA_*` | Live collectors (demo data when absent) |
+| `AI_GATEWAY_API_KEY`, `KONTROL_AGENT_MODEL` | Optional model-backed agents |
+| `KONTROL_RATE_LIMIT_PER_MINUTE` | Per-actor request budget |
+
+## API
+
+An [OpenAPI description](docs/openapi.yaml) covers every endpoint and the permission it requires. Roles: `admin`, `risk_owner`, `control_owner`, `auditor`, `viewer`.
+
+## Quality gates
+
+```bash
+npm run check           # lint, typecheck, tests on SQLite, tests on PostgreSQL, production build
+npm test                # SQLite
+npm run test:postgres   # in-process PostgreSQL (PGlite) over a socket: real driver, real RLS, migration
+```
+
+The suite covers the audit chain (tampering, deletion, concurrent writers, append-only enforcement), decision signatures, policy semantics, authentication and RBAC, CSRF, workflow separation of duties, SSRF protection, OSCAL output, tenant isolation, the SQLite → PostgreSQL migration and the HTTP handlers.
+
+## Project layout
+
+```
+src/app/            Next.js routes (UI pages and /api handlers)
+src/components/     Interface components
+src/lib/core/       Policy, risk, workflow, assurance and enterprise engines; auth; integrity
+src/lib/db/         Storage layer: SQLite and PostgreSQL drivers, schema, RLS, seed, migration
+src/lib/connectors/ GitHub, AWS and Okta collectors
+src/lib/agents/     Read-only specialist agents
+infra/opa/          Rego policies
+docs/               Architecture and OpenAPI
+tests/              Test suite (runs on both drivers)
+```
+
+See [architecture](docs/ARCHITECTURE.md) and the [security policy](SECURITY.md).
+
+## Known limits
+
+- The rate limiter and workflow scheduler are per process; run a shared limiter at the edge and a single scheduler (or an external cron hitting `/api/jobs/run`) when scaling out.
+- Evidence objects go to S3 with Object Lock when configured; otherwise a local folder is used and flagged as a fallback.
+- Benchmarking uses a disclosed synthetic cohort; connect an approved aggregation service before making peer claims.
 
 > Kontrol supports governance work; it does not provide legal advice or issue certification opinions.

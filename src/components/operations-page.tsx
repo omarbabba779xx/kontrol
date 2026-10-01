@@ -5,6 +5,7 @@ import { Activity, ArrowRight, Check, Database, Fingerprint, GitBranch, Play, Re
 import { PageHeading, MicroLabel } from "@/components/platform-shell";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
+import { errorMessage, fetchJson, isAbort } from "@/components/api-client";
 
 type Snapshot = {
   counts: { assets: number; controls: number; evidence: number; openFindings: number; decisions: number; obligations: number };
@@ -22,38 +23,43 @@ export function OperationsPage() {
   const [message, setMessage] = useState("Initialisation du noyau de contrôle…");
   const [isPending, startTransition] = useTransition();
 
-  const refresh = useCallback(async () => {
-    const response = await fetch("/api/platform/snapshot", { cache: "no-store" });
-    if (!response.ok) throw new Error("Snapshot indisponible");
-    setSnapshot(await response.json());
+  const refresh = useCallback(async (signal?: AbortSignal) => {
+    const data = await fetchJson<Snapshot>("/api/platform/snapshot", { signal });
+    setSnapshot(data);
   }, []);
 
   useEffect(() => {
-    let cancelled = false;
-    fetch("/api/platform/snapshot", { cache: "no-store" })
-      .then((response) => { if (!response.ok) throw new Error("Snapshot indisponible"); return response.json() as Promise<Snapshot>; })
-      .then((data) => { if (!cancelled) { setSnapshot(data); setMessage("Noyau opérationnel"); } })
-      .catch((error: Error) => { if (!cancelled) setMessage(error.message); });
-    return () => { cancelled = true; };
+    const controller = new AbortController();
+    fetchJson<Snapshot>("/api/platform/snapshot", { signal: controller.signal })
+      .then((data) => { setSnapshot(data); setMessage("Noyau opérationnel"); })
+      .catch((error: unknown) => { if (!isAbort(error)) setMessage(errorMessage(error, "Snapshot indisponible")); });
+    return () => controller.abort();
   }, []);
+
+  function reload() {
+    startTransition(async () => {
+      try {
+        setMessage("Actualisation…");
+        await refresh();
+        setMessage("Noyau opérationnel");
+      } catch (error) { setMessage(errorMessage(error, "Snapshot indisponible")); }
+    });
+  }
 
   function run(action: "github" | "aws" | "okta" | "workflow") {
     startTransition(async () => {
       try {
         setMessage(`${actionCopy[action] ?? "Workflow"} en cours…`);
         if (action === "workflow") {
-          const created = await fetch("/api/workflows", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ kind: "continuous_control", payload: { connector: "github", owner: "acme", repository: "lending-decision-service", demo: true } }) });
-          if (!created.ok) throw new Error("Création du workflow impossible");
-          const workflow = await created.json() as { id: string };
-          for (let index = 0; index < 4; index += 1) await fetch(`/api/workflows/${workflow.id}/run`, { method: "POST" });
+          const workflow = await fetchJson<{ id: string }>("/api/workflows", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ kind: "continuous_control", payload: { connector: "github", owner: "acme", repository: "lending-decision-service", demo: true } }) });
+          for (let index = 0; index < 4; index += 1) await fetchJson(`/api/workflows/${encodeURIComponent(workflow.id)}/run`, { method: "POST" });
           setMessage("Workflow exécuté avec piste d’audit");
         } else {
-          const response = await fetch(`/api/connectors/${action}/sync`, { method: "POST", headers: { "Content-Type": "application/json" }, body: action === "github" ? JSON.stringify({ owner: "acme", repository: "lending-decision-service", assetId: "asset_repo_lending", demo: true }) : "{}" });
-          if (!response.ok) throw new Error(`Synchronisation ${actionCopy[action]} impossible`);
+          await fetchJson(`/api/connectors/${action}/sync`, { method: "POST", headers: { "Content-Type": "application/json" }, body: action === "github" ? JSON.stringify({ owner: "acme", repository: "lending-decision-service", assetId: "asset_repo_lending", demo: true }) : "{}" });
           setMessage(`${actionCopy[action]} synchronisé; preuves horodatées`);
         }
-        await refresh();
-      } catch (error) { setMessage(error instanceof Error ? error.message : "Action impossible"); }
+      } catch (error) { setMessage(errorMessage(error, "Action impossible")); return; }
+      try { await refresh(); } catch (error) { setMessage(errorMessage(error, "Snapshot indisponible")); }
     });
   }
 
@@ -64,7 +70,8 @@ export function OperationsPage() {
 
   return (
     <div>
-      <PageHeading index="09" title="Control plane" description="Le plan d’exploitation du produit : connecteurs, évaluations continues, intégrité cryptographique et orchestration durable — observable en un seul endroit." meta={message} action={<Button onClick={() => refresh()} disabled={isPending} variant="outline" className="h-8 rounded-none border-[#171713] bg-transparent text-[9px]"><RefreshCw className={cn("me-1.5 h-3 w-3", isPending && "animate-spin")} />Actualiser</Button>} />
+      <span className="sr-only" role="status" aria-live="polite">{message}</span>
+      <PageHeading index="09" title="Control plane" description="Le plan d’exploitation du produit : connecteurs, évaluations continues, intégrité cryptographique et orchestration durable — observable en un seul endroit." meta={message} action={<Button type="button" onClick={reload} disabled={isPending} variant="outline" className="h-8 rounded-none border-[#171713] bg-transparent text-[9px]"><RefreshCw className={cn("me-1.5 h-3 w-3", isPending && "animate-spin")} />Actualiser</Button>} />
 
       <section className="grid border-b border-[#cbc7bd] sm:grid-cols-3 xl:grid-cols-6">
         {metrics.map(([label, value]) => <div key={label} className="border-e border-b border-[#cbc7bd] px-5 py-5 sm:border-b-0"><MicroLabel>{label}</MicroLabel><div className="mt-2 font-mono text-2xl tracking-[-.06em]">{value}</div></div>)}
@@ -76,16 +83,16 @@ export function OperationsPage() {
           <div className="grid gap-px border border-[#cbc7bd] bg-[#cbc7bd] md:grid-cols-3">
             {(["github", "aws", "okta"] as const).map((kind) => {
               const connector = snapshot?.connectors.find((item) => item.kind === kind);
-              return <article key={kind} className="bg-[#f4f1e9] p-4"><div className="flex items-center justify-between"><span className="font-mono text-[10px] uppercase">{actionCopy[kind]}</span><span className={cn("h-2 w-2 rounded-full", connector?.status === "healthy" ? "bg-[#2d6a4f]" : "bg-[#d49a35]")} /></div><p className="mt-7 min-h-8 text-[9px] leading-4 text-[#77746d]">{connector?.last_sync_at ? `Dernier sync ${new Date(connector.last_sync_at).toLocaleString("fr-FR")}` : "Prêt pour la première collecte"}</p><Button onClick={() => run(kind)} disabled={isPending} className="mt-3 h-8 w-full rounded-none bg-[#171713] text-[9px] text-white hover:bg-[#f05a32]"><Play className="me-1.5 h-3 w-3" />Collecter</Button></article>;
+              return <article key={kind} className="bg-[#f4f1e9] p-4"><div className="flex items-center justify-between"><span className="font-mono text-[10px] uppercase">{actionCopy[kind]}</span><span className="flex items-center gap-1.5 font-mono text-[7px] uppercase text-[#77746d]"><span className={cn("h-2 w-2 rounded-full", connector?.status === "healthy" ? "bg-[#2d6a4f]" : "bg-[#d49a35]")} aria-hidden="true" />{connector?.status ?? "no sync"}</span></div><p className="mt-7 min-h-8 text-[9px] leading-4 text-[#77746d]">{connector?.last_sync_at ? `Dernier sync ${new Date(connector.last_sync_at).toLocaleString("fr-FR")}` : "Prêt pour la première collecte"}</p><Button type="button" onClick={() => run(kind)} disabled={isPending} className="mt-3 h-8 w-full rounded-none bg-[#171713] text-[9px] text-white hover:bg-[#f05a32]"><Play className="me-1.5 h-3 w-3" />Collecter</Button></article>;
             })}
           </div>
-          <button onClick={() => run("workflow")} disabled={isPending} className="mt-4 flex w-full items-center justify-between border border-[#171713] p-4 text-start transition-colors hover:bg-[#171713] hover:text-white disabled:opacity-50"><span><span className="block font-mono text-[9px] uppercase tracking-wider">Continuous control workflow</span><span className="mt-1 block text-[10px] opacity-60">Collecte → évaluation → constat → clôture</span></span><ArrowRight className="h-4 w-4" /></button>
+          <button type="button" onClick={() => run("workflow")} disabled={isPending} className="mt-4 flex w-full items-center justify-between border border-[#171713] p-4 text-start transition-colors hover:bg-[#171713] hover:text-white disabled:opacity-50"><span><span className="block font-mono text-[9px] uppercase tracking-wider">Continuous control workflow</span><span className="mt-1 block text-[10px] opacity-60">Collecte → évaluation → constat → clôture</span></span><ArrowRight className="h-4 w-4" /></button>
         </section>
 
         <section className="border-b border-[#cbc7bd] p-5 sm:p-7">
-          <div className="flex items-center justify-between"><div><MicroLabel>Append-only ledger</MicroLabel><h2 className="mt-2 text-xl font-medium tracking-[-.04em]">Intégrité de la piste</h2></div>{snapshot?.audit.valid ? <ShieldCheck className="h-6 w-6 text-[#2d6a4f]" /> : <TriangleAlert className="h-6 w-6 text-[#b83a2e]" />}</div>
-          <div className="mt-5 border border-[#cbc7bd] bg-[#ebe7dd] p-4"><div className="flex items-center gap-2 text-[11px] font-medium"><Fingerprint className="h-4 w-4" />{snapshot?.audit.valid ? "Chaîne vérifiée" : "Vérification en attente"}</div><p className="mt-2 font-mono text-[8px] leading-4 text-[#716e67]">{snapshot?.audit.rootHash ?? "Aucune entrée"}</p><p className="mt-3 text-[9px] text-[#817e76]">{snapshot?.audit.checked ?? 0} événements recalculés depuis le bloc genesis.</p></div>
-          <div className="mt-4 space-y-2">{snapshot?.activity.slice(0, 5).map((item) => <div key={item.sequence} className="grid grid-cols-[28px_1fr_auto] items-center border-b border-[#d7d3c9] py-2 text-[9px]"><span className="font-mono text-[#a09d95]">{String(item.sequence).padStart(3, "0")}</span><span>{item.action}</span><span className="font-mono text-[7px] text-[#8f8c84]">{item.entry_hash.slice(0, 10)}</span></div>)}</div>
+          <div className="flex items-center justify-between"><div><MicroLabel>Append-only ledger</MicroLabel><h2 className="mt-2 text-xl font-medium tracking-[-.04em]">Intégrité de la piste</h2></div>{snapshot?.audit.valid ? <ShieldCheck className="h-6 w-6 text-[#2d6a4f]" aria-label="Chaîne valide" /> : <TriangleAlert className="h-6 w-6 text-[#b83a2e]" aria-label="Chaîne non vérifiée" />}</div>
+          <div className="mt-5 border border-[#cbc7bd] bg-[#ebe7dd] p-4"><div className="flex items-center gap-2 text-[11px] font-medium"><Fingerprint className="h-4 w-4" />{snapshot?.audit.valid ? "Chaîne vérifiée" : snapshot ? "Vérification en échec" : "Vérification en attente"}</div><p className="mt-2 font-mono text-[8px] leading-4 text-[#716e67]">{snapshot ? snapshot.audit.rootHash ?? "Aucune entrée" : "Chargement…"}</p><p className="mt-3 text-[9px] text-[#817e76]">{snapshot?.audit.checked ?? 0} événements recalculés depuis le bloc genesis.</p></div>
+          <div className="mt-4 space-y-2">{snapshot?.activity.slice(0, 5).map((item) => <div key={`${item.sequence}-${item.entry_hash}`} className="grid grid-cols-[28px_1fr_auto] items-center border-b border-[#d7d3c9] py-2 text-[9px]"><span className="font-mono text-[#a09d95]">{String(item.sequence).padStart(3, "0")}</span><span>{item.action}</span><span className="font-mono text-[7px] text-[#8f8c84]">{item.entry_hash.slice(0, 10)}</span></div>)}</div>
         </section>
       </div>
 

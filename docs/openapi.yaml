@@ -1,0 +1,183 @@
+openapi: 3.1.0
+info:
+  title: Kontrol API
+  version: 0.2.0
+  description: >
+    Authenticated, tenant-scoped API of the Kontrol decision-assurance platform.
+    Authenticate with `Authorization: Bearer <session token>` or the `kontrol_session` cookie.
+    Cookie-authenticated mutations must originate from the same site.
+servers:
+  - url: http://localhost:3000
+security:
+  - bearer: []
+  - cookie: []
+components:
+  securitySchemes:
+    bearer: { type: http, scheme: bearer, bearerFormat: JWT }
+    cookie: { type: apiKey, in: cookie, name: kontrol_session }
+  responses:
+    Unauthorized: { description: Missing or invalid credentials }
+    Forbidden: { description: Role lacks the required permission, or cross-tenant access }
+    TooManyRequests: { description: Per-actor rate limit exceeded }
+    Invalid: { description: Request failed validation }
+  schemas:
+    Error:
+      type: object
+      properties: { error: { type: string } }
+    ControlEvaluation:
+      type: object
+      required: [controlCode, assetId, facts]
+      properties:
+        controlCode: { type: string, example: CTL-SDLC-004 }
+        assetId: { type: string, example: asset_repo_lending }
+        facts: { type: object, additionalProperties: true }
+        source: { type: string, default: api }
+        periodStart: { type: string, format: date-time }
+        periodEnd: { type: string, format: date-time }
+    Decision:
+      type: object
+      required: [subjectType, subjectId, outcome, conditions, rationale, evidenceIds]
+      properties:
+        subjectType: { enum: [risk, ai_model, control, vendor, review] }
+        subjectId: { type: string }
+        outcome: { enum: [approved, conditional, rejected, accepted] }
+        conditions: { type: array, items: { type: string }, maxItems: 20 }
+        rationale: { type: string, minLength: 20, maxLength: 5000 }
+        evidenceIds: { type: array, items: { type: string }, maxItems: 200 }
+    RiskScenario:
+      type: object
+      required: [materialDecision, sensitiveData, humanReview, thirdPartyModel, crossBorder]
+      properties:
+        name: { type: string }
+        materialDecision: { type: boolean }
+        sensitiveData: { type: boolean }
+        humanReview: { type: boolean }
+        thirdPartyModel: { type: boolean }
+        crossBorder: { type: boolean }
+        annualEvents: { type: integer, minimum: 1, maximum: 1000000 }
+        iterations: { type: integer, minimum: 1000, maximum: 100000 }
+paths:
+  /api/health:
+    get:
+      summary: Liveness and database reachability
+      security: []
+      responses: { "200": { description: healthy }, "503": { description: degraded } }
+  /api/platform/snapshot:
+    get:
+      summary: Counts, connectors, workflows, findings, recent activity and audit-chain verdict (graph:read)
+      responses: { "200": { description: Snapshot }, "401": { $ref: "#/components/responses/Unauthorized" } }
+  /api/graph:
+    get:
+      summary: Obligation, control and asset relationship graph (graph:read)
+      responses: { "200": { description: Nodes and edges } }
+  /api/controls/evaluate:
+    post:
+      summary: Evaluate a control against facts; stores hashed evidence and opens or closes findings (controls:evaluate)
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: "#/components/schemas/ControlEvaluation" } } }
+      responses: { "200": { description: Evaluation result }, "400": { $ref: "#/components/responses/Invalid" }, "403": { $ref: "#/components/responses/Forbidden" } }
+  /api/connectors/{connector}/sync:
+    post:
+      summary: Collect facts from github, aws or okta (connectors:sync). Live with credentials, demo otherwise.
+      parameters:
+        - { name: connector, in: path, required: true, schema: { enum: [github, aws, okta] } }
+      responses: { "200": { description: Collected facts and evaluation }, "404": { description: Unsupported connector } }
+  /api/decisions:
+    post:
+      summary: Record an HMAC-signed decision sealing its evidence manifest (decisions:approve)
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: "#/components/schemas/Decision" } } }
+      responses: { "201": { description: Decision id, signature, manifest, audit entry } }
+  /api/decisions/{id}/verify:
+    get:
+      summary: Recompute and verify a decision signature (evidence:read)
+      parameters: [{ name: id, in: path, required: true, schema: { type: string } }]
+      responses: { "200": { description: "{ valid, signature, decision }" } }
+  /api/workflows:
+    get: { summary: List workflows (graph:read), responses: { "200": { description: Workflows } } }
+    post:
+      summary: Start a durable workflow (controls:evaluate)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [kind]
+              properties:
+                kind: { enum: [continuous_control, ai_release, regulatory_change] }
+                payload: { type: object }
+      responses: { "201": { description: Created workflow } }
+  /api/workflows/{id}/run:
+    post:
+      summary: Advance one idempotent step; failures retry with back-off up to three attempts (controls:evaluate)
+      parameters: [{ name: id, in: path, required: true, schema: { type: string } }]
+      responses: { "200": { description: Workflow state } }
+  /api/workflows/{id}/approve:
+    post:
+      summary: Approve or reject a workflow awaiting approval. The requester cannot approve their own workflow (decisions:approve)
+      parameters: [{ name: id, in: path, required: true, schema: { type: string } }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [approved, comment]
+              properties: { approved: { type: boolean }, comment: { type: string, minLength: 5, maxLength: 2000 } }
+      responses: { "200": { description: Workflow state }, "403": { $ref: "#/components/responses/Forbidden" } }
+  /api/risks/simulate:
+    post:
+      summary: Reproducible FAIR-inspired Monte Carlo simulation (risks:simulate)
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: "#/components/schemas/RiskScenario" } } }
+      responses: { "200": { description: P50/P90/P95 annualised loss } }
+  /api/regulatory/ingest:
+    post:
+      summary: Ingest a regulatory text version; diff and candidate control mappings need human review (regulations:ingest)
+      responses: { "200": { description: Ingestion result } }
+  /api/oscal/export:
+    get:
+      summary: OSCAL 1.1.3 assessment-results document (oscal:export)
+      responses: { "200": { description: OSCAL JSON } }
+  /api/assurance:
+    get: { summary: Evidence trust, drift, contradictions, vendors, auditor requests (evidence:read), responses: { "200": { description: Snapshot } } }
+    post:
+      summary: "Run actions: scan, assess_vendors, simulate_twin, auditor_request, auditor_respond"
+      responses: { "200": { description: Action result } }
+  /api/auditor/pack:
+    get:
+      summary: Download the integrity pack for an auditor request (oscal:export)
+      parameters: [{ name: id, in: query, required: true, schema: { type: string } }]
+      responses: { "200": { description: Pack }, "404": { description: Unknown request } }
+  /api/enterprise:
+    get: { summary: Enterprise workspace snapshot (graph:read), responses: { "200": { description: Snapshot } } }
+    post: { summary: "Run an enterprise action (controls:evaluate)", responses: { "200": { description: Result } } }
+  /api/vault/upload:
+    post:
+      summary: Upload a document to the evidence vault; hashed, signed, versioned (evidence:write)
+      requestBody:
+        content: { multipart/form-data: { schema: { type: object, properties: { file: { type: string, format: binary }, documentType: { type: string } } } } }
+      responses: { "201": { description: Stored document } }
+  /api/agents/analyze:
+    post:
+      summary: Ask a read-only specialist agent; answers carry provenance (agents:run)
+      responses: { "200": { description: Answer with sources and assumptions } }
+  /api/decision-intelligence/{id}:
+    get:
+      summary: Decision brief for a subject (graph:read)
+      parameters: [{ name: id, in: path, required: true, schema: { type: string } }]
+      responses: { "200": { description: Brief } }
+  /api/jobs/run:
+    post:
+      summary: Scheduler entry point. Authenticate with the CRON_SECRET bearer token or a session.
+      responses: { "200": { description: Processed workflows and assurance scan } }
+  /api/session/oidc/login:
+    get: { summary: Start OIDC authorisation-code flow with PKCE, security: [], responses: { "302": { description: Redirect to the identity provider } } }
+  /api/session/oidc/callback:
+    get: { summary: Complete the OIDC flow and set the session cookie, security: [], responses: { "302": { description: Redirect to the application } } }
+  /api/session/demo:
+    post: { summary: Issue a demo session (evaluation environments only; disabled in production), responses: { "200": { description: Session token } } }
