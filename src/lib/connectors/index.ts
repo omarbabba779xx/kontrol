@@ -1,94 +1,166 @@
 import "server-only";
 
-import { ConfigServiceClient, GetComplianceSummaryByConfigRuleCommand } from "@aws-sdk/client-config-service";
-import { GetAccountSummaryCommand, IAMClient } from "@aws-sdk/client-iam";
+import { CloudTrailClient } from "@aws-sdk/client-cloudtrail";
+import { ConfigServiceClient } from "@aws-sdk/client-config-service";
+import { IAMClient } from "@aws-sdk/client-iam";
+import { S3Client } from "@aws-sdk/client-s3";
 import type { Actor } from "@/lib/core/auth";
 import { getDb } from "@/lib/db";
 import { appendAudit, canonicalJson, sha256 } from "@/lib/core/integrity";
+import { assertPublicHttpsUrl } from "@/lib/core/net-guard";
 import { evaluateControl } from "@/lib/core/policy-engine";
+import { collectAws, collectGitHub, collectOkta, type AwsClients, type Facts, type GitHubApi, type JsonResponse, type OktaApi } from "@/lib/connectors/collectors";
+import { PACK, missingFacts, type ConnectorKind } from "@/lib/connectors/pack";
+
+type Evaluation = Awaited<ReturnType<typeof evaluateControl>>;
 
 export type ConnectorSyncResult = {
-  connector: "github" | "aws" | "okta";
+  connector: ConnectorKind;
   mode: "live" | "demo";
   collectedAt: string;
-  facts: Record<string, unknown>;
-  evaluation?: Awaited<ReturnType<typeof evaluateControl>>;
+  facts: Facts;
+  /** First evaluation, kept for callers written before the control pack existed. */
+  evaluation?: Evaluation;
+  evaluations: Array<{ controlCode: string; passed: boolean; finding: Evaluation["finding"] }>;
+  /** Controls not evaluated because a required fact could not be read, with the missing paths. */
+  skipped: Array<{ controlCode: string; missing: string[] }>;
 };
 
-async function githubRequest(path: string, token: string) {
-  const response = await fetch(`https://api.github.com${path}`, {
-    headers: { Authorization: `Bearer ${token}`, Accept: "application/vnd.github+json", "X-GitHub-Api-Version": "2022-11-28" },
-    cache: "no-store",
+const ASSETS: Record<Exclude<ConnectorKind, "github">, { id: string; type: string; name: string }> = {
+  people: { id: "asset_workforce", type: "workforce", name: "Workforce" },
+  aws: { id: "asset_aws_account", type: "cloud_account", name: "AWS account" },
+  okta: { id: "asset_okta_org", type: "identity_provider", name: "Okta organisation" },
+};
+
+/** Inserts the executable controls of the pack that this tenant does not have yet. Idempotent. */
+export async function installControlPack(actor: Actor, connector?: ConnectorKind) {
+  const db = (await getDb()).scope(actor.tenantId);
+  const now = new Date().toISOString();
+  const installed: string[] = [];
+  await db.transaction(async (tx) => {
+    for (const control of PACK.filter((item) => !connector || item.connector === connector)) {
+      const existing = await tx.get("SELECT id FROM controls WHERE tenant_id = ? AND code = ?", actor.tenantId, control.code);
+      if (existing) continue;
+      await tx.run(`INSERT INTO controls (id,tenant_id,code,title,objective,owner_id,automation,frequency,policy_json,status,valid_from,recorded_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?)`,
+        `control_${control.code.toLowerCase().replace(/[^a-z0-9]+/g, "_")}`, actor.tenantId, control.code, control.title, control.objective, null, "automated", control.frequency, JSON.stringify(control.policy), "unverified", now, now);
+      installed.push(control.code);
+    }
+    if (installed.length) await appendAudit({ tenantId: actor.tenantId, actorId: actor.userId, action: "controls.pack_installed", objectType: "tenant", objectId: actor.tenantId, payload: { controls: installed } }, tx);
   });
-  if (!response.ok) throw new Error(`GitHub API ${response.status}: ${await response.text()}`);
-  return response.json() as Promise<Record<string, unknown>>;
+  return { installed };
 }
 
-export async function syncGitHub(actor: Actor, input: { owner: string; repository: string; assetId: string; demo: boolean }): Promise<ConnectorSyncResult> {
+async function ensureAsset(actor: Actor, asset: { id: string; type: string; name: string }) {
+  const db = (await getDb()).scope(actor.tenantId);
+  if (await db.get("SELECT id FROM assets WHERE tenant_id = ? AND id = ?", actor.tenantId, asset.id)) return;
+  const now = new Date().toISOString();
+  await db.run(`INSERT INTO assets (id,tenant_id,type,name,criticality,owner_id,attributes_json,valid_from,recorded_at) VALUES (?,?,?,?,?,?,?,?,?)`, asset.id, actor.tenantId, asset.type, asset.name, "high", null, JSON.stringify({ managedBy: "kontrol-connector" }), now, now);
+}
+
+async function runPack(actor: Actor, connector: ConnectorKind, facts: Facts, assetId: string, source: string) {
+  await installControlPack(actor, connector);
+  const evaluations: ConnectorSyncResult["evaluations"] = [];
+  const skipped: ConnectorSyncResult["skipped"] = [];
+  let first: Evaluation | undefined;
+  for (const control of PACK.filter((item) => item.connector === connector)) {
+    const missing = missingFacts(control, facts);
+    if (missing.length) { skipped.push({ controlCode: control.code, missing }); continue; }
+    const result = await evaluateControl(actor, { controlCode: control.code, assetId, facts, source, validForDays: control.validForDays });
+    first ??= result;
+    evaluations.push({ controlCode: control.code, passed: result.passed, finding: result.finding });
+  }
+  return { evaluations, skipped, first };
+}
+
+// ---------------------------------------------------------------- GitHub ------------------------------------------------
+
+function githubApi(token: string): GitHubApi {
+  return async (path) => {
+    const response = await fetch(`https://api.github.com${path}`, { headers: { Authorization: `Bearer ${token}`, Accept: "application/vnd.github+json", "X-GitHub-Api-Version": "2022-11-28" }, cache: "no-store", signal: AbortSignal.timeout(15_000) });
+    const body = response.status === 204 ? null : await response.json().catch(() => null);
+    return { status: response.status, body };
+  };
+}
+
+function demoGitHubFacts(owner: string, repository: string): Facts {
+  return { production: true, repository: `${owner}/${repository}`, defaultBranch: "main", visibility: "private", archived: false, branchProtection: { enabled: false, requiredReviews: 0, enforceAdmins: false, dismissStaleReviews: false, requireCodeOwnerReviews: false, requireSignedCommits: false }, security: { secretScanning: "enabled", pushProtection: "disabled", dependabotSecurityUpdates: "enabled" }, vulnerabilityAlertsEnabled: true, org: { twoFactorRequired: true } };
+}
+
+export async function syncGitHub(actor: Actor, input: { owner: string; repository: string; assetId: string; demo: boolean }, api?: GitHubApi): Promise<ConnectorSyncResult> {
   const token = process.env.GITHUB_TOKEN;
-  const useDemo = input.demo || !token;
-  let facts: Record<string, unknown>;
-
-  if (useDemo) {
-    facts = { production: true, repository: `${input.owner}/${input.repository}`, defaultBranch: "main", branchProtection: { enabled: false, requiredReviews: 0, enforceAdmins: false }, secretScanning: true, visibility: "private" };
-  } else {
-    const repository = await githubRequest(`/repos/${encodeURIComponent(input.owner)}/${encodeURIComponent(input.repository)}`, token);
-    const defaultBranch = String(repository.default_branch ?? "main");
-    let protection: Record<string, unknown> | null = null;
-    try { protection = await githubRequest(`/repos/${encodeURIComponent(input.owner)}/${encodeURIComponent(input.repository)}/branches/${encodeURIComponent(defaultBranch)}/protection`, token); } catch { protection = null; }
-    const reviews = protection?.required_pull_request_reviews as Record<string, unknown> | undefined;
-    facts = {
-      production: true,
-      repository: repository.full_name,
-      defaultBranch,
-      visibility: repository.visibility,
-      archived: repository.archived,
-      branchProtection: { enabled: Boolean(protection), requiredReviews: Number(reviews?.required_approving_review_count ?? 0), enforceAdmins: Boolean((protection?.enforce_admins as Record<string, unknown> | undefined)?.enabled) },
-      security: repository.security_and_analysis ?? null,
-    };
-  }
-
-  const evaluation = await evaluateControl(actor, { controlCode: "CTL-SDLC-004", assetId: input.assetId, facts, source: useDemo ? "github:demo" : "github:api" });
+  const useDemo = !api && (input.demo || !token);
+  const facts = useDemo ? demoGitHubFacts(input.owner, input.repository) : await collectGitHub(api ?? githubApi(token!), input.owner, input.repository);
+  const { evaluations, skipped, first } = await runPack(actor, "github", facts, input.assetId, useDemo ? "github:demo" : "github:api");
   await updateConnector(actor, "github", useDemo ? "demo" : "healthy", facts);
-  return { connector: "github", mode: useDemo ? "demo" : "live", collectedAt: new Date().toISOString(), facts, evaluation };
+  return { connector: "github", mode: useDemo ? "demo" : "live", collectedAt: new Date().toISOString(), facts, evaluation: first, evaluations, skipped };
 }
 
-export async function syncAws(actor: Actor, region = process.env.AWS_REGION ?? "eu-west-1"): Promise<ConnectorSyncResult> {
-  const demo = !process.env.AWS_ACCESS_KEY_ID && !process.env.AWS_PROFILE;
-  let facts: Record<string, unknown>;
-  if (demo) {
-    facts = { region, account: "demo", configRules: { compliant: 42, nonCompliant: 3 }, iam: { users: 18, mfaDevices: 16, accessKeys: 7 }, encryption: { s3: .96, rds: 1 } };
-  } else {
-    const [configSummary, iamSummary] = await Promise.all([
-      new ConfigServiceClient({ region }).send(new GetComplianceSummaryByConfigRuleCommand({})),
-      new IAMClient({ region }).send(new GetAccountSummaryCommand({})),
-    ]);
-    facts = { region, configRules: configSummary.ComplianceSummary, iam: iamSummary.SummaryMap };
-  }
+// ---------------------------------------------------------------- AWS ---------------------------------------------------
+
+function demoAwsFacts(region: string): Facts {
+  return {
+    region,
+    root: { mfaEnabled: true, accessKeysPresent: 0, users: 18, mfaDevices: 16 },
+    passwordPolicy: { exists: true, minimumLength: 14, reusePrevention: 24, maxPasswordAge: 0, requireSymbols: true, requireNumbers: true },
+    s3: { buckets: 12, withoutPublicAccessBlock: 1, unchecked: 0 },
+    config: { compliantResources: 42, nonCompliantResources: 3 },
+    cloudTrail: { trails: 1, multiRegionTrails: 1, logging: true, logValidation: true },
+  };
+}
+
+export async function syncAws(actor: Actor, region = process.env.AWS_REGION ?? "eu-west-1", clients?: AwsClients): Promise<ConnectorSyncResult> {
+  const demo = !clients && !process.env.AWS_ACCESS_KEY_ID && !process.env.AWS_PROFILE;
+  const facts = demo ? demoAwsFacts(region) : await collectAws(clients ?? { iam: new IAMClient({ region }), s3: new S3Client({ region }), config: new ConfigServiceClient({ region }), cloudtrail: new CloudTrailClient({ region }) }, region);
+  await ensureAsset(actor, ASSETS.aws);
+  const { evaluations, skipped } = await runPack(actor, "aws", facts, ASSETS.aws.id, demo ? "aws:demo" : "aws:api");
   await persistConnectorEvidence(actor, "aws", "AWS configuration and IAM posture", facts, demo);
   await updateConnector(actor, "aws", demo ? "demo" : "healthy", facts);
-  return { connector: "aws", mode: demo ? "demo" : "live", collectedAt: new Date().toISOString(), facts };
+  return { connector: "aws", mode: demo ? "demo" : "live", collectedAt: new Date().toISOString(), facts, evaluations, skipped };
 }
 
-export async function syncOkta(actor: Actor): Promise<ConnectorSyncResult> {
+// ---------------------------------------------------------------- Okta --------------------------------------------------
+
+function oktaApi(baseUrl: string, token: string): OktaApi {
+  const origin = assertPublicHttpsUrl(baseUrl).origin;
+  return async (path): Promise<JsonResponse> => {
+    // Pagination links come from the API response; they must stay on the same origin as the configured base URL.
+    const url = path.startsWith("http") ? new URL(path) : new URL(path, origin);
+    if (url.origin !== origin) throw new Error("Okta pagination link points to a different origin");
+    const response = await fetch(url, { headers: { Authorization: `SSWS ${token}`, Accept: "application/json" }, cache: "no-store", signal: AbortSignal.timeout(15_000) });
+    return { status: response.status, body: await response.json().catch(() => null), link: response.headers.get("link") };
+  };
+}
+
+function demoOktaFacts(): Facts {
+  return { organization: "demo", users: { active: 126, inactiveOver90Days: 2, truncated: false }, privileged: { total: 9, mfaEnrolled: 8, mfaCoverage: 8 / 9 }, passwordPolicy: { minLength: 12, policies: 1 } };
+}
+
+export async function syncOkta(actor: Actor, api?: OktaApi): Promise<ConnectorSyncResult> {
   const baseUrl = process.env.OKTA_BASE_URL;
   const token = process.env.OKTA_API_TOKEN;
-  const demo = !baseUrl || !token;
-  let facts: Record<string, unknown>;
-  if (demo) {
-    facts = { organization: "demo", users: { active: 126, suspended: 4, deprovisioned: 11 }, privileged: { total: 9, mfaEnrolled: 8, inactiveOver30Days: 1 } };
-  } else {
-    const response = await fetch(`${baseUrl.replace(/\/$/, "")}/api/v1/users?limit=200`, { headers: { Authorization: `SSWS ${token}`, Accept: "application/json" }, cache: "no-store" });
-    if (!response.ok) throw new Error(`Okta API ${response.status}: ${await response.text()}`);
-    const users = await response.json() as Array<{ status?: string }>;
-    facts = { organization: new URL(baseUrl).hostname, users: { total: users.length, active: users.filter((user) => user.status === "ACTIVE").length, suspended: users.filter((user) => user.status === "SUSPENDED").length, deprovisioned: users.filter((user) => user.status === "DEPROVISIONED").length } };
-  }
+  const demo = !api && (!baseUrl || !token);
+  const facts = demo ? demoOktaFacts() : await collectOkta(api ?? oktaApi(baseUrl!, token!), baseUrl ? new URL(baseUrl).hostname : "okta");
+  await ensureAsset(actor, ASSETS.okta);
+  const { evaluations, skipped } = await runPack(actor, "okta", facts, ASSETS.okta.id, demo ? "okta:demo" : "okta:api");
   await persistConnectorEvidence(actor, "okta", "Okta identity posture", facts, demo);
   await updateConnector(actor, "okta", demo ? "demo" : "healthy", facts);
-  return { connector: "okta", mode: demo ? "demo" : "live", collectedAt: new Date().toISOString(), facts };
+  return { connector: "okta", mode: demo ? "demo" : "live", collectedAt: new Date().toISOString(), facts, evaluations, skipped };
 }
 
-async function persistConnectorEvidence(actor: Actor, source: string, name: string, facts: Record<string, unknown>, demo: boolean) {
+// ---------------------------------------------------------------- People systems ------------------------------------------
+
+/** Facts reported by HR and learning systems through the signed ingest endpoint. Evaluated by the same control pack. */
+export async function syncPeople(actor: Actor, facts: Facts, source: string): Promise<ConnectorSyncResult> {
+  await ensureAsset(actor, ASSETS.people);
+  const { evaluations, skipped } = await runPack(actor, "people", facts, ASSETS.people.id, source);
+  await persistConnectorEvidence(actor, source.split(":")[0], `People system report (${source})`, facts, false);
+  await updateConnector(actor, "people", "healthy", facts);
+  return { connector: "people", mode: "live", collectedAt: new Date().toISOString(), facts, evaluations, skipped };
+}
+
+// ---------------------------------------------------------------- Persistence -------------------------------------------
+
+async function persistConnectorEvidence(actor: Actor, source: string, name: string, facts: Facts, demo: boolean) {
   const now = new Date().toISOString();
   const content = canonicalJson(facts);
   const id = `evidence_${source}_${Date.now()}`;
@@ -99,7 +171,7 @@ async function persistConnectorEvidence(actor: Actor, source: string, name: stri
   });
 }
 
-async function updateConnector(actor: Actor, kind: string, status: string, facts: Record<string, unknown>) {
+async function updateConnector(actor: Actor, kind: string, status: string, facts: Facts) {
   const now = new Date().toISOString();
   const config = JSON.stringify({ lastFactHash: sha256(canonicalJson(facts)) });
   await (await getDb()).scope(actor.tenantId).transaction(async (tx) => {

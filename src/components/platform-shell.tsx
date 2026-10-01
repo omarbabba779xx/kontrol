@@ -5,6 +5,7 @@ import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import {
   Archive,
+  BadgeCheck,
   ArrowUpRight,
   Boxes,
   Braces,
@@ -39,6 +40,7 @@ const navigation = [
   { name: "Control plane", code: "09", href: "/operations", icon: Activity },
   { name: "Assurance studio", code: "10", href: "/assurance", icon: ScanSearch },
   { name: "Enterprise platform", code: "11", href: "/enterprise", icon: Landmark },
+  { name: "Compliance hub", code: "12", href: "/compliance", icon: BadgeCheck },
 ];
 
 function Mark() {
@@ -49,7 +51,7 @@ function Mark() {
       </span>
       <span>
         <span className="block text-[13px] font-semibold tracking-[-.03em] text-[#171713]">KONTROL</span>
-        <span className="block font-mono text-[8px] uppercase tracking-[.18em] text-[#79776f]">Decision assurance</span>
+        <span className="block font-mono text-[8px] uppercase tracking-[.18em] text-[#5f5d56]">Decision assurance</span>
       </span>
     </Link>
   );
@@ -83,7 +85,7 @@ function PageJump() {
 
   return (
     <form onSubmit={submit} role="search" className="relative hidden md:block">
-      <Search aria-hidden="true" className="absolute start-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-[#96938b]" />
+      <Search aria-hidden="true" className="absolute start-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-[#63615a]" />
       <Input
         ref={inputRef}
         type="search"
@@ -92,10 +94,10 @@ function PageJump() {
         onChange={(event) => setValue(event.target.value)}
         aria-label="Jump to a page"
         placeholder="Jump to a page…"
-        className="h-8 w-[220px] rounded-none border-[#cbc7bd] bg-transparent ps-8 pe-9 text-[10px] shadow-none placeholder:text-[#9d9a92]"
+        className="h-8 w-[220px] rounded-none border-[#cbc7bd] bg-transparent ps-8 pe-9 text-[10px] shadow-none placeholder:text-[#63615a]"
       />
       <datalist id="kontrol-pages">{navigation.map((item) => <option key={item.href} value={item.name} />)}</datalist>
-      <span aria-hidden="true" className="pointer-events-none absolute end-2 top-1/2 flex -translate-y-1/2 items-center gap-1 font-mono text-[8px] text-[#aaa79e]"><Command className="h-2.5 w-2.5" />K</span>
+      <span aria-hidden="true" className="pointer-events-none absolute end-2 top-1/2 flex -translate-y-1/2 items-center gap-1 font-mono text-[8px] text-[#63615a]"><Command className="h-2.5 w-2.5" />K</span>
     </form>
   );
 }
@@ -104,7 +106,7 @@ function Navigation({ onNavigate }: { onNavigate?: () => void }) {
   const pathname = usePathname();
   return (
     <nav aria-label="Primary navigation" className="mt-10">
-      <div className="mb-3 flex items-center justify-between px-2 font-mono text-[8px] uppercase tracking-[.16em] text-[#96938b]">
+      <div className="mb-3 flex items-center justify-between px-2 font-mono text-[8px] uppercase tracking-[.16em] text-[#63615a]">
         <span>Workspace</span><span>Demo / EU</span>
       </div>
       <div className="border-t border-[#d7d3c9]">
@@ -121,9 +123,9 @@ function Navigation({ onNavigate }: { onNavigate?: () => void }) {
                 active ? "bg-[#171713] text-[#f7f4ed]" : "text-[#5f5d56] hover:bg-[#e8e4da] hover:text-[#171713]",
               )}
             >
-              <span className={cn("font-mono text-[8px]", active ? "text-[#f4673b]" : "text-[#a4a198]")}>{item.code}</span>
+              <span className={cn("font-mono text-[8px]", active ? "text-[#f4673b]" : "text-[#63615a]")}>{item.code}</span>
               <span className="font-medium">{item.name}</span>
-              <item.icon className={cn("h-3.5 w-3.5", active ? "text-[#f7f4ed]" : "text-[#aaa79f] group-hover:text-[#171713]")} strokeWidth={1.6} />
+              <item.icon className={cn("h-3.5 w-3.5", active ? "text-[#f7f4ed]" : "text-[#63615a] group-hover:text-[#171713]")} strokeWidth={1.6} />
             </Link>
           );
         })}
@@ -137,11 +139,11 @@ function Sidebar() {
     <aside className="fixed inset-y-0 start-0 z-30 hidden w-[224px] border-e border-[#cbc7bd] bg-[#efebe2] lg:flex lg:flex-col">
       <div className="px-5 pt-5"><Mark /><Navigation /></div>
       <div className="mt-auto border-t border-[#cbc7bd] p-4">
-        <div className="mb-4 flex items-center justify-between font-mono text-[8px] uppercase tracking-wider text-[#8c8981]"><span>Data state</span><span className="flex items-center gap-1.5 text-[#8c6a25]"><span className="h-1.5 w-1.5 rounded-full bg-[#a98a45]" aria-hidden="true" />Sample data</span></div>
+        <div className="mb-4 flex items-center justify-between font-mono text-[8px] uppercase tracking-wider text-[#5f5d56]"><span>Data state</span><span className="flex items-center gap-1.5 text-[#7a5a1a]"><span className="h-1.5 w-1.5 rounded-full bg-[#7a5a1a]" aria-hidden="true" />Sample data</span></div>
         <button type="button" className="flex w-full items-center gap-3 border-t border-[#d7d3c9] pt-3 text-start">
           <span className="grid h-7 w-7 place-items-center rounded-full bg-[#d9d4c8] font-mono text-[9px] text-[#34332e]">LM</span>
-          <span className="min-w-0"><span className="block truncate text-[10px] font-semibold text-[#34332e]">Leila Mansour</span><span className="block truncate text-[8px] text-[#8f8c84]">AI Risk Owner</span></span>
-          <ChevronDown className="ms-auto h-3 w-3 text-[#9c9990]" />
+          <span className="min-w-0"><span className="block truncate text-[10px] font-semibold text-[#34332e]">Leila Mansour</span><span className="block truncate text-[8px] text-[#63615a]">AI Risk Owner</span></span>
+          <ChevronDown className="ms-auto h-3 w-3 text-[#63615a]" />
         </button>
       </div>
     </aside>
@@ -162,10 +164,10 @@ export function PlatformShell({ children }: { children: React.ReactNode }) {
               <SheetContent side="left" className="w-[278px] border-[#cbc7bd] bg-[#efebe2] p-5 text-[#171713]"><SheetTitle className="sr-only">Navigation</SheetTitle><Mark /><Navigation onNavigate={() => setMenuOpen(false)} /></SheetContent>
             </Sheet>
             <div className="hidden items-center gap-3 sm:flex">
-              <span className="font-mono text-[8px] uppercase tracking-[.16em] text-[#8e8b83]">Portfolio</span>
+              <span className="font-mono text-[8px] uppercase tracking-[.16em] text-[#63615a]">Portfolio</span>
               <span className="text-[10px] font-medium text-[#2d2c28]">EU Consumer Lending</span>
               <span className="h-3 w-px bg-[#cbc7bd]" />
-              <span className="font-mono text-[8px] text-[#8e8b83]">SAMPLE PORTFOLIO · ILLUSTRATIVE DATA</span>
+              <span className="font-mono text-[8px] text-[#63615a]">SAMPLE PORTFOLIO · ILLUSTRATIVE DATA</span>
             </div>
             <div className="ms-auto flex items-center gap-2">
               <PageJump />
@@ -189,14 +191,14 @@ export function PageHeading({ index, title, description, meta, action }: { index
   return (
     <div className="grid gap-5 border-b border-[#cbc7bd] px-5 py-7 sm:px-7 lg:grid-cols-[1fr_auto] lg:px-9">
       <div className="flex gap-4">
-        <span className="mt-1 font-mono text-[9px] text-[#f05a32]">{index}</span>
+        <span className="mt-1 font-mono text-[9px] text-[#a8391a]">{index}</span>
         <div><h1 className="text-[28px] font-medium leading-none tracking-[-.045em] text-[#171713] sm:text-[36px]">{title}</h1><p className="mt-3 max-w-2xl text-[11px] leading-5 text-[#6f6c64]">{description}</p></div>
       </div>
-      <div className="flex items-end gap-3">{meta ? <span role="status" aria-live="polite" className="font-mono text-[8px] uppercase tracking-[.13em] text-[#918e86]">{meta}</span> : null}{action}</div>
+      <div className="flex items-end gap-3">{meta ? <span role="status" aria-live="polite" className="font-mono text-[8px] uppercase tracking-[.13em] text-[#63615a]">{meta}</span> : null}{action}</div>
     </div>
   );
 }
 
 export function MicroLabel({ children, className }: { children: React.ReactNode; className?: string }) {
-  return <span className={cn("font-mono text-[8px] uppercase tracking-[.14em] text-[#85827a]", className)}>{children}</span>;
+  return <span className={cn("font-mono text-[8px] uppercase tracking-[.14em] text-[#63615a]", className)}>{children}</span>;
 }

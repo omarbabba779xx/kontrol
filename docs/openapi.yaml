@@ -156,6 +156,46 @@ paths:
   /api/enterprise:
     get: { summary: Enterprise workspace snapshot (graph:read), responses: { "200": { description: Snapshot } } }
     post: { summary: "Run an enterprise action (controls:evaluate)", responses: { "200": { description: Result } } }
+  /api/compliance:
+    get: { summary: "Compliance posture: framework scores, unified controls, roadmap, exceptions, policies, trend (graph:read)", responses: { "200": { description: Snapshot } } }
+    post:
+      summary: "Compliance action. adopt_framework, set_implementation, set_requirement_scope, request_exception, save_policy, reattest, install_pack, link_evidence, snapshot, load_demo and purge_demo need controls:evaluate; decide_exception, review_mapping, countersign and review_evidence need decisions:approve, and a decider different from the requester, attester or uploader"
+      responses: { "200": { description: Result }, "201": { description: Created }, "400": { description: Invalid request }, "403": { description: Forbidden } }
+  /api/compliance/frameworks/{framework}:
+    get:
+      summary: "Requirement-level status with cross-framework links; format=csv|json downloads a Statement of Applicability (oscal:export)"
+      parameters:
+        - { name: framework, in: path, required: true, schema: { type: string, enum: [iso27001, nist_csf, soc2, gdpr, nis2, dora, eu_ai_act, iso42001, pci_dss, cis_v8] } }
+        - { name: format, in: query, required: false, schema: { type: string, enum: [csv, json] } }
+      responses: { "200": { description: Detail or download }, "404": { description: Unknown framework } }
+  /api/compliance/report:
+    get:
+      summary: "Signed PDF audit-readiness report; its fingerprint is appended to the audit chain (oscal:export)"
+      parameters:
+        - { name: framework, in: query, required: false, schema: { type: string } }
+      responses: { "200": { description: PDF, headers: { X-Report-Fingerprint: { schema: { type: string } } } }, "404": { description: Unknown framework } }
+  /api/compliance/evidence:
+    post:
+      summary: "Upload a document as evidence for a unified control; it stays pending until another person reviews it (evidence:write)"
+      requestBody:
+        content: { multipart/form-data: { schema: { type: object, required: [file, ucCode, title, kind, validUntil], properties: { file: { type: string, format: binary }, ucCode: { type: string }, title: { type: string }, kind: { type: string, enum: [document, record, report, certificate] }, validUntil: { type: string, format: date-time }, note: { type: string } } } } }
+      responses: { "201": { description: Pending evidence with its SHA-256 }, "400": { description: Invalid request } }
+  /api/compliance/licensed-content:
+    get: { summary: "Active licensed-content imports (graph:read)", responses: { "200": { description: Imports } } }
+    post:
+      summary: "Import the organisation's licensed copy of framework text and sub-requirements; requires acknowledgeLicence true (regulations:ingest, administrators)"
+      responses: { "201": { description: Import recorded }, "400": { description: Validation failed, nothing written }, "413": { description: Larger than 5 MB } }
+    delete:
+      summary: "Remove everything imported for a framework (regulations:ingest)"
+      parameters:
+        - { name: framework, in: query, required: true, schema: { type: string } }
+      responses: { "200": { description: Counts removed } }
+  /api/ingest/{source}:
+    post:
+      summary: "Signed report from a learning (lms) or HR (hris) system. Headers X-Kontrol-Tenant, X-Kontrol-Timestamp, X-Kontrol-Signature: sha256=HMAC(tenantSecret, timestamp.body). No session; authenticated by signature only"
+      parameters:
+        - { name: source, in: path, required: true, schema: { type: string, enum: [lms, hris] } }
+      responses: { "202": { description: Evaluated by the people controls }, "401": { description: Invalid signature or unknown tenant }, "409": { description: Replay }, "413": { description: Payload too large }, "422": { description: Invalid figures or report older than 35 days }, "503": { description: KONTROL_INGEST_SECRET not configured } }
   /api/vault/upload:
     post:
       summary: Upload a document to the evidence vault; hashed, signed, versioned (evidence:write)

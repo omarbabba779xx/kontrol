@@ -1,8 +1,10 @@
 import { ZodError } from "zod";
 import { AuthError } from "@/lib/core/auth";
+import { UserError } from "@/lib/core/errors";
 
 export function apiError(error: unknown) {
   if (error instanceof AuthError) return Response.json({ error: error.message }, { status: error.status });
+  if (error instanceof UserError) return Response.json({ error: error.message }, { status: error.status });
   if (error instanceof ZodError) return Response.json({ error: "Invalid request", issues: error.issues }, { status: 400 });
   const message = error instanceof Error ? error.message : "Internal server error";
   console.error(error);
