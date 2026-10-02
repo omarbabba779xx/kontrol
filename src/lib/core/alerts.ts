@@ -51,6 +51,14 @@ export async function scanAndNotify(tenantId: string, now = Date.now()) {
     await send({ type: "audit.request_due", severity: late ? "high" : "medium", title: `${late ? "Overdue audit request" : "Audit request due soon"} ${row.ref}: ${row.title}`, body: `${row.engagement}, due ${row.due_at.slice(0, 10)}.`, link: publicLink("/audit"), dedupeKey: `audit.request_due:${row.id}:${late ? isoWeek(now) : "soon"}`, payload: { assigneeEmail: row.assignee_email } });
   }
 
+  for (const row of await db.all<{ id: string; ref: string; title: string; accepted_until: string }>("SELECT id, ref, title, accepted_until FROM risk_items WHERE tenant_id = ? AND status = 'accepted' AND accepted_until < ?", tenantId, soon)) {
+    const lapsed = row.accepted_until <= iso;
+    await send({ type: lapsed ? "risk.acceptance_expired" : "risk.acceptance_expiring", severity: lapsed ? "high" : "medium", title: `Risk ${row.ref} acceptance ${lapsed ? "expired" : `expires ${row.accepted_until.slice(0, 10)}`}: ${row.title}`, body: lapsed ? "The risk counts as untreated again. Re-accept it or treat it." : "Re-accept the risk or treat it before it lapses.", link: publicLink("/risk-register"), dedupeKey: `risk.acceptance:${row.id}:${row.accepted_until}:${lapsed ? "expired" : "expiring"}` });
+  }
+  for (const row of await db.all<{ id: string; ref: string; title: string; target_date: string }>("SELECT id, ref, title, target_date FROM risk_items WHERE tenant_id = ? AND status = 'treating' AND target_date IS NOT NULL AND target_date < ?", tenantId, iso)) {
+    await send({ type: "risk.treatment_overdue", severity: "medium", title: `Risk treatment overdue ${row.ref}: ${row.title}`, body: `Target date was ${row.target_date.slice(0, 10)}.`, link: publicLink("/risk-register"), dedupeKey: `risk.treatment:${row.id}:${isoWeek(now)}` });
+  }
+
   for (const row of await db.all<{ id: string; title: string; severity: Severity }>("SELECT id, title, severity FROM findings WHERE tenant_id = ? AND status = 'open' AND severity IN ('high','critical') AND opened_at > ?", tenantId, new Date(now - 2 * DAY).toISOString())) {
     await send({ type: "finding.opened", severity: row.severity, title: `New ${row.severity} finding: ${row.title}`, body: "A control evaluation failed. Create a remediation task and assign an owner.", link: publicLink("/controls"), dedupeKey: `finding.opened:${row.id}` });
   }
