@@ -39,8 +39,13 @@ test("a task is created, assigned, discussed and completed", async ({ page }) =>
 
 test("tasks can be generated from the compliance roadmap", async ({ page }) => {
   await page.goto("/compliance");
-  await page.getByRole("button", { name: /Charger la posture d.exemple/ }).click();
-  await expect(page.getByText("Sample posture").first()).toBeVisible();
+  // Earlier specs may already have adopted frameworks: the roadmap exists either way.
+  const load = page.getByRole("button", { name: /Charger la posture d.exemple/ });
+  const loadedSample = await load.isVisible();
+  if (loadedSample) {
+    await load.click();
+    await expect(page.getByText("Sample posture").first()).toBeVisible();
+  }
 
   await page.goto("/tasks");
   await page.getByRole("button", { name: "Generate from roadmap" }).click();
@@ -48,10 +53,12 @@ test("tasks can be generated from the compliance roadmap", async ({ page }) => {
   await expect(page.getByRole("row", { name: /Implement UC-/ }).first()).toBeVisible();
   expect(await page.getByRole("row", { name: /Implement UC-/ }).count()).toBe(10);
 
-  await page.goto("/compliance");
-  page.once("dialog", (dialog) => dialog.accept());
-  await page.getByRole("button", { name: /Purger l.exemple/ }).click();
-  await expect(page.getByText(/Données d.exemple supprimées/)).toBeVisible();
+  if (loadedSample) {
+    await page.goto("/compliance");
+    page.once("dialog", (dialog) => dialog.accept());
+    await page.getByRole("button", { name: /Purger l.exemple/ }).click();
+    await expect(page.getByText(/Données d.exemple supprimées/)).toBeVisible();
+  }
 });
 
 test("a notification channel is created, switched off and deleted, and its destination never shown", async ({ page }) => {

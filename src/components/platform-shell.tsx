@@ -6,6 +6,7 @@ import { usePathname, useRouter } from "next/navigation";
 import {
   Archive,
   ClipboardCheck,
+  Network,
   BadgeCheck,
   UserCog,
   ListChecks,
@@ -47,6 +48,7 @@ const navigation = [
   { name: "Administration", code: "13", href: "/admin", icon: UserCog },
   { name: "Remediation tasks", code: "14", href: "/tasks", icon: ListChecks },
   { name: "Audit workspace", code: "15", href: "/audit", icon: ClipboardCheck },
+  { name: "Third parties", code: "16", href: "/third-party", icon: Network },
 ];
 
 /** External auditors only see the audit workspace; everyone else sees the full navigation. */
