@@ -4,6 +4,7 @@ import { apiError } from "@/lib/core/api";
 import { runDueWorkflows } from "@/lib/core/workflow-engine";
 import { runAssuranceScan } from "@/lib/core/assurance-engine";
 import { runDueJobs } from "@/lib/core/scheduler";
+import { runMaintenance } from "@/lib/core/alerts";
 
 export const runtime = "nodejs";
 export async function POST(request: Request) {
@@ -15,6 +16,7 @@ export async function POST(request: Request) {
     const processed = await runDueWorkflows(actor, 25);
     const assurance = await runAssuranceScan(actor);
     const connectors = await runDueJobs();
-    return Response.json({ processed, assurance, connectors: connectors.map(({ scheduleId, status, error }) => ({ scheduleId, status, error })) });
+    const notifications = await runMaintenance();
+    return Response.json({ processed, assurance, notifications, connectors: connectors.map(({ scheduleId, status, error }) => ({ scheduleId, status, error })) });
   } catch (error) { return apiError(error); }
 }

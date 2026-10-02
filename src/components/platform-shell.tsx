@@ -7,6 +7,7 @@ import {
   Archive,
   BadgeCheck,
   UserCog,
+  ListChecks,
   ArrowUpRight,
   Boxes,
   Braces,
@@ -43,6 +44,7 @@ const navigation = [
   { name: "Enterprise platform", code: "11", href: "/enterprise", icon: Landmark },
   { name: "Compliance hub", code: "12", href: "/compliance", icon: BadgeCheck },
   { name: "Administration", code: "13", href: "/admin", icon: UserCog },
+  { name: "Remediation tasks", code: "14", href: "/tasks", icon: ListChecks },
 ];
 
 function Mark() {

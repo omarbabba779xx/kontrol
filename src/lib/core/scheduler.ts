@@ -129,9 +129,15 @@ export async function runScheduleNow(actor: Actor, scheduleId: string) {
 }
 
 /** Starts the in-process loop once per process. */
-export function startSchedulerLoop(everyMs = 60_000) {
+export function startSchedulerLoop(everyMs = 60_000, maintenance?: () => Promise<unknown>) {
   const holder = globalThis as typeof globalThis & { __kontrolScheduler?: ReturnType<typeof setInterval> };
   if (holder.__kontrolScheduler) return;
-  holder.__kontrolScheduler = setInterval(() => { runDueJobs().catch((error) => console.error("scheduler:", error instanceof Error ? error.message : error)); }, everyMs);
+  let ticks = 0;
+  const report = (error: unknown) => console.error("scheduler:", error instanceof Error ? error.message : error);
+  holder.__kontrolScheduler = setInterval(() => {
+    runDueJobs().catch(report);
+    // Alert scans and notification delivery run every fifth tick.
+    if (maintenance && ++ticks % 5 === 0) maintenance().catch(report);
+  }, everyMs);
   holder.__kontrolScheduler.unref?.();
 }

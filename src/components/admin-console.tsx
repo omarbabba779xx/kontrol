@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState, useTransition } from "react";
-import { CalendarClock, Copy, KeyRound, Plug, ShieldCheck, Trash2, UserPlus } from "lucide-react";
+import { Bell, CalendarClock, Copy, KeyRound, Plug, ShieldCheck, Trash2, UserPlus } from "lucide-react";
 import { MicroLabel, PageHeading } from "@/components/platform-shell";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -15,7 +15,7 @@ type ApiKey = { id: string; name: string; prefix: string; role: Role; created_at
 type Credential = { kind: string; configured: boolean; hint: string | null; rotatedAt: string | null };
 type Snapshot = { users: User[]; apiKeys: ApiKey[]; credentials: Credential[]; authentication: { oidc: boolean; oidcRoleClaimTrusted: boolean; demoSessions: boolean; secretsKeyConfigured: boolean; ingestConfigured: boolean } };
 
-const tabs = ["Users", "API keys", "Connections", "Authentication"] as const;
+const tabs = ["Users", "API keys", "Connections", "Notifications", "Authentication"] as const;
 type Tab = (typeof tabs)[number];
 const ROLES: Role[] = ["admin", "risk_owner", "control_owner", "auditor", "viewer"];
 const ROLE_HELP: Record<Role, string> = { admin: "Everything, including users and credentials", risk_owner: "Simulates risk, approves decisions and reviews", control_owner: "Evaluates controls, uploads evidence, syncs connectors", auditor: "Read-only access with exports", viewer: "Read-only" };
@@ -67,6 +67,7 @@ export function AdminConsole() {
         {snapshot && tab === "Users" ? <Users snapshot={snapshot} act={act} pending={isPending} /> : null}
         {snapshot && tab === "API keys" ? <Keys snapshot={snapshot} act={act} pending={isPending} newKey={newKey} setNewKey={setNewKey} /> : null}
         {snapshot && tab === "Connections" ? <Connections snapshot={snapshot} act={act} pending={isPending} /> : null}
+        {snapshot && tab === "Notifications" ? <Notifications pending={isPending} /> : null}
         {snapshot && tab === "Authentication" ? <Authentication snapshot={snapshot} /> : null}
         {!snapshot && !failed ? <div className="grid min-h-40 place-items-center text-[9px] text-[#63615a]">Loading…</div> : null}
       </section>
@@ -224,6 +225,79 @@ function Authentication({ snapshot }: { snapshot: Snapshot }) {
   return (
     <div className="max-w-3xl border border-[#cbc7bd]">
       {rows.map(([label, good, text]) => <div key={label} className="flex items-start gap-3 border-b border-[#d8d4ca] p-4 last:border-b-0"><ShieldCheck className={cn("mt-0.5 h-4 w-4 shrink-0", good ? "text-[#245c3f]" : "text-[#7a5a1a]")} aria-hidden="true" /><div><p className="text-[11px] font-semibold">{label}</p><p className="text-[9px] text-[#55534b]">{text}</p></div></div>)}
+    </div>
+  );
+}
+
+type Channel = { id: string; kind: string; name: string; events: string[]; minSeverity: string; enabled: boolean; hint: string; lastStatus: string | null; lastError: string | null; lastSentAt: string | null };
+type OutboxItem = { id: string; channel_id: string; event_type: string; severity: string; title: string; status: string; attempts: number; last_error: string | null; created_at: string; sent_at: string | null };
+const CHANNEL_KINDS: Record<string, { title: string; fields: FieldSpec[] }> = {
+  slack: { title: "Slack (or compatible)", fields: [{ name: "webhookUrl", label: "Incoming webhook URL", secret: true }] },
+  webhook: { title: "Signed webhook", fields: [{ name: "url", label: "Endpoint URL", secret: true }] },
+  email: { title: "Email (SMTP)", fields: [{ name: "host", label: "SMTP host" }, { name: "port", label: "Port", placeholder: "587" }, { name: "user", label: "Username", optional: true }, { name: "pass", label: "Password", secret: true, optional: true }, { name: "from", label: "From address" }, { name: "to", label: "Recipients, comma separated" }] },
+  jira: { title: "Jira", fields: [{ name: "baseUrl", label: "Site URL", placeholder: "https://your-site.atlassian.net" }, { name: "email", label: "Account email" }, { name: "apiToken", label: "API token", secret: true }, { name: "projectKey", label: "Project key", placeholder: "SEC" }, { name: "issueType", label: "Issue type", optional: true, placeholder: "Task" }] },
+};
+const SEVERITY_LEVELS = ["low", "medium", "high", "critical"];
+
+function Notifications({ pending }: { pending: boolean }) {
+  const [data, setData] = useState<{ channels: Channel[]; outbox: OutboxItem[]; events: string[] } | null>(null);
+  const [message, setMessage] = useState("");
+  const [kind, setKind] = useState("slack");
+  const [values, setValues] = useState<Record<string, string>>({});
+  const [flags, setFlags] = useState({ secure: false, includeAssignee: false });
+  const [name, setName] = useState("");
+  const [minSeverity, setMinSeverity] = useState("low");
+  const [events, setEvents] = useState<string[]>([]);
+  const [secret, setSecret] = useState<string | null>(null);
+  const [busy, startBusy] = useTransition();
+
+  const load = useCallback(() => fetchJson<{ channels: Channel[]; outbox: OutboxItem[]; events: string[] }>("/api/notifications").then(setData).catch((error: unknown) => setMessage(errorMessage(error, "Notifications unavailable"))), []);
+  useEffect(() => { void load(); }, [load]);
+
+  const post = (body: Record<string, unknown>, success: string, after?: (result: Record<string, unknown>) => void) => startBusy(async () => {
+    try { setMessage("Working…"); const result = await fetchJson<Record<string, unknown>>("/api/notifications", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) }); await load(); setMessage(typeof result.detail === "string" ? `${success}: ${result.detail}` : success); after?.(result); }
+    catch (error) { setMessage(errorMessage(error, "Action failed")); }
+  });
+
+  function create() {
+    const config: Record<string, unknown> = Object.fromEntries(Object.entries(values).filter(([, value]) => value.trim() !== ""));
+    if (kind === "email") { config.port = Number(values.port || 587); config.to = String(values.to ?? "").split(",").map((item) => item.trim()).filter(Boolean); config.secure = flags.secure; config.includeAssignee = flags.includeAssignee; }
+    post({ action: "create_channel", kind, name, config, events: events.length ? events : ["*"], minSeverity }, "Channel created", (result) => { setValues({}); setName(""); setEvents([]); if (typeof result.signingSecret === "string") setSecret(result.signingSecret); });
+  }
+
+  const spec = CHANNEL_KINDS[kind];
+  const nameOf = (id: string) => data?.channels.find((channel) => channel.id === id)?.name ?? "deleted channel";
+  return (
+    <div className="space-y-6">
+      <p className="max-w-3xl text-[10px] text-[#55534b]">Channels receive the events you choose: tasks assigned or overdue, new high-severity findings, risk acceptances awaiting a decision, attestations and policies falling due, failing connectors. Destinations are encrypted and never shown again; deliveries retry with back-off and never follow redirects or reach private networks.</p>
+      {message ? <p role="status" className="text-[9px] font-medium text-[#34332e]">{message}</p> : null}
+      {secret ? <div role="status" className="border border-[#245c3f] bg-[#dcebe1] p-4 text-[10px] text-[#173d2a]"><p className="font-semibold">Signing secret. Shown once: store it in the receiving system.</p><code className="mt-2 block break-all bg-white px-2 py-1 font-mono text-[10px]">{secret}</code><p className="mt-2 text-[9px]">Each request carries <code className="font-mono">X-Kontrol-Timestamp</code> and <code className="font-mono">X-Kontrol-Signature: sha256=HMAC(secret, timestamp.body)</code>.</p><Button type="button" variant="ghost" onClick={() => setSecret(null)} className="mt-1 h-7 rounded-none text-[9px]">I have stored it</Button></div> : null}
+      <div className="grid gap-8 xl:grid-cols-[360px_1fr]">
+        <form className="h-fit space-y-2 border border-[#cbc7bd] p-4" onSubmit={(event) => { event.preventDefault(); create(); }}>
+          <MicroLabel>Add a channel</MicroLabel>
+          <select aria-label="Channel type" value={kind} onChange={(event) => { setKind(event.target.value); setValues({}); }} className={cn(select, "w-full")}>{Object.entries(CHANNEL_KINDS).map(([key, item]) => <option key={key} value={key}>{item.title}</option>)}</select>
+          <Input aria-label="Channel name" placeholder="Name (for example #security-alerts)" value={name} onChange={(event) => setName(event.target.value)} className={field} />
+          {spec.fields.map((fieldSpec) => <Input key={fieldSpec.name} aria-label={`${spec.title} ${fieldSpec.label}`} type={fieldSpec.secret ? "password" : "text"} autoComplete="off" placeholder={`${fieldSpec.label}${fieldSpec.optional ? " (optional)" : ""}${fieldSpec.placeholder ? ` · ${fieldSpec.placeholder}` : ""}`} value={values[fieldSpec.name] ?? ""} onChange={(event) => setValues({ ...values, [fieldSpec.name]: event.target.value })} className={field} />)}
+          {kind === "email" ? <div className="space-y-1 text-[9px]"><label className="flex items-center gap-2"><input type="checkbox" checked={flags.secure} onChange={(event) => setFlags({ ...flags, secure: event.target.checked })} />Use TLS from the start (port 465)</label><label className="flex items-center gap-2"><input type="checkbox" checked={flags.includeAssignee} onChange={(event) => setFlags({ ...flags, includeAssignee: event.target.checked })} />Also email the task assignee</label></div> : null}
+          <select aria-label="Minimum severity" value={minSeverity} onChange={(event) => setMinSeverity(event.target.value)} className={cn(select, "w-full")}>{SEVERITY_LEVELS.map((level) => <option key={level} value={level}>{level === "low" ? "All severities" : `${level} and above`}</option>)}</select>
+          <fieldset className="border border-[#d8d4ca] p-2"><legend className="px-1 font-mono text-[8px] uppercase text-[#5f5d56]">Events (none selected = all)</legend><div className="grid max-h-36 grid-cols-1 gap-0.5 overflow-y-auto text-[9px]">{(data?.events ?? []).filter((eventName) => eventName !== "test").map((eventName) => <label key={eventName} className="flex items-center gap-2"><input type="checkbox" checked={events.includes(eventName)} onChange={(event) => setEvents(event.target.checked ? [...events, eventName] : events.filter((item) => item !== eventName))} />{eventName}</label>)}</div></fieldset>
+          <Button type="submit" disabled={busy || pending || name.trim().length < 2} className="h-8 w-full rounded-none bg-[#171713] text-[10px] text-white"><Bell className="me-1.5 h-3 w-3" aria-hidden="true" />Add channel</Button>
+        </form>
+        <div className="space-y-6">
+          <div className="grid gap-3 md:grid-cols-2">{(data?.channels ?? []).map((channel) => (
+            <div key={channel.id} className="border border-[#cbc7bd] bg-[#f8f6f0] p-4">
+              <div className="flex items-start justify-between gap-2"><div><p className="text-[11px] font-semibold">{channel.name}</p><p className="font-mono text-[8px] text-[#5f5d56]">{channel.kind} · {channel.hint}</p></div><span className={cn("px-1.5 py-0.5 font-mono text-[8px] uppercase", channel.enabled ? "bg-[#dcebe1] text-[#245c3f]" : "bg-[#e5e2d8] text-[#5f5d56]")}>{channel.enabled ? "on" : "off"}</span></div>
+              <p className="mt-1 text-[9px] text-[#55534b]">{channel.events.includes("*") ? "All events" : channel.events.join(", ")} · {channel.minSeverity === "low" ? "all severities" : `${channel.minSeverity}+`}</p>
+              {channel.lastStatus ? <p className={cn("mt-1 font-mono text-[8px]", channel.lastStatus === "failing" ? "text-[#b8322a]" : "text-[#5f5d56]")}>{channel.lastStatus === "failing" ? `failing: ${channel.lastError}` : `last delivery ${channel.lastSentAt?.slice(0, 16).replace("T", " ")}`}</p> : null}
+              <div className="mt-3 flex flex-wrap gap-2"><Button type="button" variant="outline" disabled={busy} onClick={() => post({ action: "test_channel", id: channel.id }, "Test sent")} className="h-7 rounded-none border-[#171713] bg-transparent text-[9px]">Send test</Button>
+                <Button type="button" variant="outline" disabled={busy} onClick={() => post({ action: "set_enabled", id: channel.id, enabled: !channel.enabled }, channel.enabled ? "Channel turned off" : "Channel turned on")} className="h-7 rounded-none border-[#171713] bg-transparent text-[9px]">{channel.enabled ? "Turn off" : "Turn on"}</Button>
+                <Button type="button" variant="outline" disabled={busy} onClick={() => { if (window.confirm(`Delete ${channel.name} and its queued messages?`)) post({ action: "delete_channel", id: channel.id }, "Channel deleted"); }} className="h-7 rounded-none border-[#b8322a] bg-transparent text-[9px] text-[#b8322a]"><Trash2 className="me-1 h-3 w-3" aria-hidden="true" />Delete</Button></div>
+            </div>))}
+          </div>
+          {data && data.channels.length === 0 ? <p className="text-[10px] text-[#5f5d56]">No channels yet. Add one to receive alerts.</p> : null}
+          {data?.outbox.length ? <div><MicroLabel>Recent messages</MicroLabel><div tabIndex={0} role="region" aria-label="Recent messages, scrollable" className="mt-2 overflow-x-auto border border-[#cbc7bd] focus-visible:outline-2 focus-visible:outline-[#171713]"><table className="w-full min-w-[640px] text-left text-[9px]"><caption className="sr-only">Recent messages</caption><tbody>{data.outbox.slice(0, 12).map((item) => <tr key={item.id} className="border-t border-[#d8d4ca] first:border-t-0"><td className="px-3 py-2 font-mono">{item.created_at.slice(0, 16).replace("T", " ")}</td><td className="px-3 py-2">{item.title}<span className="block font-mono text-[8px] text-[#5f5d56]">{item.event_type} · {nameOf(item.channel_id)}</span></td><td className={cn("px-3 py-2 font-mono uppercase", item.status === "sent" ? "text-[#245c3f]" : item.status === "pending" ? "text-[#5f5d56]" : "text-[#b8322a]")}>{item.status}{item.attempts ? ` (${item.attempts})` : ""}</td><td className="px-3 py-2 text-end">{item.status === "dead" || item.status === "failed" ? <Button type="button" variant="outline" disabled={busy} onClick={() => post({ action: "retry", id: item.id }, "Message re-queued")} className="h-6 rounded-none border-[#171713] bg-transparent text-[8px]">Retry</Button> : null}</td></tr>)}</tbody></table></div></div> : null}
+        </div>
+      </div>
     </div>
   );
 }

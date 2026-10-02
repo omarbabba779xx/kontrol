@@ -10,6 +10,7 @@ import { FRAMEWORKS, FRAMEWORK_BY_ID } from "@/lib/frameworks/catalog";
 import { SUGGESTED_LINKS } from "@/lib/connectors/pack";
 import { storeVaultDocument } from "@/lib/core/enterprise-engine";
 import { listImports, loadCustomRequirements, loadLicensedText } from "@/lib/core/licensed-content";
+import { notify } from "@/lib/core/notifications";
 import { allLinks, allSuggestions, baseControls, linkBasis, linkKey, linkSource, suggestedControls } from "@/lib/frameworks/mapping";
 import { buildRoadmap, controlWeight, crosswalk, isBacked, mappedControls, overlapMatrix, readinessLabel, requirementsOf, scoreFramework, type ControlState, type MappingOverrides, type NotApplicable, type Verification } from "@/lib/frameworks/scoring";
 import { DOMAIN_LABELS, UNIFIED_CONTROLS, UC_BY_CODE } from "@/lib/frameworks/unified";
@@ -380,6 +381,7 @@ export async function attachEvidence(actor: Actor, input: { ucCode: string; titl
       id, actor.tenantId, input.ucCode, input.title, input.kind, stored.id, stored.hash, input.note, new Date(until).toISOString(), actor.userId, new Date().toISOString(), "pending");
     await appendAudit({ tenantId: actor.tenantId, actorId: actor.userId, action: "compliance.evidence_attached", objectType: "control_evidence", objectId: id, payload: { ucCode: input.ucCode, hash: stored.hash, kind: input.kind, vaultDocumentId: stored.id } }, tx);
   });
+  await notify(actor.tenantId, { type: "evidence.pending_review", severity: "low", title: `Evidence awaiting review: ${input.title}`, body: `${actor.name} uploaded evidence for ${input.ucCode}. Someone else must review it.`, dedupeKey: `evidence.pending:${id}:new` }).catch(() => undefined);
   return { id, status: "pending", hash: stored.hash, duplicateDocument: stored.duplicate };
 }
 
@@ -429,6 +431,7 @@ export async function requestException(actor: Actor, input: { ucCode: string; ti
       id, actor.tenantId, input.ucCode, input.title, input.justification, input.compensatingControls, input.riskLevel, actor.userId, "pending", new Date(expires).toISOString(), at);
     await appendAudit({ tenantId: actor.tenantId, actorId: actor.userId, action: "compliance.exception_requested", objectType: "exception", objectId: id, payload: { ucCode: input.ucCode, riskLevel: input.riskLevel, expiresAt: input.expiresAt } }, tx);
   });
+  await notify(actor.tenantId, { type: "exception.pending", severity: "medium", title: `Risk acceptance awaiting a decision: ${input.title}`, body: `${actor.name} requested an exception for ${input.ucCode} (${input.riskLevel} risk).`, dedupeKey: `exception.pending:${id}:requested` }).catch(() => undefined);
   return { id, status: "pending" };
 }
 

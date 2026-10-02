@@ -1,0 +1,76 @@
+import type { Migration } from "@/lib/db/migrations/runner";
+
+/** Remediation tasks and the notification system (channels, outbox). */
+export const tasksNotifications: Migration = {
+  id: 4,
+  name: "tasks_and_notifications",
+  tables: ["tasks", "task_comments", "notification_channels", "notifications"],
+  up: () => [
+    `CREATE TABLE IF NOT EXISTS tasks (
+      id TEXT PRIMARY KEY,
+      tenant_id TEXT NOT NULL REFERENCES tenants(id),
+      title TEXT NOT NULL,
+      description TEXT NOT NULL DEFAULT '',
+      source_type TEXT NOT NULL DEFAULT 'manual',
+      source_id TEXT,
+      uc_code TEXT,
+      assignee_id TEXT REFERENCES users(id),
+      created_by TEXT NOT NULL,
+      priority TEXT NOT NULL CHECK(priority IN ('low','medium','high','critical')),
+      status TEXT NOT NULL CHECK(status IN ('open','in_progress','blocked','done','cancelled')),
+      due_at TEXT,
+      created_at TEXT NOT NULL,
+      updated_at TEXT NOT NULL,
+      closed_at TEXT
+    )`,
+    `CREATE TABLE IF NOT EXISTS task_comments (
+      id TEXT PRIMARY KEY,
+      tenant_id TEXT NOT NULL REFERENCES tenants(id),
+      task_id TEXT NOT NULL REFERENCES tasks(id),
+      author_id TEXT NOT NULL,
+      body TEXT NOT NULL,
+      created_at TEXT NOT NULL
+    )`,
+    `CREATE TABLE IF NOT EXISTS notification_channels (
+      id TEXT PRIMARY KEY,
+      tenant_id TEXT NOT NULL REFERENCES tenants(id),
+      kind TEXT NOT NULL CHECK(kind IN ('slack','webhook','email','jira')),
+      name TEXT NOT NULL,
+      events_json TEXT NOT NULL DEFAULT '["*"]',
+      min_severity TEXT NOT NULL DEFAULT 'low' CHECK(min_severity IN ('low','medium','high','critical')),
+      enabled INTEGER NOT NULL DEFAULT 1,
+      ciphertext TEXT NOT NULL,
+      iv TEXT NOT NULL,
+      tag TEXT NOT NULL,
+      hint TEXT NOT NULL DEFAULT '',
+      created_by TEXT NOT NULL,
+      created_at TEXT NOT NULL,
+      last_status TEXT,
+      last_error TEXT,
+      last_sent_at TEXT
+    )`,
+    `CREATE TABLE IF NOT EXISTS notifications (
+      id TEXT PRIMARY KEY,
+      tenant_id TEXT NOT NULL REFERENCES tenants(id),
+      channel_id TEXT NOT NULL REFERENCES notification_channels(id),
+      event_type TEXT NOT NULL,
+      severity TEXT NOT NULL,
+      title TEXT NOT NULL,
+      body TEXT NOT NULL,
+      link TEXT,
+      payload_json TEXT NOT NULL DEFAULT '{}',
+      dedupe_key TEXT NOT NULL,
+      status TEXT NOT NULL CHECK(status IN ('pending','sent','failed','dead')),
+      attempts INTEGER NOT NULL DEFAULT 0,
+      next_attempt_at TEXT NOT NULL,
+      last_error TEXT,
+      created_at TEXT NOT NULL,
+      sent_at TEXT,
+      UNIQUE(tenant_id, channel_id, dedupe_key)
+    )`,
+    "CREATE INDEX IF NOT EXISTS idx_tasks_status ON tasks(tenant_id, status, due_at)",
+    "CREATE INDEX IF NOT EXISTS idx_tasks_assignee ON tasks(tenant_id, assignee_id, status)",
+    "CREATE INDEX IF NOT EXISTS idx_task_comments ON task_comments(tenant_id, task_id)",
+    "CREATE INDEX IF NOT EXISTS idx_notifications_due ON notifications(status, next_attempt_at)",
+  ],
+};
