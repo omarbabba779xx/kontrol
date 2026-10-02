@@ -79,15 +79,16 @@ type Act = (body: Record<string, unknown>, success: string, after?: (result: Rec
 const day = (value: string | null) => (value ? value.slice(0, 10) : "never");
 
 function Users({ snapshot, act, pending }: { snapshot: Snapshot; act: Act; pending: boolean }) {
-  const [form, setForm] = useState({ email: "", name: "", role: "viewer" as Role });
+  const [form, setForm] = useState({ email: "", name: "", role: "viewer" as Role, external: false });
   return (
     <div className="grid gap-8 xl:grid-cols-[320px_1fr]">
-      <form className="space-y-2 border border-[#cbc7bd] p-4" onSubmit={(event) => { event.preventDefault(); act({ action: "invite_user", ...form }, "User created", () => setForm({ email: "", name: "", role: "viewer" })); }}>
+      <form className="space-y-2 border border-[#cbc7bd] p-4" onSubmit={(event) => { event.preventDefault(); act({ action: "invite_user", ...form }, "User created", () => setForm({ email: "", name: "", role: "viewer", external: false })); }}>
         <MicroLabel>Add a user</MicroLabel>
         <Input aria-label="Full name" placeholder="Full name" value={form.name} onChange={(event) => setForm({ ...form, name: event.target.value })} className={field} />
         <Input aria-label="Email" type="email" placeholder="Email (matches their single sign-on identity)" value={form.email} onChange={(event) => setForm({ ...form, email: event.target.value })} className={field} />
         <select aria-label="Role" value={form.role} onChange={(event) => setForm({ ...form, role: event.target.value as Role })} className={cn(select, "w-full")}>{ROLES.map((role) => <option key={role} value={role}>{role.replace("_", " ")}</option>)}</select>
         <p className="text-[8px] text-[#5f5d56]">{ROLE_HELP[form.role]}</p>
+        <label className="flex items-center gap-2 text-[9px]"><input type="checkbox" checked={form.external} onChange={(event) => setForm({ ...form, external: event.target.checked })} />External auditor (sees only the audit engagements granted to them)</label>
         <Button type="submit" disabled={pending || form.name.trim().length < 2 || !form.email.includes("@")} className="h-8 w-full rounded-none bg-[#171713] text-[10px] text-white"><UserPlus className="me-1.5 h-3 w-3" aria-hidden="true" />Add user</Button>
         <p className="text-[8px] text-[#5f5d56]">Sign-in is through your identity provider; the role set here applies when they first sign in.</p>
       </form>

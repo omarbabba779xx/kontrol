@@ -45,6 +45,12 @@ export async function scanAndNotify(tenantId: string, now = Date.now()) {
     await send({ type: "policy.review_overdue", severity: "medium", title: `Policy review overdue: ${row.title}`, body: `Review was due ${row.next_review.slice(0, 10)}.`, link: publicLink("/compliance"), dedupeKey: `policy.review:${row.id}:${row.next_review}` });
   }
 
+  for (const row of await db.all<{ id: string; ref: string; title: string; due_at: string; engagement: string; assignee_email: string | null }>(
+    "SELECT r.id, r.ref, r.title, r.due_at, e.name AS engagement, u.email AS assignee_email FROM audit_requests r JOIN audit_engagements e ON e.id = r.engagement_id LEFT JOIN users u ON u.id = r.assignee_id WHERE r.tenant_id = ? AND r.status IN ('open','needs_more') AND e.status <> 'closed' AND r.due_at IS NOT NULL AND r.due_at < ?", tenantId, new Date(now + 3 * DAY).toISOString())) {
+    const late = row.due_at < iso;
+    await send({ type: "audit.request_due", severity: late ? "high" : "medium", title: `${late ? "Overdue audit request" : "Audit request due soon"} ${row.ref}: ${row.title}`, body: `${row.engagement}, due ${row.due_at.slice(0, 10)}.`, link: publicLink("/audit"), dedupeKey: `audit.request_due:${row.id}:${late ? isoWeek(now) : "soon"}`, payload: { assigneeEmail: row.assignee_email } });
+  }
+
   for (const row of await db.all<{ id: string; title: string; severity: Severity }>("SELECT id, title, severity FROM findings WHERE tenant_id = ? AND status = 'open' AND severity IN ('high','critical') AND opened_at > ?", tenantId, new Date(now - 2 * DAY).toISOString())) {
     await send({ type: "finding.opened", severity: row.severity, title: `New ${row.severity} finding: ${row.title}`, body: "A control evaluation failed. Create a remediation task and assign an owner.", link: publicLink("/controls"), dedupeKey: `finding.opened:${row.id}` });
   }

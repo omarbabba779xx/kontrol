@@ -8,7 +8,7 @@ const role = z.enum(ROLES as [string, ...string[]]);
 const kind = z.enum(CREDENTIAL_KINDS as [string, ...string[]]);
 
 const actionSchema = z.discriminatedUnion("action", [
-  z.object({ action: z.literal("invite_user"), email: z.string().email(), name: z.string().min(2).max(120), role }),
+  z.object({ action: z.literal("invite_user"), email: z.string().email(), name: z.string().min(2).max(120), role, external: z.boolean().default(false) }),
   z.object({ action: z.literal("set_role"), userId: z.string().min(3), role }),
   z.object({ action: z.literal("set_status"), userId: z.string().min(3), status: z.enum(["active", "disabled"]) }),
   z.object({ action: z.literal("create_api_key"), name: z.string().min(3).max(80), role: z.enum(KEY_ROLES as [string, ...string[]]), expiresInDays: z.number().int().min(1).max(365).default(90) }),

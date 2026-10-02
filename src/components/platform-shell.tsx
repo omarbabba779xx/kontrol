@@ -5,6 +5,7 @@ import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import {
   Archive,
+  ClipboardCheck,
   BadgeCheck,
   UserCog,
   ListChecks,
@@ -45,7 +46,19 @@ const navigation = [
   { name: "Compliance hub", code: "12", href: "/compliance", icon: BadgeCheck },
   { name: "Administration", code: "13", href: "/admin", icon: UserCog },
   { name: "Remediation tasks", code: "14", href: "/tasks", icon: ListChecks },
+  { name: "Audit workspace", code: "15", href: "/audit", icon: ClipboardCheck },
 ];
+
+/** External auditors only see the audit workspace; everyone else sees the full navigation. */
+function useVisibleNavigation() {
+  const [external, setExternal] = useState(false);
+  useEffect(() => {
+    const controller = new AbortController();
+    fetch("/api/me", { signal: controller.signal }).then((response) => (response.ok ? response.json() : null)).then((me: { external?: boolean } | null) => setExternal(me?.external === true)).catch(() => undefined);
+    return () => controller.abort();
+  }, []);
+  return external ? navigation.filter((item) => item.href === "/audit") : navigation;
+}
 
 function Mark() {
   return (
@@ -63,6 +76,7 @@ function Mark() {
 
 function PageJump() {
   const router = useRouter();
+  const pages = useVisibleNavigation();
   const inputRef = useRef<HTMLInputElement>(null);
   const [value, setValue] = useState("");
 
@@ -80,7 +94,7 @@ function PageJump() {
   function submit(event: React.FormEvent) {
     event.preventDefault();
     const query = value.trim().toLowerCase();
-    const match = navigation.find((item) => item.name.toLowerCase() === query) ?? navigation.find((item) => item.name.toLowerCase().includes(query));
+    const match = pages.find((item) => item.name.toLowerCase() === query) ?? pages.find((item) => item.name.toLowerCase().includes(query));
     if (!match) return;
     router.push(match.href);
     setValue("");
@@ -100,7 +114,7 @@ function PageJump() {
         placeholder="Jump to a page…"
         className="h-8 w-[220px] rounded-none border-[#cbc7bd] bg-transparent ps-8 pe-9 text-[10px] shadow-none placeholder:text-[#63615a]"
       />
-      <datalist id="kontrol-pages">{navigation.map((item) => <option key={item.href} value={item.name} />)}</datalist>
+      <datalist id="kontrol-pages">{pages.map((item) => <option key={item.href} value={item.name} />)}</datalist>
       <span aria-hidden="true" className="pointer-events-none absolute end-2 top-1/2 flex -translate-y-1/2 items-center gap-1 font-mono text-[8px] text-[#63615a]"><Command className="h-2.5 w-2.5" />K</span>
     </form>
   );
@@ -108,13 +122,14 @@ function PageJump() {
 
 function Navigation({ onNavigate }: { onNavigate?: () => void }) {
   const pathname = usePathname();
+  const pages = useVisibleNavigation();
   return (
     <nav aria-label="Primary navigation" className="mt-10">
       <div className="mb-3 flex items-center justify-between px-2 font-mono text-[8px] uppercase tracking-[.16em] text-[#63615a]">
         <span>Workspace</span><span>Demo / EU</span>
       </div>
       <div className="border-t border-[#d7d3c9]">
-        {navigation.map((item) => {
+        {pages.map((item) => {
           const active = item.href === "/" ? pathname === "/" : pathname.startsWith(item.href);
           return (
             <Link

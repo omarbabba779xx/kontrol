@@ -13,7 +13,7 @@ export const ROLES: Role[] = ["admin", "risk_owner", "control_owner", "auditor",
 export const KEY_ROLES: Role[] = ["risk_owner", "control_owner", "auditor", "viewer"];
 export const KEY_PREFIX = "kon_";
 
-type UserRow = { id: string; email: string; name: string; role: Role; status: "active" | "disabled"; created_at: string; last_login_at: string | null };
+type UserRow = { id: string; email: string; name: string; role: Role; status: "active" | "disabled"; created_at: string; last_login_at: string | null; external: number };
 
 async function activeAdminCount(tenantId: string, excluding?: string) {
   const row = await (await getDb()).scope(tenantId).get<{ n: number }>("SELECT COUNT(*) AS n FROM users WHERE tenant_id = ? AND role = 'admin' AND status = 'active' AND id <> ?", tenantId, excluding ?? "");
@@ -22,7 +22,7 @@ async function activeAdminCount(tenantId: string, excluding?: string) {
 
 export async function adminSnapshot(tenantId: string) {
   const db = (await getDb()).scope(tenantId);
-  const users = await db.all<UserRow>("SELECT id, email, name, role, status, created_at, last_login_at FROM users WHERE tenant_id = ? ORDER BY created_at", tenantId);
+  const users = await db.all<UserRow>("SELECT id, email, name, role, status, created_at, last_login_at, external FROM users WHERE tenant_id = ? AND id NOT LIKE 'usr_svc_%' ORDER BY created_at", tenantId);
   const keys = await db.all<{ id: string; user_id: string; name: string; prefix: string; role: Role; created_at: string; expires_at: string | null; last_used_at: string | null; revoked_at: string | null }>(
     "SELECT id, user_id, name, prefix, role, created_at, expires_at, last_used_at, revoked_at FROM api_keys WHERE tenant_id = ? ORDER BY created_at DESC", tenantId);
   const now = new Date().toISOString();
@@ -40,26 +40,28 @@ export async function adminSnapshot(tenantId: string) {
   };
 }
 
-export async function inviteUser(actor: Actor, input: { email: string; name: string; role: Role }) {
+export async function inviteUser(actor: Actor, input: { email: string; name: string; role: Role; external?: boolean }) {
+  if (input.external && input.role !== "auditor") throw userError("An external user must have the auditor role");
   const email = input.email.trim().toLowerCase();
   const db = (await getDb()).scope(actor.tenantId);
   if (await db.get("SELECT id FROM users WHERE tenant_id = ? AND email = ?", actor.tenantId, email)) throw userError(`A user with email ${email} already exists`);
   const id = `usr_${randomUUID()}`;
   await db.transaction(async (tx) => {
-    await tx.run("INSERT INTO users (id,tenant_id,email,name,role,created_at,status) VALUES (?,?,?,?,?,?,?)", id, actor.tenantId, email, input.name.trim(), input.role, new Date().toISOString(), "active");
-    await appendAudit({ tenantId: actor.tenantId, actorId: actor.userId, action: "admin.user_created", objectType: "user", objectId: id, payload: { email, role: input.role } }, tx);
+    await tx.run("INSERT INTO users (id,tenant_id,email,name,role,created_at,status,external) VALUES (?,?,?,?,?,?,?,?)", id, actor.tenantId, email, input.name.trim(), input.role, new Date().toISOString(), "active", input.external ? 1 : 0);
+    await appendAudit({ tenantId: actor.tenantId, actorId: actor.userId, action: "admin.user_created", objectType: "user", objectId: id, payload: { email, role: input.role, external: input.external === true } }, tx);
   });
   return { id, email, role: input.role };
 }
 
 async function target(actor: Actor, userId: string) {
-  const row = await (await getDb()).scope(actor.tenantId).get<UserRow>("SELECT id, email, name, role, status, created_at, last_login_at FROM users WHERE tenant_id = ? AND id = ?", actor.tenantId, userId);
+  const row = await (await getDb()).scope(actor.tenantId).get<UserRow>("SELECT id, email, name, role, status, created_at, last_login_at, external FROM users WHERE tenant_id = ? AND id = ?", actor.tenantId, userId);
   if (!row) throw userError("User not found");
   return row;
 }
 
 export async function setUserRole(actor: Actor, input: { userId: string; role: Role }) {
   const user = await target(actor, input.userId);
+  if (Number(user.external) === 1 && input.role !== "auditor") throw userError("An external user must keep the auditor role");
   if (user.role === input.role) return { id: user.id, role: user.role };
   if (user.role === "admin" && user.status === "active" && (await activeAdminCount(actor.tenantId, user.id)) === 0) throw userError("The last active administrator cannot be demoted");
   await (await getDb()).scope(actor.tenantId).transaction(async (tx) => {
