@@ -4,12 +4,17 @@ import { CloudTrailClient } from "@aws-sdk/client-cloudtrail";
 import { ConfigServiceClient } from "@aws-sdk/client-config-service";
 import { IAMClient } from "@aws-sdk/client-iam";
 import { S3Client } from "@aws-sdk/client-s3";
+import { GetCallerIdentityCommand, STSClient } from "@aws-sdk/client-sts";
 import type { Actor } from "@/lib/core/auth";
+import { loadCredentials, type CredentialKind } from "@/lib/core/credentials";
+import { userError } from "@/lib/core/errors";
 import { getDb } from "@/lib/db";
 import { appendAudit, canonicalJson, sha256 } from "@/lib/core/integrity";
 import { assertPublicHttpsUrl } from "@/lib/core/net-guard";
 import { evaluateControl } from "@/lib/core/policy-engine";
 import { collectAws, collectGitHub, collectOkta, type AwsClients, type Facts, type GitHubApi, type JsonResponse, type OktaApi } from "@/lib/connectors/collectors";
+import { collectEntra, collectGitLab, collectGoogleWorkspace, type Api } from "@/lib/connectors/collectors-identity";
+import { entraAccessToken, googleAccessToken } from "@/lib/connectors/oauth";
 import { PACK, missingFacts, type ConnectorKind } from "@/lib/connectors/pack";
 
 type Evaluation = Awaited<ReturnType<typeof evaluateControl>>;
@@ -26,11 +31,16 @@ export type ConnectorSyncResult = {
   skipped: Array<{ controlCode: string; missing: string[] }>;
 };
 
-const ASSETS: Record<Exclude<ConnectorKind, "github">, { id: string; type: string; name: string }> = {
+type Asset = { id: string; type: string; name: string };
+const ASSETS: Record<Exclude<ConnectorKind, "github" | "gitlab">, Asset> = {
   people: { id: "asset_workforce", type: "workforce", name: "Workforce" },
   aws: { id: "asset_aws_account", type: "cloud_account", name: "AWS account" },
   okta: { id: "asset_okta_org", type: "identity_provider", name: "Okta organisation" },
+  google_workspace: { id: "asset_google_workspace", type: "identity_provider", name: "Google Workspace domain" },
+  entra: { id: "asset_entra_tenant", type: "identity_provider", name: "Microsoft Entra ID tenant" },
 };
+
+const slug = (value: string) => value.toLowerCase().replace(/[^a-z0-9]+/g, "_").replace(/^_|_$/g, "").slice(0, 60);
 
 /** Inserts the executable controls of the pack that this tenant does not have yet. Idempotent. */
 export async function installControlPack(actor: Actor, connector?: ConnectorKind) {
@@ -50,7 +60,7 @@ export async function installControlPack(actor: Actor, connector?: ConnectorKind
   return { installed };
 }
 
-async function ensureAsset(actor: Actor, asset: { id: string; type: string; name: string }) {
+async function ensureAsset(actor: Actor, asset: Asset) {
   const db = (await getDb()).scope(actor.tenantId);
   if (await db.get("SELECT id FROM assets WHERE tenant_id = ? AND id = ?", actor.tenantId, asset.id)) return;
   const now = new Date().toISOString();
@@ -86,13 +96,41 @@ function demoGitHubFacts(owner: string, repository: string): Facts {
   return { production: true, repository: `${owner}/${repository}`, defaultBranch: "main", visibility: "private", archived: false, branchProtection: { enabled: false, requiredReviews: 0, enforceAdmins: false, dismissStaleReviews: false, requireCodeOwnerReviews: false, requireSignedCommits: false }, security: { secretScanning: "enabled", pushProtection: "disabled", dependabotSecurityUpdates: "enabled" }, vulnerabilityAlertsEnabled: true, org: { twoFactorRequired: true } };
 }
 
-export async function syncGitHub(actor: Actor, input: { owner: string; repository: string; assetId: string; demo: boolean }, api?: GitHubApi): Promise<ConnectorSyncResult> {
-  const token = process.env.GITHUB_TOKEN;
+export async function syncGitHub(actor: Actor, input: { owner: string; repository: string; assetId?: string; demo: boolean }, api?: GitHubApi): Promise<ConnectorSyncResult> {
+  const token = (await loadCredentials(actor.tenantId, "github"))?.token ?? process.env.GITHUB_TOKEN;
   const useDemo = !api && (input.demo || !token);
+  const assetId = input.assetId ?? `asset_repo_${slug(`${input.owner}_${input.repository}`)}`;
+  await ensureAsset(actor, { id: assetId, type: "repository", name: `${input.owner}/${input.repository}` });
   const facts = useDemo ? demoGitHubFacts(input.owner, input.repository) : await collectGitHub(api ?? githubApi(token!), input.owner, input.repository);
-  const { evaluations, skipped, first } = await runPack(actor, "github", facts, input.assetId, useDemo ? "github:demo" : "github:api");
+  const { evaluations, skipped, first } = await runPack(actor, "github", facts, assetId, useDemo ? "github:demo" : "github:api");
   await updateConnector(actor, "github", useDemo ? "demo" : "healthy", facts);
   return { connector: "github", mode: useDemo ? "demo" : "live", collectedAt: new Date().toISOString(), facts, evaluation: first, evaluations, skipped };
+}
+
+// ---------------------------------------------------------------- GitLab ------------------------------------------------
+
+function gitlabApi(baseUrl: string, token: string): Api {
+  const origin = assertPublicHttpsUrl(baseUrl).origin;
+  return async (path) => {
+    const response = await fetch(`${origin}/api/v4${path}`, { headers: { "PRIVATE-TOKEN": token, Accept: "application/json" }, cache: "no-store", signal: AbortSignal.timeout(15_000) });
+    return { status: response.status, body: await response.json().catch(() => null) };
+  };
+}
+
+function demoGitLabFacts(project: string): Facts {
+  return { production: true, repository: project, defaultBranch: "main", visibility: "private", archived: false, branchProtection: { enabled: true, developersCanPush: false, forcePushAllowed: false, codeOwnerApprovalRequired: false, requiredReviews: 0 }, group: { twoFactorRequired: true } };
+}
+
+export async function syncGitLab(actor: Actor, input: { project: string; assetId?: string; demo: boolean }, api?: Api): Promise<ConnectorSyncResult> {
+  const stored = await loadCredentials(actor.tenantId, "gitlab");
+  const useDemo = !api && (input.demo || !stored);
+  const assetId = input.assetId ?? `asset_repo_${slug(input.project)}`;
+  await ensureAsset(actor, { id: assetId, type: "repository", name: input.project });
+  const facts = useDemo ? demoGitLabFacts(input.project) : await collectGitLab(api ?? gitlabApi(stored!.baseUrl, stored!.token), input.project, stored?.group);
+  const { evaluations, skipped } = await runPack(actor, "gitlab", facts, assetId, useDemo ? "gitlab:demo" : "gitlab:api");
+  await persistConnectorEvidence(actor, "gitlab", `GitLab project posture (${input.project})`, facts, useDemo);
+  await updateConnector(actor, "gitlab", useDemo ? "demo" : "healthy", facts);
+  return { connector: "gitlab", mode: useDemo ? "demo" : "live", collectedAt: new Date().toISOString(), facts, evaluations, skipped };
 }
 
 // ---------------------------------------------------------------- AWS ---------------------------------------------------
@@ -108,9 +146,18 @@ function demoAwsFacts(region: string): Facts {
   };
 }
 
+type AwsCredentials = { accessKeyId: string; secretAccessKey: string; sessionToken?: string };
+
+function awsClients(region: string, credentials?: AwsCredentials): AwsClients {
+  const common = credentials ? { region, credentials } : { region };
+  return { iam: new IAMClient(common), s3: new S3Client(common), config: new ConfigServiceClient(common), cloudtrail: new CloudTrailClient(common) } as unknown as AwsClients;
+}
+
 export async function syncAws(actor: Actor, region = process.env.AWS_REGION ?? "eu-west-1", clients?: AwsClients): Promise<ConnectorSyncResult> {
-  const demo = !clients && !process.env.AWS_ACCESS_KEY_ID && !process.env.AWS_PROFILE;
-  const facts = demo ? demoAwsFacts(region) : await collectAws(clients ?? { iam: new IAMClient({ region }), s3: new S3Client({ region }), config: new ConfigServiceClient({ region }), cloudtrail: new CloudTrailClient({ region }) }, region);
+  const stored = await loadCredentials(actor.tenantId, "aws");
+  const demo = !clients && !stored && !process.env.AWS_ACCESS_KEY_ID && !process.env.AWS_PROFILE;
+  const effectiveRegion = stored?.region ?? region;
+  const facts = demo ? demoAwsFacts(effectiveRegion) : await collectAws(clients ?? awsClients(effectiveRegion, stored ?? undefined), effectiveRegion);
   await ensureAsset(actor, ASSETS.aws);
   const { evaluations, skipped } = await runPack(actor, "aws", facts, ASSETS.aws.id, demo ? "aws:demo" : "aws:api");
   await persistConnectorEvidence(actor, "aws", "AWS configuration and IAM posture", facts, demo);
@@ -135,16 +182,71 @@ function demoOktaFacts(): Facts {
   return { organization: "demo", users: { active: 126, inactiveOver90Days: 2, truncated: false }, privileged: { total: 9, mfaEnrolled: 8, mfaCoverage: 8 / 9 }, passwordPolicy: { minLength: 12, policies: 1 } };
 }
 
+async function oktaTarget(tenantId: string) {
+  const stored = await loadCredentials(tenantId, "okta");
+  const baseUrl = stored?.baseUrl ?? process.env.OKTA_BASE_URL;
+  const token = stored?.token ?? process.env.OKTA_API_TOKEN;
+  return baseUrl && token ? { baseUrl, token } : null;
+}
+
 export async function syncOkta(actor: Actor, api?: OktaApi): Promise<ConnectorSyncResult> {
-  const baseUrl = process.env.OKTA_BASE_URL;
-  const token = process.env.OKTA_API_TOKEN;
-  const demo = !api && (!baseUrl || !token);
-  const facts = demo ? demoOktaFacts() : await collectOkta(api ?? oktaApi(baseUrl!, token!), baseUrl ? new URL(baseUrl).hostname : "okta");
+  const target = await oktaTarget(actor.tenantId);
+  const demo = !api && !target;
+  const facts = demo ? demoOktaFacts() : await collectOkta(api ?? oktaApi(target!.baseUrl, target!.token), target ? new URL(target.baseUrl).hostname : "okta");
   await ensureAsset(actor, ASSETS.okta);
   const { evaluations, skipped } = await runPack(actor, "okta", facts, ASSETS.okta.id, demo ? "okta:demo" : "okta:api");
   await persistConnectorEvidence(actor, "okta", "Okta identity posture", facts, demo);
   await updateConnector(actor, "okta", demo ? "demo" : "healthy", facts);
   return { connector: "okta", mode: demo ? "demo" : "live", collectedAt: new Date().toISOString(), facts, evaluations, skipped };
+}
+
+// ---------------------------------------------------------------- Google Workspace --------------------------------------
+
+function googleApi(accessToken: string): Api {
+  return async (path) => {
+    const response = await fetch(`https://admin.googleapis.com/admin/directory/v1${path}`, { headers: { Authorization: `Bearer ${accessToken}`, Accept: "application/json" }, cache: "no-store", signal: AbortSignal.timeout(20_000) });
+    return { status: response.status, body: await response.json().catch(() => null) };
+  };
+}
+
+function demoGoogleFacts(): Facts {
+  return { domain: "demo.example", users: { total: 84, active: 80, enrolledIn2Sv: 77, twoStepCoverage: 77 / 80, inactiveOver90Days: 3, truncated: false }, admins: { superAdmins: 3, superAdminsWithout2Sv: 0, delegatedAdmins: 4 } };
+}
+
+export async function syncGoogleWorkspace(actor: Actor, api?: Api): Promise<ConnectorSyncResult> {
+  const stored = await loadCredentials(actor.tenantId, "google_workspace");
+  const demo = !api && !stored;
+  const facts = demo ? demoGoogleFacts() : await collectGoogleWorkspace(api ?? googleApi(await googleAccessToken(stored!)), stored ? stored.adminEmail.split("@")[1] : "workspace");
+  await ensureAsset(actor, ASSETS.google_workspace);
+  const { evaluations, skipped } = await runPack(actor, "google_workspace", facts, ASSETS.google_workspace.id, demo ? "google_workspace:demo" : "google_workspace:api");
+  await persistConnectorEvidence(actor, "google_workspace", "Google Workspace identity posture", facts, demo);
+  await updateConnector(actor, "google_workspace", demo ? "demo" : "healthy", facts);
+  return { connector: "google_workspace", mode: demo ? "demo" : "live", collectedAt: new Date().toISOString(), facts, evaluations, skipped };
+}
+
+// ---------------------------------------------------------------- Microsoft Entra ID ------------------------------------
+
+function graphApi(accessToken: string): Api {
+  return async (path) => {
+    const url = path.startsWith("https://graph.microsoft.com/") ? path : `https://graph.microsoft.com/v1.0${path}`;
+    const response = await fetch(url, { headers: { Authorization: `Bearer ${accessToken}`, Accept: "application/json" }, cache: "no-store", signal: AbortSignal.timeout(20_000) });
+    return { status: response.status, body: await response.json().catch(() => null) };
+  };
+}
+
+function demoEntraFacts(): Facts {
+  return { tenant: "demo", mfa: { members: 210, mfaRegistered: 198, mfaCoverage: 198 / 210, admins: 8, adminsWithoutMfa: 0 }, conditionalAccess: { policies: 6, enabledPolicies: 5, mfaForAllUsers: true, legacyAuthBlocked: false }, users: { enabled: 205, inactiveOver90Days: 6, truncated: false } };
+}
+
+export async function syncEntra(actor: Actor, api?: Api): Promise<ConnectorSyncResult> {
+  const stored = await loadCredentials(actor.tenantId, "entra");
+  const demo = !api && !stored;
+  const facts = demo ? demoEntraFacts() : await collectEntra(api ?? graphApi(await entraAccessToken(stored!)), stored?.tenantId ?? "entra");
+  await ensureAsset(actor, ASSETS.entra);
+  const { evaluations, skipped } = await runPack(actor, "entra", facts, ASSETS.entra.id, demo ? "entra:demo" : "entra:api");
+  await persistConnectorEvidence(actor, "entra", "Microsoft Entra ID posture", facts, demo);
+  await updateConnector(actor, "entra", demo ? "demo" : "healthy", facts);
+  return { connector: "entra", mode: demo ? "demo" : "live", collectedAt: new Date().toISOString(), facts, evaluations, skipped };
 }
 
 // ---------------------------------------------------------------- People systems ------------------------------------------
@@ -156,6 +258,81 @@ export async function syncPeople(actor: Actor, facts: Facts, source: string): Pr
   await persistConnectorEvidence(actor, source.split(":")[0], `People system report (${source})`, facts, false);
   await updateConnector(actor, "people", "healthy", facts);
   return { connector: "people", mode: "live", collectedAt: new Date().toISOString(), facts, evaluations, skipped };
+}
+
+// ---------------------------------------------------------------- Dispatch and connection tests --------------------------
+
+export type SyncParams = { owner?: string; repository?: string; project?: string; assetId?: string; demo?: boolean };
+export const POLLED_CONNECTORS = ["github", "gitlab", "aws", "okta", "google_workspace", "entra"] as const;
+export type PolledConnector = (typeof POLLED_CONNECTORS)[number];
+
+/** One entry point for the sync endpoint, the scheduler and workflows. */
+export async function syncConnector(actor: Actor, kind: PolledConnector, params: SyncParams = {}): Promise<ConnectorSyncResult> {
+  switch (kind) {
+    case "github":
+      if (!params.owner || !params.repository) throw userError("GitHub needs an owner and a repository");
+      return syncGitHub(actor, { owner: params.owner, repository: params.repository, assetId: params.assetId, demo: params.demo ?? false });
+    case "gitlab":
+      if (!params.project) throw userError("GitLab needs a project path (group/project)");
+      return syncGitLab(actor, { project: params.project, assetId: params.assetId, demo: params.demo ?? false });
+    case "aws": return syncAws(actor);
+    case "okta": return syncOkta(actor);
+    case "google_workspace": return syncGoogleWorkspace(actor);
+    case "entra": return syncEntra(actor);
+  }
+}
+
+export type ConnectionTest = { ok: boolean; detail: string; durationMs: number };
+
+/** A cheap read-only call that proves the stored credentials work, with a message that never contains a secret. */
+export async function testConnection(actor: Actor, kind: CredentialKind): Promise<ConnectionTest> {
+  const started = Date.now();
+  const done = (ok: boolean, detail: string): ConnectionTest => ({ ok, detail: detail.slice(0, 300), durationMs: Date.now() - started });
+  try {
+    switch (kind) {
+      case "github": {
+        const token = (await loadCredentials(actor.tenantId, "github"))?.token ?? process.env.GITHUB_TOKEN;
+        if (!token) return done(false, "No GitHub token is stored.");
+        const response = await githubApi(token)("/user");
+        const login = (response.body as { login?: string } | null)?.login;
+        return response.status === 200 ? done(true, `Authenticated as ${login ?? "GitHub user"}. Repository permissions are checked when you sync.`) : done(false, `GitHub answered ${response.status}${response.status === 401 ? ": the token is invalid or expired" : ""}.`);
+      }
+      case "gitlab": {
+        const stored = await loadCredentials(actor.tenantId, "gitlab");
+        if (!stored) return done(false, "No GitLab credentials are stored.");
+        const response = await gitlabApi(stored.baseUrl, stored.token)("/user");
+        return response.status === 200 ? done(true, `Authenticated as ${(response.body as { username?: string } | null)?.username ?? "GitLab user"}.`) : done(false, `GitLab answered ${response.status}.`);
+      }
+      case "okta": {
+        const target = await oktaTarget(actor.tenantId);
+        if (!target) return done(false, "No Okta credentials are stored.");
+        const response = await oktaApi(target.baseUrl, target.token)("/api/v1/users?limit=1");
+        return response.status === 200 ? done(true, `Connected to ${new URL(target.baseUrl).hostname}.`) : done(false, `Okta answered ${response.status}${response.status === 401 ? ": the API token is invalid" : ""}.`);
+      }
+      case "aws": {
+        const stored = await loadCredentials(actor.tenantId, "aws");
+        const region = stored?.region ?? process.env.AWS_REGION ?? "eu-west-1";
+        if (!stored && !process.env.AWS_ACCESS_KEY_ID && !process.env.AWS_PROFILE) return done(false, "No AWS credentials are stored.");
+        const identity = await new STSClient(stored ? { region, credentials: stored } : { region }).send(new GetCallerIdentityCommand({}));
+        return done(true, `Account ${identity.Account}, ${identity.Arn?.split(":").pop()}.`);
+      }
+      case "google_workspace": {
+        const stored = await loadCredentials(actor.tenantId, "google_workspace");
+        if (!stored) return done(false, "No Google Workspace credentials are stored.");
+        const response = await googleApi(await googleAccessToken(stored))("/users?customer=my_customer&maxResults=1");
+        return response.status === 200 ? done(true, `Connected to the ${stored.adminEmail.split("@")[1]} directory.`) : done(false, `Google Directory answered ${response.status}${response.status === 403 ? ": check the delegated administrator and the API scope" : ""}.`);
+      }
+      case "entra": {
+        const stored = await loadCredentials(actor.tenantId, "entra");
+        if (!stored) return done(false, "No Entra ID credentials are stored.");
+        const response = await graphApi(await entraAccessToken(stored))("/organization");
+        const name = (response.body as { value?: Array<{ displayName?: string }> } | null)?.value?.[0]?.displayName;
+        return response.status === 200 ? done(true, `Connected to ${name ?? "the tenant"}.`) : done(false, `Microsoft Graph answered ${response.status}.`);
+      }
+    }
+  } catch (error) {
+    return done(false, error instanceof Error ? error.message : "Connection failed");
+  }
 }
 
 // ---------------------------------------------------------------- Persistence -------------------------------------------

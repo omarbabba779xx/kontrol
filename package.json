@@ -25,6 +25,7 @@
     "@aws-sdk/client-config-service": "^3.1143.0",
     "@aws-sdk/client-iam": "^3.1143.0",
     "@aws-sdk/client-s3": "^3.1144.0",
+    "@aws-sdk/client-sts": "^3.1145.0",
     "@base-ui/react": "^1.8.0",
     "ai": "^7.0.124",
     "better-sqlite3": "^13.0.3",

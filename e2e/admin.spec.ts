@@ -65,6 +65,27 @@ test("connector credentials are stored encrypted and never displayed again", asy
   await expect(page.getByText("GitHub credentials removed")).toBeVisible();
 });
 
+test("a connector can be tested, scheduled and run on demand", async ({ page }) => {
+  await page.goto("/admin");
+  await tab(page, "Connections").click();
+  for (const name of ["GitHub", "GitLab", "Okta", "AWS", "Google Workspace", "Microsoft Entra ID"]) await expect(page.getByText(name, { exact: true }).first()).toBeVisible();
+
+  const okta = page.locator("div.border", { hasText: "API token with read access to users, roles and policies" }).first();
+  await okta.getByRole("button", { name: "Test connection" }).click();
+  await expect(okta.getByText(/No Okta credentials are stored/)).toBeVisible();
+
+  await page.getByLabel("Okta schedule").selectOption("1440");
+  await expect(page.getByText("Schedule saved")).toBeVisible();
+  await okta.getByRole("button", { name: "Run now" }).click();
+  await expect(page.getByText("Collection finished")).toBeVisible();
+  await expect(okta.getByText(/^ok · last/)).toBeVisible();
+  await expect(page.getByRole("row", { name: /okta.*MANUAL.*OK/i })).toBeVisible();
+  expect(await serious(page)).toEqual([]);
+
+  await page.getByLabel("Okta schedule").selectOption("0");
+  await expect(page.getByText("Schedule turned off")).toBeVisible();
+});
+
 test("the authentication overview explains the instance's security posture", async ({ page }) => {
   await page.goto("/admin");
   await tab(page, "Authentication").click();

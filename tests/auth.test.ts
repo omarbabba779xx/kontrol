@@ -7,8 +7,8 @@ isolateDatabase();
 setEnv({ NODE_ENV: "test", KONTROL_AUTH_SECRET: "a".repeat(40) });
 
 const req = (headers: Record<string, string> = {}, method = "GET") => new Request("http://localhost:3000/api/x", { method, headers });
-const sign = (claims: Record<string, unknown>, opts: { key?: string; issuer?: string; exp?: number | string } = {}) =>
-  new SignJWT(claims).setProtectedHeader({ alg: "HS256" }).setSubject("x").setIssuer(opts.issuer ?? "kontrol").setAudience("kontrol-api").setExpirationTime(opts.exp ?? "1h").sign(new TextEncoder().encode(opts.key ?? "a".repeat(40)));
+const sign = (claims: Record<string, unknown>, opts: { key?: string; issuer?: string; exp?: number | string; subject?: string } = {}) =>
+  new SignJWT(claims).setProtectedHeader({ alg: "HS256" }).setSubject(opts.subject ?? "usr_leila").setIssuer(opts.issuer ?? "kontrol").setAudience("kontrol-api").setExpirationTime(opts.exp ?? "1h").sign(new TextEncoder().encode(opts.key ?? "a".repeat(40)));
 
 test("tokens round-trip and carry role and tenant", async () => {
   const { issueSessionToken, requireActor } = await import("../src/lib/core/auth");
@@ -35,6 +35,7 @@ test("forged, foreign-issuer, unknown-role and expired tokens are rejected", asy
   assert.equal(await authenticate(bearer(await sign({ ...claims, role: "superuser" }))), null);
   assert.equal(await authenticate(bearer(await sign(claims, { exp: Math.floor(Date.now() / 1000) - 60 }))), null);
   assert.ok(await authenticate(bearer(await sign(claims))));
+  assert.equal(await authenticate(bearer(await sign(claims, { subject: "usr_does_not_exist" }))), null, "a valid token for a user that does not exist");
 });
 
 test("cookie sessions reject cross-origin mutations", async () => {

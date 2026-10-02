@@ -42,7 +42,7 @@ export const regulatoryIngestSchema = z.object({
 export const githubSyncSchema = z.object({
   owner: z.string().min(1).max(100),
   repository: z.string().min(1).max(100),
-  assetId: z.string().default("asset_repo_lending"),
+  assetId: z.string().min(3).optional(),
   demo: z.boolean().default(false),
 });
 

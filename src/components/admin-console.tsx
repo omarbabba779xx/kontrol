@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState, useTransition } from "react";
-import { Copy, KeyRound, Plug, ShieldCheck, Trash2, UserPlus } from "lucide-react";
+import { CalendarClock, Copy, KeyRound, Plug, ShieldCheck, Trash2, UserPlus } from "lucide-react";
 import { MicroLabel, PageHeading } from "@/components/platform-shell";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -130,35 +130,86 @@ function Keys({ snapshot, act, pending, newKey, setNewKey }: { snapshot: Snapsho
   );
 }
 
+type Schedule = { id: string; kind: string; target: string; intervalMinutes: number; enabled: boolean; nextRunAt: string; lastRunAt: string | null; lastStatus: string | null; lastError: string | null; consecutiveFailures: number; failing: boolean };
+type RunRecord = { id: string; kind: string; target: string; trigger: string; started_at: string; status: string; error: string | null };
+const INTERVALS: Array<[number, string]> = [[0, "Off"], [60, "Every hour"], [360, "Every 6 hours"], [1440, "Daily"], [10080, "Weekly"]];
+const TARGETED: Record<string, string> = { github: "owner/repository", gitlab: "group/project" };
+
 function Connections({ snapshot, act, pending }: { snapshot: Snapshot; act: Act; pending: boolean }) {
   const [open, setOpen] = useState<string | null>(null);
   const [values, setValues] = useState<Record<string, string>>({});
+  const [schedules, setSchedules] = useState<Schedule[]>([]);
+  const [runs, setRuns] = useState<RunRecord[]>([]);
+  const [tests, setTests] = useState<Record<string, { ok: boolean; detail: string }>>({});
+  const [targets, setTargets] = useState<Record<string, string>>({});
+  const [message, setMessage] = useState("");
+  const [busy, startBusy] = useTransition();
   const noKey = !snapshot.authentication.secretsKeyConfigured;
+
+  const loadSchedules = useCallback(() => fetchJson<{ schedules: Schedule[]; runs: RunRecord[] }>("/api/schedules").then((data) => { setSchedules(data.schedules); setRuns(data.runs); }).catch(() => undefined), []);
+  useEffect(() => { void loadSchedules(); }, [loadSchedules]);
+
+  const post = (url: string, body: Record<string, unknown>, success: string, after?: (result: Record<string, unknown>) => void) => startBusy(async () => {
+    try { setMessage("Working…"); const result = await fetchJson<Record<string, unknown>>(url, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) }); await loadSchedules(); setMessage(success); after?.(result); }
+    catch (error) { setMessage(errorMessage(error, "Action failed")); }
+  });
+
+  function saveSchedule(kind: string, minutes: number) {
+    const existing = schedules.find((item) => item.kind === kind && (!TARGETED[kind] || item.target === targets[kind] || !targets[kind]));
+    if (minutes === 0) { if (existing) post("/api/schedules", { action: "save", kind, params: paramsFor(kind, existing.target), intervalMinutes: existing.intervalMinutes, enabled: false }, "Schedule turned off"); return; }
+    const target = targets[kind] ?? existing?.target ?? "";
+    if (TARGETED[kind] && !target.includes("/")) { setMessage(`Enter the target as ${TARGETED[kind]} first`); return; }
+    post("/api/schedules", { action: "save", kind, params: paramsFor(kind, target), intervalMinutes: minutes, enabled: true }, "Schedule saved");
+  }
+
   return (
     <div className="space-y-4">
       <p className="max-w-3xl text-[10px] text-[#55534b]"><Plug className="me-1 inline h-3 w-3" aria-hidden="true" />Credentials entered here are encrypted at rest (AES-256-GCM, bound to your tenant and the connector) and are never shown again: only the last four characters. They are used instead of environment variables.{noKey ? " KONTROL_SECRETS_KEY is not set: a development key is in use. Set a unique key before storing real credentials." : ""}</p>
+      {message ? <p role="status" className="text-[9px] font-medium text-[#34332e]">{message}</p> : null}
       <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
         {snapshot.credentials.map((item) => {
           const spec = CONNECTORS[item.kind];
           if (!spec) return null;
+          const mine = schedules.filter((entry) => entry.kind === item.kind);
+          const current = mine[0];
+          const test = tests[item.kind];
           return (
             <div key={item.kind} className="border border-[#cbc7bd] bg-[#f8f6f0] p-4">
               <div className="flex items-start justify-between gap-2"><p className="text-[12px] font-semibold">{spec.title}</p><span className={cn("px-1.5 py-0.5 font-mono text-[8px] uppercase", item.configured ? "bg-[#dcebe1] text-[#245c3f]" : "bg-[#e5e2d8] text-[#5f5d56]")}>{item.configured ? `configured …${item.hint}` : "not configured"}</span></div>
               <p className="mt-1 text-[9px] text-[#55534b]">{spec.help}</p>
               {item.configured ? <p className="mt-1 font-mono text-[8px] text-[#5f5d56]">Updated {day(item.rotatedAt)}</p> : null}
-              <div className="mt-3 flex gap-2"><Button type="button" variant="outline" aria-expanded={open === item.kind} onClick={() => { setOpen(open === item.kind ? null : item.kind); setValues({}); }} className="h-7 rounded-none border-[#171713] bg-transparent text-[9px]">{item.configured ? "Replace" : "Configure"}</Button>
+              <div className="mt-3 flex flex-wrap gap-2"><Button type="button" variant="outline" aria-expanded={open === item.kind} onClick={() => { setOpen(open === item.kind ? null : item.kind); setValues({}); }} className="h-7 rounded-none border-[#171713] bg-transparent text-[9px]">{item.configured ? "Replace" : "Configure"}</Button>
+                <Button type="button" variant="outline" disabled={busy || pending} onClick={() => post(`/api/connectors/${item.kind}/test`, {}, "Connection tested", (result) => setTests({ ...tests, [item.kind]: result as { ok: boolean; detail: string } }))} className="h-7 rounded-none border-[#171713] bg-transparent text-[9px]">Test connection</Button>
                 {item.configured ? <Button type="button" variant="outline" disabled={pending} onClick={() => { if (window.confirm(`Remove the stored ${spec.title} credentials?`)) act({ action: "delete_credentials", kind: item.kind }, `${spec.title} credentials removed`); }} className="h-7 rounded-none border-[#b8322a] bg-transparent text-[9px] text-[#b8322a]"><Trash2 className="me-1 h-3 w-3" aria-hidden="true" />Remove</Button> : null}</div>
+              {test ? <p role="status" className={cn("mt-2 border-s-2 ps-2 text-[9px]", test.ok ? "border-[#245c3f] text-[#245c3f]" : "border-[#b8322a] text-[#9f2923]")}>{test.ok ? "OK: " : "Failed: "}{test.detail}</p> : null}
               {open === item.kind ? <form className="mt-3 space-y-2" onSubmit={(event) => { event.preventDefault(); const payload = Object.fromEntries(Object.entries(values).filter(([, value]) => value.trim() !== "")); act({ action: "save_credentials", kind: item.kind, values: payload }, `${spec.title} credentials saved`, () => { setOpen(null); setValues({}); }); }}>
                 {spec.fields.map((fieldSpec) => fieldSpec.textarea
                   ? <Textarea key={fieldSpec.name} aria-label={`${spec.title} ${fieldSpec.label}`} placeholder={fieldSpec.label} value={values[fieldSpec.name] ?? ""} onChange={(event) => setValues({ ...values, [fieldSpec.name]: event.target.value })} className="min-h-24 rounded-none font-mono text-[9px] placeholder:text-[#63615a]" />
                   : <Input key={fieldSpec.name} aria-label={`${spec.title} ${fieldSpec.label}`} type={fieldSpec.secret ? "password" : "text"} autoComplete="off" placeholder={`${fieldSpec.label}${fieldSpec.optional ? " (optional)" : ""}${fieldSpec.placeholder ? ` · ${fieldSpec.placeholder}` : ""}`} value={values[fieldSpec.name] ?? ""} onChange={(event) => setValues({ ...values, [fieldSpec.name]: event.target.value })} className={field} />)}
                 <Button type="submit" disabled={pending} className="h-8 w-full rounded-none bg-[#171713] text-[10px] text-white">Save encrypted</Button>
               </form> : null}
+
+              <div className="mt-4 border-t border-[#d8d4ca] pt-3">
+                <p className="mb-1 flex items-center gap-1 font-mono text-[8px] uppercase tracking-wider text-[#5f5d56]"><CalendarClock className="h-3 w-3" aria-hidden="true" />Automatic collection</p>
+                {TARGETED[item.kind] ? <Input aria-label={`${spec.title} target`} placeholder={TARGETED[item.kind]} value={targets[item.kind] ?? current?.target ?? ""} onChange={(event) => setTargets({ ...targets, [item.kind]: event.target.value })} className={cn(field, "mb-2")} /> : null}
+                <div className="flex flex-wrap items-center gap-2">
+                  <select aria-label={`${spec.title} schedule`} value={current?.enabled ? current.intervalMinutes : 0} disabled={busy} onChange={(event) => saveSchedule(item.kind, Number(event.target.value))} className={select}>{INTERVALS.map(([minutes, label]) => <option key={minutes} value={minutes}>{label}</option>)}</select>
+                  {current ? <Button type="button" variant="outline" disabled={busy} onClick={() => post("/api/schedules", { action: "run_now", id: current.id }, "Collection finished")} className="h-8 rounded-none border-[#171713] bg-transparent text-[9px]">Run now</Button> : null}
+                </div>
+                {current ? <p className={cn("mt-2 font-mono text-[8px]", current.failing ? "font-bold text-[#b8322a]" : "text-[#5f5d56]")}>{current.failing ? `FAILING (${current.consecutiveFailures} in a row): ${current.lastError}` : `${current.lastStatus ?? "pending"} · last ${day(current.lastRunAt)} · next ${current.enabled ? current.nextRunAt.slice(0, 16).replace("T", " ") : "off"}`}</p> : null}
+              </div>
             </div>);
         })}
       </div>
+      {runs.length ? <div className="max-w-3xl"><MicroLabel>Recent collections</MicroLabel><div tabIndex={0} role="region" aria-label="Recent collections, scrollable" className="mt-2 overflow-x-auto border border-[#cbc7bd] focus-visible:outline-2 focus-visible:outline-[#171713]"><table className="w-full min-w-[520px] text-left text-[9px]"><caption className="sr-only">Recent collections</caption><tbody>{runs.slice(0, 8).map((run) => <tr key={run.id} className="border-t border-[#d8d4ca] first:border-t-0"><td className="px-3 py-2 font-mono">{run.started_at.slice(0, 16).replace("T", " ")}</td><td className="px-3 py-2">{run.kind}{run.target ? ` · ${run.target}` : ""}</td><td className="px-3 py-2 font-mono uppercase">{run.trigger}</td><td className={cn("px-3 py-2 font-mono uppercase", run.status === "failed" ? "text-[#b8322a]" : "text-[#245c3f]")}>{run.status}</td><td className="px-3 py-2 text-[#5f5d56]">{run.error ?? ""}</td></tr>)}</tbody></table></div></div> : null}
     </div>
   );
+}
+
+function paramsFor(kind: string, target: string): Record<string, string> {
+  if (kind === "github") { const [owner, repository] = target.split("/"); return { owner: owner ?? "", repository: repository ?? "" }; }
+  if (kind === "gitlab") return { project: target };
+  return {};
 }
 
 function Authentication({ snapshot }: { snapshot: Snapshot }) {
