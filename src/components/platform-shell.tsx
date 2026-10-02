@@ -8,6 +8,7 @@ import {
   ClipboardCheck,
   Network,
   Gauge,
+  Bot,
   BadgeCheck,
   UserCog,
   ListChecks,
@@ -51,6 +52,7 @@ const navigation = [
   { name: "Audit workspace", code: "15", href: "/audit", icon: ClipboardCheck },
   { name: "Third parties", code: "16", href: "/third-party", icon: Network },
   { name: "Risk register", code: "17", href: "/risk-register", icon: Gauge },
+  { name: "AI governance", code: "18", href: "/ai-governance", icon: Bot },
 ];
 
 /** External auditors only see the audit workspace; everyone else sees the full navigation. */

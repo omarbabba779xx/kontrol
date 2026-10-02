@@ -24,12 +24,13 @@ export type Permission =
   | "audit:comment"
   | "audit:manage"
   | "vendors:manage"
-  | "risks:manage";
+  | "risks:manage"
+  | "ai:manage";
 
 const permissions: Record<Role, Permission[]> = {
-  admin: ["graph:read", "evidence:read", "evidence:write", "controls:evaluate", "risks:simulate", "decisions:approve", "connectors:sync", "regulations:ingest", "oscal:export", "agents:run", "users:manage", "credentials:manage", "audit:read", "audit:comment", "audit:manage", "vendors:manage", "risks:manage"],
-  risk_owner: ["graph:read", "evidence:read", "risks:simulate", "decisions:approve", "oscal:export", "agents:run", "audit:read", "audit:comment", "audit:manage", "vendors:manage", "risks:manage"],
-  control_owner: ["graph:read", "evidence:read", "evidence:write", "controls:evaluate", "connectors:sync", "oscal:export", "agents:run", "audit:read", "audit:comment", "audit:manage", "vendors:manage", "risks:manage"],
+  admin: ["graph:read", "evidence:read", "evidence:write", "controls:evaluate", "risks:simulate", "decisions:approve", "connectors:sync", "regulations:ingest", "oscal:export", "agents:run", "users:manage", "credentials:manage", "audit:read", "audit:comment", "audit:manage", "vendors:manage", "risks:manage", "ai:manage"],
+  risk_owner: ["graph:read", "evidence:read", "risks:simulate", "decisions:approve", "oscal:export", "agents:run", "audit:read", "audit:comment", "audit:manage", "vendors:manage", "risks:manage", "ai:manage"],
+  control_owner: ["graph:read", "evidence:read", "evidence:write", "controls:evaluate", "connectors:sync", "oscal:export", "agents:run", "audit:read", "audit:comment", "audit:manage", "vendors:manage", "risks:manage", "ai:manage"],
   auditor: ["graph:read", "evidence:read", "oscal:export", "agents:run", "audit:read", "audit:comment"],
   viewer: ["graph:read", "evidence:read", "audit:read"],
 };
