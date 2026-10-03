@@ -1,5 +1,7 @@
 FROM node:24-alpine AS deps
 WORKDIR /app
+# better-sqlite3 has no prebuilt binary for this platform and compiles here; the toolchain stays in this stage and never reaches the runner.
+RUN apk add --no-cache python3 make g++
 COPY package.json package-lock.json ./
 RUN npm ci
 FROM deps AS prod-deps
