@@ -1,7 +1,7 @@
 import "server-only";
 
 import { randomUUID } from "node:crypto";
-import { POLLED_CONNECTORS, syncConnector, type ConnectorSyncResult, type PolledConnector, type SyncParams } from "@/lib/connectors";
+import { assertLiveCredentials, POLLED_CONNECTORS, syncConnector, type ConnectorSyncResult, type PolledConnector, type SyncParams } from "@/lib/connectors";
 import type { Actor } from "@/lib/core/auth";
 import { userError } from "@/lib/core/errors";
 import { appendAudit } from "@/lib/core/integrity";
@@ -84,7 +84,11 @@ async function execute(row: ScheduleRow, trigger: "schedule" | "manual", now: nu
   const started = new Date().toISOString();
   let summary: unknown = {};
   let error: string | null = null;
-  try { summary = summarise(await syncConnector(actor, row.kind, JSON.parse(row.params_json) as SyncParams)); }
+  try {
+    const params = JSON.parse(row.params_json) as SyncParams;
+    await assertLiveCredentials(actor, row.kind, params);
+    summary = summarise(await syncConnector(actor, row.kind, params));
+  }
   catch (caught) { error = safeError(caught); }
   const finished = new Date().toISOString();
   const failures = error ? row.consecutive_failures + 1 : 0;

@@ -267,6 +267,23 @@ export const POLLED_CONNECTORS = ["github", "gitlab", "aws", "okta", "google_wor
 export type PolledConnector = (typeof POLLED_CONNECTORS)[number];
 
 /** One entry point for the sync endpoint, the scheduler and workflows. */
+/**
+ * Scheduled and manual-from-schedule collections must be live. Without stored credentials the individual sync functions fall back to
+ * clearly tagged sample data, which is right for a demonstration but wrong for a recurring job: it would record sample facts under
+ * the real repository or account name. This refuses instead, so a missing credential shows as a failed collection.
+ */
+export async function assertLiveCredentials(actor: Actor, kind: PolledConnector, params: SyncParams = {}) {
+  // A demonstration deployment may opt in to scheduled sample collections explicitly; the default is to refuse.
+  if (process.env.KONTROL_ALLOW_SAMPLE_COLLECTION === "true") return;
+  if (params.demo) throw userError("A scheduled collection cannot run in sample mode");
+  const stored = await loadCredentials(actor.tenantId, kind as never);
+  const available = kind === "github" ? !!(stored as { token?: string } | null)?.token || !!process.env.GITHUB_TOKEN
+    : kind === "okta" ? !!(await oktaTarget(actor.tenantId))
+    : kind === "aws" ? !!stored || !!process.env.AWS_ACCESS_KEY_ID || !!process.env.AWS_PROFILE
+    : !!stored;
+  if (!available) throw userError(`No ${kind.replace("_", " ")} credentials are stored. A collection never falls back to sample data: add the connection in Administration.`);
+}
+
 export async function syncConnector(actor: Actor, kind: PolledConnector, params: SyncParams = {}): Promise<ConnectorSyncResult> {
   switch (kind) {
     case "github":

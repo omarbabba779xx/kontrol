@@ -3,7 +3,7 @@ import { test } from "node:test";
 import { admin, isolateDatabase, setEnv } from "./setup";
 
 isolateDatabase();
-setEnv({ KONTROL_SECRETS_KEY: "k".repeat(40) });
+setEnv({ KONTROL_SECRETS_KEY: "k".repeat(40), KONTROL_ALLOW_SAMPLE_COLLECTION: "true" });
 
 const sched = () => import("../src/lib/core/scheduler");
 const db = async () => (await import("../src/lib/db")).getDb();
@@ -137,4 +137,19 @@ test("scheduled runs are performed by a service account, not by a person, and st
   const rows = await (await db()).scope(admin.tenantId).all<{ actor_id: string }>("SELECT DISTINCT actor_id FROM audit_log WHERE tenant_id = ? AND action = 'connector.synced'", admin.tenantId);
   assert.ok(rows.some((row) => row.actor_id === "usr_svc_scheduler"));
   assert.equal((await verifyAuditChain(admin.tenantId)).valid, true);
+});
+
+test("a scheduled collection without stored credentials fails instead of recording sample data under a real name", async () => {
+  const { runDueJobs, listSchedules } = await sched();
+  const previous = process.env.KONTROL_ALLOW_SAMPLE_COLLECTION;
+  delete process.env.KONTROL_ALLOW_SAMPLE_COLLECTION;
+  try {
+    const gl = await schedule("gitlab", { project: "acme/nocreds" }, 60);
+    const [result] = (await runDueJobs({ now: Date.now() + 10 * 60 * MIN })).filter((item) => item.scheduleId === gl.id);
+    assert.equal(result.status, "failed");
+    const row = (await listSchedules(admin.tenantId)).schedules.find((item) => item.id === gl.id)!;
+    assert.match(row.lastError ?? "", /No gitlab credentials are stored/);
+    const sources = await (await db()).system().all<{ source: string }>("SELECT DISTINCT source FROM evidence WHERE source LIKE 'gitlab:%'");
+    assert.ok(!sources.some((item) => item.source === "gitlab:demo"), "no sample evidence was recorded");
+  } finally { if (previous !== undefined) process.env.KONTROL_ALLOW_SAMPLE_COLLECTION = previous; }
 });

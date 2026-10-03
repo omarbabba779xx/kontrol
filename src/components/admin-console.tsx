@@ -159,7 +159,7 @@ function Connections({ snapshot, act, pending }: { snapshot: Snapshot; act: Act;
   function saveSchedule(kind: string, minutes: number) {
     const existing = schedules.find((item) => item.kind === kind && (!TARGETED[kind] || item.target === targets[kind] || !targets[kind]));
     if (minutes === 0) { if (existing) post("/api/schedules", { action: "save", kind, params: paramsFor(kind, existing.target), intervalMinutes: existing.intervalMinutes, enabled: false }, "Schedule turned off"); return; }
-    const target = targets[kind] ?? existing?.target ?? "";
+    const target = normalizeTarget(targets[kind] ?? existing?.target ?? "");
     if (TARGETED[kind] && !target.includes("/")) { setMessage(`Enter the target as ${TARGETED[kind]} first`); return; }
     post("/api/schedules", { action: "save", kind, params: paramsFor(kind, target), intervalMinutes: minutes, enabled: true }, "Schedule saved");
   }
@@ -208,7 +208,13 @@ function Connections({ snapshot, act, pending }: { snapshot: Snapshot; act: Act;
   );
 }
 
-function paramsFor(kind: string, target: string): Record<string, string> {
+/** Accepts a pasted URL, a trailing .git or stray spaces and returns the bare "owner/repository" (or "group/project") path. */
+function normalizeTarget(value: string) {
+  return value.trim().replace(/^https?:\/\/[^/]+\//i, "").replace(/\.git$/i, "").replace(/^\/+|\/+$/g, "");
+}
+
+function paramsFor(kind: string, rawTarget: string): Record<string, string> {
+  const target = normalizeTarget(rawTarget);
   if (kind === "github") { const [owner, repository] = target.split("/"); return { owner: owner ?? "", repository: repository ?? "" }; }
   if (kind === "gitlab") return { project: target };
   return {};
