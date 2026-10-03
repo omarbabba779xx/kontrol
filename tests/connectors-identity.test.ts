@@ -4,6 +4,7 @@ import { exportPKCS8, generateKeyPair, jwtVerify } from "jose";
 import { collectEntra, collectGitLab, collectGoogleWorkspace, type Api } from "../src/lib/connectors/collectors-identity";
 import { entraAccessToken, GOOGLE_SCOPES, GOOGLE_TOKEN_URL, googleAccessToken } from "../src/lib/connectors/oauth";
 import { PACK, missingFacts } from "../src/lib/connectors/pack";
+import { setOutboundTransport } from "../src/lib/core/net-guard";
 import { evaluatePolicy } from "../src/lib/core/policy-engine";
 import { admin, isolateDatabase, setEnv } from "./setup";
 
@@ -173,6 +174,7 @@ test("a sync with stored credentials uses them, installs the pack and stores evi
   const recent = new Date(Date.now() - 3 * 86_400_000).toISOString(); // the sync judges dormancy against the real clock
   const realFetch = globalThis.fetch;
   const calls: string[] = [];
+  setOutboundTransport((url, init) => globalThis.fetch(url, init as RequestInit));
   globalThis.fetch = (async (input: string | URL | Request) => {
     const url = String(input);
     calls.push(url);
@@ -185,7 +187,7 @@ test("a sync with stored credentials uses them, installs the pack and stores evi
     assert.equal(live.mode, "live");
     assert.ok(calls[0] === GOOGLE_TOKEN_URL && calls[1].startsWith("https://admin.googleapis.com/"), "token exchange first, then the Directory API");
     assert.deepEqual(live.evaluations.map((item) => [item.controlCode, item.passed]), [["CTL-GWS-001", true], ["CTL-GWS-002", true], ["CTL-GWS-003", true], ["CTL-GWS-004", true]]);
-  } finally { globalThis.fetch = realFetch; }
+  } finally { globalThis.fetch = realFetch; setOutboundTransport(null); }
 
   const sources = (await (await getDb()).scope(admin.tenantId).all<{ source: string }>("SELECT DISTINCT source FROM evidence WHERE tenant_id = ?", admin.tenantId)).map((row) => row.source);
   assert.ok(sources.includes("google_workspace:demo") && sources.includes("google_workspace:api"));
@@ -201,6 +203,7 @@ test("connection tests answer plainly and never echo a secret", async () => {
 
   const realFetch = globalThis.fetch;
   try {
+    setOutboundTransport((url, init) => globalThis.fetch(url, init as RequestInit));
     globalThis.fetch = (async (input: string | URL | Request, init?: RequestInit) => { assert.equal((init?.headers as Record<string, string>)["PRIVATE-TOKEN"], token); return new Response(JSON.stringify({ username: "kontrol-bot" }), { status: 200 }); }) as typeof fetch;
     const ok = await testConnection(admin, "gitlab");
     assert.equal(ok.ok, true);
@@ -210,5 +213,5 @@ test("connection tests answer plainly and never echo a secret", async () => {
     const bad = await testConnection(admin, "gitlab");
     assert.equal(bad.ok, false);
     assert.ok(!JSON.stringify(bad).includes(token));
-  } finally { globalThis.fetch = realFetch; }
+  } finally { globalThis.fetch = realFetch; setOutboundTransport(null); }
 });

@@ -5,6 +5,7 @@ import type { Actor } from "@/lib/core/auth";
 import { getDb } from "@/lib/db";
 import { appendAudit, canonicalJson, sha256 } from "@/lib/core/integrity";
 import { crossCheckWithOpa } from "@/lib/core/opa";
+import { userError } from "@/lib/core/errors";
 
 export type Operator = "eq" | "neq" | "gt" | "gte" | "lt" | "lte" | "between" | "in" | "not_in" | "includes" | "exists" | "not_exists" | "length_gte" | "length_lte" | "matches" | "within_days" | "older_than_days";
 export type Condition = { path: string; op: Operator; value?: unknown };
@@ -85,9 +86,9 @@ export function evaluatePolicy(policy: Policy, facts: Record<string, unknown>, n
 export async function evaluateControl(actor: Actor, input: { controlCode: string; assetId: string; facts: Record<string, unknown>; source: string; periodStart?: string; periodEnd?: string; /** How long the evidence stays current; defaults to one day. */ validForDays?: number; /** Where the facts came from and what could not be seen. Stored inside the hashed evidence. */ provenance?: { collector: { name: string; version: string }; scope?: Record<string, unknown>; limits?: string[] } }) {
   const db = (await getDb()).scope(actor.tenantId);
   const control = await db.get<{ id: string; code: string; title: string; objective: string; policy_json: string; valid_from: string }>("SELECT * FROM controls WHERE tenant_id = ? AND code = ? AND valid_to IS NULL", actor.tenantId, input.controlCode);
-  if (!control) throw new Error(`Control ${input.controlCode} not found`);
+  if (!control) throw userError(`Control ${input.controlCode} not found`);
   const asset = await db.get<{ id: string; name: string }>("SELECT id, name FROM assets WHERE tenant_id = ? AND id = ? AND valid_to IS NULL", actor.tenantId, input.assetId);
-  if (!asset) throw new Error(`Asset ${input.assetId} not found`);
+  if (!asset) throw userError(`Asset ${input.assetId} not found`);
 
   const nowMs = Date.now();
   const evaluatedAt = new Date(nowMs).toISOString();
@@ -95,13 +96,14 @@ export async function evaluateControl(actor: Actor, input: { controlCode: string
   const result = evaluatePolicy(policy, input.facts, nowMs);
   // Findings from sample data say so in their title, so they cannot be mistaken for facts about a real system.
   const sample = input.source.endsWith(":demo");
+  const method = input.source.startsWith("manual:") ? "manual assertion" : "automated policy evaluation";
   const opa = await crossCheckWithOpa(policy, input.facts, nowMs, result.passed);
   const evidenceId = `evidence_${randomUUID()}`;
   const expiresAt = new Date(nowMs + Math.max(1, input.validForDays ?? 1) * 86_400_000).toISOString();
   // Provenance travels inside the hashed content, so it cannot be edited without breaking the evidence hash: who collected what, with
   // which collector and which rule, over what scope and period, until when it counts, and what the collector could not see.
   const provenance = {
-    tenantId: actor.tenantId, source: input.source, sample, collectionMethod: "automated policy evaluation", collectedBy: actor.userId,
+    tenantId: actor.tenantId, source: input.source, sample, collectionMethod: method, collectedBy: actor.userId,
     collector: input.provenance?.collector ?? { name: "direct-api", version: "1" },
     rule: { controlCode: control.code, title: control.title, policySha256: sha256(canonicalJson(policy)), controlVersionFrom: control.valid_from },
     asset: { id: asset.id, name: asset.name }, scope: input.provenance?.scope ?? {},
@@ -113,7 +115,7 @@ export async function evaluateControl(actor: Actor, input: { controlCode: string
 
   const finding = await db.transaction(async (tx) => {
     await tx.run(`INSERT INTO evidence (id,tenant_id,control_id,asset_id,name,source,collection_method,content_type,content_json,content_hash,period_start,period_end,collected_at,expires_at,status,created_by) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
-      evidenceId, actor.tenantId, control.id, asset.id, `${control.title} evaluation`, input.source, "automated policy evaluation", "application/vnd.kontrol.control-result+json", content, sha256(content), input.periodStart ?? null, input.periodEnd ?? null, evaluatedAt, expiresAt, result.passed ? "healthy" : "failed", actor.userId);
+      evidenceId, actor.tenantId, control.id, asset.id, `${control.title} evaluation`, input.source, method, "application/vnd.kontrol.control-result+json", content, sha256(content), input.periodStart ?? null, input.periodEnd ?? null, evaluatedAt, expiresAt, result.passed ? "healthy" : "failed", actor.userId);
 
     let outcome: string | string[];
     if (!result.passed) {

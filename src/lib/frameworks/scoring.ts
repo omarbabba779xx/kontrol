@@ -2,6 +2,7 @@ import { FRAMEWORKS, FRAMEWORK_BY_ID } from "@/lib/frameworks/catalog";
 import { baseControls, baseRequirements, linkKey } from "@/lib/frameworks/mapping";
 import { UNIFIED_CONTROLS, effortOf } from "@/lib/frameworks/unified";
 import type { FrameworkId, ImplementationStatus } from "@/lib/frameworks/types";
+import { userError } from "@/lib/core/errors";
 
 /** How well a unified control's implementation is backed by machine-collected evidence. */
 /**
@@ -112,7 +113,7 @@ export type NotApplicable = Map<string, string>;
 
 export function scoreFramework(frameworkId: FrameworkId, states: Map<string, ControlState>, notApplicable: NotApplicable = new Map(), overrides: MappingOverrides = NO_OVERRIDES): FrameworkScore {
   const framework = FRAMEWORK_BY_ID.get(frameworkId);
-  if (!framework) throw new Error(`Framework ${frameworkId} not found`);
+  if (!framework) throw userError(`Framework ${frameworkId} not found`);
 
   const imported = overrides.custom?.get(frameworkId) ?? [];
   // A requirement refined by imported sub-requirements is replaced by them in the score, so nothing counts twice.

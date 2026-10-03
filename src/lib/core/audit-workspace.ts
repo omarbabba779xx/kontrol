@@ -235,7 +235,7 @@ export async function periodCoverage(tenantId: string, engagement: { period_star
     const per: ControlCoverage["controls"] = [];
     for (const code of [...new Set(link.linked_control_code.split(",").map((item) => item.trim()).filter(Boolean))]) {
       const rows = await db.all<{ collected_at: string; expires_at: string | null; status: string }>(
-        "SELECT e.collected_at, e.expires_at, e.status FROM evidence e JOIN controls c ON c.id = e.control_id WHERE e.tenant_id = ? AND c.code = ? AND c.valid_to IS NULL AND e.collected_at <= ? ORDER BY e.collected_at", tenantId, code, new Date(end).toISOString());
+        "SELECT e.collected_at, e.expires_at, e.status FROM evidence e JOIN controls c ON c.id = e.control_id WHERE e.tenant_id = ? AND c.code = ? AND c.valid_to IS NULL AND e.source NOT LIKE 'manual:%' AND e.collected_at <= ? ORDER BY e.collected_at", tenantId, code, new Date(end).toISOString());
       let healthy = 0, failing = 0, covered = 0, longestGap = 0, cursor = start, points = 0, failures = 0;
       rows.forEach((row, index) => {
         const at = Date.parse(row.collected_at);

@@ -6,7 +6,7 @@ import { z } from "zod";
 import type { Actor } from "@/lib/core/auth";
 import { userError } from "@/lib/core/errors";
 import { appendAudit } from "@/lib/core/integrity";
-import { assertPublicHttpsUrl, assertResolvesPublic } from "@/lib/core/net-guard";
+import { assertPublicHttpsUrl, assertResolvesPublic, safeFetch } from "@/lib/core/net-guard";
 import { open, seal } from "@/lib/core/secrets";
 import { getDb } from "@/lib/db";
 
@@ -125,7 +125,7 @@ export type DeliveryDeps = {
   now?: number;
 };
 
-const defaultFetch: FetchLike = (url, init) => fetch(url, init);
+const defaultFetch: FetchLike = (url, init) => safeFetch(url, { method: init?.method, headers: init?.headers as Record<string, string> | undefined, body: init?.body as string | undefined, signal: init?.signal ?? undefined });
 const defaultMail = async (smtp: Record<string, unknown>, mail: Mail) => {
   const transport = createTransport({ host: String(smtp.host), port: Number(smtp.port), secure: smtp.secure === true, auth: smtp.user ? { user: String(smtp.user), pass: String(smtp.pass ?? "") } : undefined, connectionTimeout: 10_000, socketTimeout: 15_000 });
   await transport.sendMail(mail);

@@ -5,7 +5,7 @@ import { excerptAad, textAad, writeLocalDocument } from "@/lib/core/vault-store"
 import { randomUUID } from "node:crypto";
 import postgres from "postgres";
 import { allTables } from "@/lib/db/migrations";
-import { assertPublicHttpsUrl, assertResolvesPublic } from "@/lib/core/net-guard";
+import { assertPublicHttpsUrl, assertResolvesPublic, safeFetch } from "@/lib/core/net-guard";
 import { HeadBucketCommand, PutObjectCommand, S3Client } from "@aws-sdk/client-s3";
 import type { Actor } from "@/lib/core/auth";
 import { databaseDriver, getDb } from "@/lib/db";
@@ -38,7 +38,7 @@ export async function addRegulatoryFeed(actor: Actor, input: { name: string; fra
 export async function checkRegulatoryFeeds(actor: Actor) {
   const db = (await getDb()).scope(actor.tenantId); const feeds = await db.all<{ id: string; source_url: string; last_hash: string | null }>("SELECT * FROM regulatory_feeds WHERE tenant_id=? AND status='active'", actor.tenantId);
   const results = [];
-  for (const feed of feeds) { try { await assertResolvesPublic(feed.source_url); const response = await fetch(feed.source_url, { headers: { "User-Agent": "Kontrol-Regulatory-Monitor/1.0" }, redirect: "error", signal: AbortSignal.timeout(8000) }); const text = await response.text(); const hash = sha256(text); const changed = Boolean(feed.last_hash && feed.last_hash !== hash); await db.run("UPDATE regulatory_feeds SET last_checked_at=?,last_hash=?,next_check_at=? WHERE id=?", new Date().toISOString(), hash, new Date(Date.now() + 86_400_000).toISOString(), feed.id); results.push({ id: feed.id, changed, hash, status: response.status }); } catch (error) { results.push({ id: feed.id, changed: false, error: error instanceof Error ? error.message : String(error) }); } }
+  for (const feed of feeds) { try { await assertResolvesPublic(feed.source_url); const response = await safeFetch(feed.source_url, { headers: { "User-Agent": "Kontrol-Regulatory-Monitor/1.0" }, signal: AbortSignal.timeout(8000) }); const text = await response.text(); const hash = sha256(text); const changed = Boolean(feed.last_hash && feed.last_hash !== hash); await db.run("UPDATE regulatory_feeds SET last_checked_at=?,last_hash=?,next_check_at=? WHERE id=?", new Date().toISOString(), hash, new Date(Date.now() + 86_400_000).toISOString(), feed.id); results.push({ id: feed.id, changed, hash, status: response.status }); } catch (error) { results.push({ id: feed.id, changed: false, error: error instanceof Error ? error.message : String(error) }); } }
   return results;
 }
 

@@ -1,52 +1,45 @@
-import { randomUUID } from "node:crypto";
-import { createRemoteJWKSet, jwtVerify } from "jose";
-import { issueSessionToken, type Role } from "@/lib/core/auth";
-import { DEFAULT_TENANT_ID, getDb } from "@/lib/db";
+import { createRemoteJWKSet, customFetch, jwtVerify } from "jose";
+import { issueSessionToken } from "@/lib/core/auth";
+import { assertResolvesPublic, safeFetch } from "@/lib/core/net-guard";
+import { signInWithClaims } from "@/lib/core/oidc";
 
 export const runtime = "nodejs";
-const allowedRoles = new Set<Role>(["admin", "risk_owner", "control_owner", "auditor", "viewer"]);
+
+// The one-time state cookie is single use: every answer from this route, success or failure, removes it.
+const CLEAR = "kontrol_oidc=; HttpOnly; Secure; SameSite=Lax; Path=/api/session/oidc; Max-Age=0";
+const fail = (error: string, status: number) => Response.json({ error }, { status, headers: { "Set-Cookie": CLEAR } });
 
 export async function GET(request: Request) {
   try {
     const url = new URL(request.url);
     const code = url.searchParams.get("code");
     const state = url.searchParams.get("state");
-    const stored = request.headers.get("cookie")?.match(/(?:^|;\s*)kontrol_oidc=([^;]+)/)?.[1];
-    const separator = stored?.indexOf(".") ?? -1;
-    const storedState = separator > 0 ? stored?.slice(0, separator) : undefined;
-    const verifier = separator > 0 ? stored?.slice(separator + 1) : undefined;
-    if (!code || !state || !storedState || !verifier || state !== storedState) return Response.json({ error: "Invalid OIDC state" }, { status: 400 });
+    const [storedState, nonce, verifier] = (request.headers.get("cookie")?.match(/(?:^|;\s*)kontrol_oidc=([^;]+)/)?.[1] ?? "").split(".");
+    if (!code || !state || !storedState || !nonce || !verifier || state !== storedState) return fail("Invalid OIDC state", 400);
     const issuer = process.env.OIDC_ISSUER?.replace(/\/$/, "");
     const clientId = process.env.OIDC_CLIENT_ID;
-    if (!issuer || !clientId) return Response.json({ error: "OIDC is not configured" }, { status: 503 });
-    const discovery = await fetch(`${issuer}/.well-known/openid-configuration`, { cache: "no-store" });
-    if (!discovery.ok) return Response.json({ error: "OIDC discovery failed" }, { status: 502 });
+    if (!issuer || !clientId) return fail("OIDC is not configured", 503);
+    await assertResolvesPublic(issuer);
+    const discovery = await safeFetch(`${issuer}/.well-known/openid-configuration`, { signal: AbortSignal.timeout(8000) });
+    if (!discovery.ok) return fail("OIDC discovery failed", 502);
     const metadata = await discovery.json() as { token_endpoint: string; jwks_uri: string };
+    await assertResolvesPublic(metadata.token_endpoint);
+    await assertResolvesPublic(metadata.jwks_uri);
     const redirectUri = process.env.OIDC_REDIRECT_URI ?? `${url.origin}/api/session/oidc/callback`;
-    const tokenResponse = await fetch(metadata.token_endpoint, { method: "POST", headers: { "Content-Type": "application/x-www-form-urlencoded" }, body: new URLSearchParams({ grant_type: "authorization_code", client_id: clientId, client_secret: process.env.OIDC_CLIENT_SECRET ?? "", code, redirect_uri: redirectUri, code_verifier: verifier }) });
-    if (!tokenResponse.ok) return Response.json({ error: "OIDC token exchange failed" }, { status: 401 });
+    const tokenResponse = await safeFetch(metadata.token_endpoint, { method: "POST", signal: AbortSignal.timeout(8000), headers: { "Content-Type": "application/x-www-form-urlencoded" }, body: new URLSearchParams({ grant_type: "authorization_code", client_id: clientId, client_secret: process.env.OIDC_CLIENT_SECRET ?? "", code, redirect_uri: redirectUri, code_verifier: verifier }) });
+    if (!tokenResponse.ok) return fail("OIDC token exchange failed", 401);
     const tokens = await tokenResponse.json() as { id_token?: string };
-    if (!tokens.id_token) return Response.json({ error: "Identity token missing" }, { status: 401 });
-    const { payload } = await jwtVerify(tokens.id_token, createRemoteJWKSet(new URL(metadata.jwks_uri)), { issuer, audience: clientId });
-    const email = String(payload.email ?? "");
-    if (!email || payload.email_verified === false) return Response.json({ error: "Verified email required" }, { status: 403 });
-    const tenantId = process.env.OIDC_DEFAULT_TENANT_ID ?? DEFAULT_TENANT_ID;
-    // Role claims are only honoured when the deployer explicitly trusts the identity provider to assign them.
-    const requestedRole = String(process.env.OIDC_TRUST_ROLE_CLAIM === "true" ? payload.kontrol_role ?? "viewer" : "viewer") as Role;
-    const role: Role = allowedRoles.has(requestedRole) ? requestedRole : "viewer";
-    const db = (await getDb()).system();
-    let user = await db.get<{ id: string; tenant_id: string; email: string; name: string; role: Role; status?: string }>("SELECT id,tenant_id,email,name,role,status FROM users WHERE tenant_id=? AND email=?", tenantId, email);
-    if (!user) {
-      const id = `usr_oidc_${randomUUID()}`;
-      await db.run("INSERT INTO users (id,tenant_id,email,name,role,created_at) VALUES (?,?,?,?,?,?)", id, tenantId, email, String(payload.name ?? email), role, new Date().toISOString());
-      user = { id, tenant_id: tenantId, email, name: String(payload.name ?? email), role };
-    }
-    if ((user as { status?: string }).status === "disabled") return Response.json({ error: "This account is disabled" }, { status: 403 });
-    await db.run("UPDATE users SET last_login_at = ? WHERE id = ?", new Date().toISOString(), user.id);
-    const token = await issueSessionToken({ userId: user.id, tenantId: user.tenant_id, email: user.email, name: user.name, role: user.role });
-    return new Response(null, { status: 302, headers: { Location: `${url.origin}/`, "Set-Cookie": `kontrol_session=${token}; HttpOnly; Secure; SameSite=Lax; Path=/; Max-Age=28800` } });
+    if (!tokens.id_token) return fail("Identity token missing", 401);
+    const { payload } = await jwtVerify(tokens.id_token, createRemoteJWKSet(new URL(metadata.jwks_uri), { [customFetch]: (jwksUrl, options) => safeFetch(jwksUrl, { headers: Object.fromEntries(options.headers.entries()), signal: options.signal }) }), { issuer, audience: clientId });
+    const result = await signInWithClaims(payload, { issuer, expectedNonce: nonce });
+    if (!result.ok) return fail(result.error, result.status);
+    const token = await issueSessionToken({ userId: result.user.id, tenantId: result.user.tenantId, email: result.user.email, name: result.user.name, role: result.user.role });
+    const headers = new Headers({ Location: `${url.origin}/` });
+    headers.append("Set-Cookie", CLEAR);
+    headers.append("Set-Cookie", `kontrol_session=${token}; HttpOnly; Secure; SameSite=Lax; Path=/; Max-Age=28800`);
+    return new Response(null, { status: 302, headers });
   } catch (error) {
     console.error(error);
-    return Response.json({ error: "OIDC authentication failed" }, { status: 401 });
+    return fail("OIDC authentication failed", 401);
   }
 }

@@ -5,6 +5,7 @@ import type { Actor } from "@/lib/core/auth";
 import { getDb } from "@/lib/db";
 import type { Executor } from "@/lib/db/types";
 import { appendAudit, sha256 } from "@/lib/core/integrity";
+import { userError } from "@/lib/core/errors";
 
 type EvidenceRow = { id: string; source: string; collection_method: string; content_json: string; content_hash: string; period_start: string | null; period_end: string | null; collected_at: string; expires_at: string | null; status: string; control_id: string | null; asset_id: string | null };
 
@@ -122,7 +123,7 @@ export async function createAuditorRequest(actor: Actor, input: { requesterName:
 export async function respondToAuditor(actor: Actor, input: { requestId: string; response: string; status: "answered" | "rejected" }) {
   const db = (await getDb()).scope(actor.tenantId);
   const request = await db.get("SELECT id FROM auditor_requests WHERE tenant_id=? AND id=?", actor.tenantId, input.requestId);
-  if (!request) throw new Error("Auditor request not found");
+  if (!request) throw userError("Auditor request not found");
   await db.run("UPDATE auditor_requests SET response=?,status=?,responded_at=? WHERE id=?", input.response, input.status, new Date().toISOString(), input.requestId);
   await appendAudit({ tenantId: actor.tenantId, actorId: actor.userId, action: `auditor.request_${input.status}`, objectType: "auditor_request", objectId: input.requestId, payload: { response: input.response } });
   return { id: input.requestId, status: input.status };

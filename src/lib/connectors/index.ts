@@ -10,7 +10,7 @@ import { loadCredentials, type CredentialKind } from "@/lib/core/credentials";
 import { userError } from "@/lib/core/errors";
 import { getDb } from "@/lib/db";
 import { appendAudit, canonicalJson, sha256 } from "@/lib/core/integrity";
-import { assertPublicHttpsUrl } from "@/lib/core/net-guard";
+import { assertPublicHttpsUrl, safeFetch } from "@/lib/core/net-guard";
 import { evaluateControl } from "@/lib/core/policy-engine";
 import { collectAws, collectGitHub, collectOkta, type AwsClients, type Facts, type GitHubApi, type JsonResponse, type OktaApi } from "@/lib/connectors/collectors";
 import { collectEntra, collectGitLab, collectGoogleWorkspace, type Api } from "@/lib/connectors/collectors-identity";
@@ -155,7 +155,7 @@ export async function syncGitHub(actor: Actor, input: { owner: string; repositor
 function gitlabApi(baseUrl: string, token: string): Api {
   const origin = assertPublicHttpsUrl(baseUrl).origin;
   return async (path) => {
-    const response = await fetch(`${origin}/api/v4${path}`, { headers: { "PRIVATE-TOKEN": token, Accept: "application/json" }, cache: "no-store", signal: AbortSignal.timeout(15_000) });
+    const response = await safeFetch(`${origin}/api/v4${path}`, { headers: { "PRIVATE-TOKEN": token, Accept: "application/json" }, signal: AbortSignal.timeout(15_000) });
     return { status: response.status, body: await response.json().catch(() => null) };
   };
 }
@@ -216,7 +216,7 @@ function oktaApi(baseUrl: string, token: string): OktaApi {
     // Pagination links come from the API response; they must stay on the same origin as the configured base URL.
     const url = path.startsWith("http") ? new URL(path) : new URL(path, origin);
     if (url.origin !== origin) throw new Error("Okta pagination link points to a different origin");
-    const response = await fetch(url, { headers: { Authorization: `SSWS ${token}`, Accept: "application/json" }, cache: "no-store", signal: AbortSignal.timeout(15_000) });
+    const response = await safeFetch(url, { headers: { Authorization: `SSWS ${token}`, Accept: "application/json" }, signal: AbortSignal.timeout(15_000) });
     return { status: response.status, body: await response.json().catch(() => null), link: response.headers.get("link") };
   };
 }

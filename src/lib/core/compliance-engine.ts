@@ -28,7 +28,7 @@ const scope = async (tenantId: string) => (await getDb()).scope(tenantId);
 
 async function singleVerification(db: Executor, tenantId: string, controlCode: string): Promise<Verification> {
   const latest = await db.get<{ status: string; expires_at: string | null }>(
-    "SELECT e.status, e.expires_at FROM evidence e JOIN controls c ON c.id = e.control_id WHERE e.tenant_id = ? AND c.code = ? AND c.valid_to IS NULL ORDER BY e.collected_at DESC LIMIT 1",
+    "SELECT e.status, e.expires_at FROM evidence e JOIN controls c ON c.id = e.control_id WHERE e.tenant_id = ? AND c.code = ? AND c.valid_to IS NULL AND e.source NOT LIKE 'manual:%' ORDER BY e.collected_at DESC LIMIT 1",
     tenantId, controlCode);
   if (!latest) return "unverified";
   if (latest.status === "failed") return "failing";

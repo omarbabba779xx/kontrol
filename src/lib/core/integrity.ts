@@ -1,7 +1,7 @@
 import "server-only";
 
-import { createHash, createHmac, randomUUID } from "node:crypto";
-import { signingSecret } from "@/lib/core/config";
+import { createHash, randomUUID, timingSafeEqual } from "node:crypto";
+import { legacyHmac, signBytes, verifyBytes } from "@/lib/core/signing";
 import { getDb, type Executor } from "@/lib/db";
 
 export function canonicalJson(value: unknown): string {
@@ -16,8 +16,18 @@ export function sha256(value: string | Buffer) {
   return createHash("sha256").update(value).digest("hex");
 }
 
+/** Signs the canonical form of a payload with the Ed25519 key. Third parties verify it with the public key alone. */
 export function signDecision(payload: unknown) {
-  return createHmac("sha256", signingSecret()).update(canonicalJson(payload)).digest("hex");
+  return signBytes(canonicalJson(payload));
+}
+
+/** Verifies a signature made by `signDecision`, or by the earlier HMAC form. Pass a public key (PEM) to verify as a third party would. */
+export function verifySignature(payload: unknown, signature: string, publicKeyPem?: string) {
+  const message = canonicalJson(payload);
+  if (signature.startsWith("ed25519:")) return verifyBytes(message, signature, publicKeyPem);
+  if (publicKeyPem) return false;
+  const expected = Buffer.from(legacyHmac(message)), given = Buffer.from(signature);
+  return expected.length === given.length && timingSafeEqual(expected, given);
 }
 
 type AuditInput = { tenantId: string; actorId: string; action: string; objectType: string; objectId: string; payload: unknown };

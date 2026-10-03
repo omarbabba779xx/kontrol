@@ -2,9 +2,8 @@ import "server-only";
 
 import { randomUUID } from "node:crypto";
 import type { Actor } from "@/lib/core/auth";
-import { safeEqual } from "@/lib/core/config";
 import { getDb } from "@/lib/db";
-import { appendAudit, canonicalJson, sha256, signDecision } from "@/lib/core/integrity";
+import { appendAudit, canonicalJson, sha256, signDecision, verifySignature } from "@/lib/core/integrity";
 
 export async function recordDecision(actor: Actor, input: { subjectType: string; subjectId: string; outcome: string; conditions: string[]; rationale: string; evidenceIds: string[] }) {
   const db = (await getDb()).scope(actor.tenantId);
@@ -33,5 +32,5 @@ export async function verifyDecision(tenantId: string, decisionId: string) {
     conditions: JSON.parse(String(row.conditions_json)), rationale: row.rationale, evidenceIds: (JSON.parse(String(row.evidence_manifest_json)) as { evidence: Array<{ id: string }> }).evidence.map((item) => item.id),
     evidenceManifest: JSON.parse(String(row.evidence_manifest_json)), decidedBy: row.decided_by, decidedAt: row.decided_at,
   };
-  return { valid: safeEqual(signDecision(payload), String(row.signature)), signature: row.signature, decision: row };
+  return { valid: verifySignature(payload, String(row.signature)), signature: row.signature, decision: row };
 }
