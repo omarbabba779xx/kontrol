@@ -1,3 +1,4 @@
+import { signingKeyMode } from "@/lib/core/signing";
 import { getDb } from "@/lib/db";
 
 export const runtime = "nodejs";
@@ -10,5 +11,5 @@ export async function GET() {
   } catch {
     healthy = false;
   }
-  return Response.json({ status: healthy ? "healthy" : "degraded", service: "kontrol-kernel", time: new Date().toISOString() });
+  return Response.json({ status: healthy ? "healthy" : "degraded", service: "kontrol-kernel", signingKey: signingKeyMode(), time: new Date().toISOString() });
 }

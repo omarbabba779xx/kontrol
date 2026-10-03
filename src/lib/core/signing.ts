@@ -26,12 +26,25 @@ function load() {
   } else {
     if (isProduction())
       throw new Error("KONTROL_SIGNING_KEY is required in production (an Ed25519 private key; generate one with `npm run keys:signing`)");
+    warnDevelopmentKey();
     const seed = createHash("sha256").update(`kontrol-dev-signing-key:${signingSecret()}`).digest();
     privateKey = createPrivateKey({ key: Buffer.concat([PKCS8_SEED_HEADER, seed]), format: "der", type: "pkcs8" });
   }
   cached = { source: configured + signingSecretSafe(), privateKey, publicKey: createPublicKey(privateKey) };
   return cached;
 }
+
+let warned = false;
+function warnDevelopmentKey() {
+  if (warned || process.env.NODE_ENV === "test") return;
+  warned = true;
+  console.warn(
+    "signing: KONTROL_SIGNING_KEY is not set, so signatures use a key derived from the development secret. Anyone who knows that secret can forge them. Set KONTROL_SIGNING_KEY on every environment that is not a developer machine, staging included.",
+  );
+}
+
+/** Whether signatures come from a configured key or from the development fallback. Shown on the health and admin pages. */
+export const signingKeyMode = () => (process.env.KONTROL_SIGNING_KEY ? ("configured" as const) : ("development-derived" as const));
 
 const signingSecretSafe = () => {
   try {

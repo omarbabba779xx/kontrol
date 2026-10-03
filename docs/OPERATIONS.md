@@ -87,7 +87,8 @@ Decision manifests, evidence-pack manifests, reports and audit anchors are signe
 - A signature proves that **the holder of the private key** produced or approved the content and that it has not changed since. A third party needs only the public key. Signatures made before this change are hex HMACs under `KONTROL_SIGNING_SECRET`; they stay verifiable by the application but not by third parties.
 - Keep the private key out of the database host and out of reach of the people who administer the database; an operator who holds it can still sign. For stronger separation, generate the key in a KMS or HSM and export only what the process needs. The tamper evidence that does not depend on any key is the hash-chained audit log and the SHA-256 of each document.
 - Rotating the key leaves earlier signatures verifiable with the earlier public key: keep every public key you have published, and the `keyFingerprint` carried by anchors tells which one signed.
-- **Audit anchors** close the gap the hash chain leaves: a chain that has had its newest entries (or all of them) removed still verifies. `POST /api/audit/anchor` signs the chain head (entry count and head hash); copy the result to storage the database owner cannot rewrite (object storage with a retention lock, a transparency log, your auditor). `POST /api/audit/anchor` with `{ "anchors": [...], "publicKeyPem": "..." }` checks the live chain against the copies you hold. Take an anchor on a schedule that matches how much history you could not afford to lose silently.
+- **Audit anchors** close the gap the hash chain leaves: a chain that has had its newest entries (or all of them) removed still verifies. Each organisation's chain head is anchored automatically every `KONTROL_ANCHOR_INTERVAL_HOURS` (default 24; 0 turns it off; needs `KONTROL_SCHEDULER=true` or a cron on `/api/jobs/run`) and each anchor is written with an HTTPS `PUT` to `KONTROL_ANCHOR_SINK_URL/<tenant>/<entries>.json` (bearer `KONTROL_ANCHOR_SINK_TOKEN`). **The sink is what makes the guarantee real**: put a write-once store behind it (an upload gateway in front of S3 Object Lock, a transparency log, an append-only service), because an anchor that only lives in the database can be deleted with the chain. A failed write is kept with its reason and retried; `GET /api/audit/anchor` reports `sinkConfigured`, `unpublished` and the plain-language `guarantee`. With no sink the system says so. To check a chain against copies you hold, `POST /api/audit/anchor` with `{ "anchors": [...], "publicKeyPem": "..." }`.
+- **Development key.** Without `KONTROL_SIGNING_KEY` outside production, signatures use a key derived from the development secret. Anyone who knows that secret can forge them. The process logs a warning and `/api/health` reports `signingKey: "development-derived"`; treat that value on any shared environment (staging included) as a misconfiguration. Production refuses to start signing without the key.
 
 ## Logs, metrics and alerts
 
@@ -99,4 +100,14 @@ Decision manifests, evidence-pack manifests, reports and audit anchors are signe
 
 Safe today: schedule execution (an atomic claim per schedule with an expiring lease), the notification outbox, database migrations (advisory lock) and the webhook replay table all coordinate through the database.
 
-**Not shared yet:** the request rate limiter is per process, so the effective limit is the configured one multiplied by the number of instances. Behind several instances apply rate limiting at the edge (gateway or WAF). Local vault files live on one node's disk, so use S3 (or a shared volume) when running more than one instance.
+**Not shared yet:** the request rate limiter is per process, so the effective limit is the configured one multiplied by the number of instances. Behind several instances apply rate limiting at the edge (gateway or WAF). Local vault files live on one node's disk, so use S3 (or a shared volume) when running more than one instance.
+
+## Limits of the rate limiter
+
+- Per-user limits are kept in each process. Limits that must hold across instances (sign-in, public endpoints, repeated authentication failures, ingestion) are counted in the database with one atomic upsert.
+- **If the database cannot be reached, the shared limiter falls back to the process-local one.** Failing open would invite abuse during an outage and failing closed would lock everybody out, so the limit then holds per instance rather than across them. Put a limit at the edge (gateway, WAF) as well.
+- `X-Forwarded-For` is ignored unless `KONTROL_TRUSTED_PROXY_HOPS` says how many proxies you control in front of the app.
+
+## Running several instances
+
+Schedules are claimed with a database lease before they run, notifications are leased per delivery and anchoring is gated through the shared limiter, so every instance can run `KONTROL_SCHEDULER=true` without double work. A claim that is not released (the instance died mid-run) expires and the job is picked up again.

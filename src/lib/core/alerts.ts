@@ -1,5 +1,6 @@
 import "server-only";
 
+import { runAnchoring } from "@/lib/core/anchor-publisher";
 import { deliverPending, notify, type DeliveryDeps, type Severity } from "@/lib/core/notifications";
 import { onScheduleFailing, onScheduleRecovered } from "@/lib/core/scheduler";
 import { publicLink } from "@/lib/core/tasks";
@@ -214,10 +215,15 @@ export async function runMaintenance(options: DeliveryDeps & { now?: number } = 
   let queued = 0;
   for (const tenant of tenants) queued += (await scanAndNotify(tenant.id, now)).queued;
   const delivered = await deliverPending({ ...options, now });
+  const anchoring = await runAnchoring(now).catch((error) => {
+    console.error("anchoring:", error instanceof Error ? error.message : error);
+    return null;
+  });
   return {
     queued,
     delivered: delivered.filter((item) => item.status === "sent").length,
     failed: delivered.filter((item) => item.status !== "sent").length,
+    anchoring,
   };
 }
 

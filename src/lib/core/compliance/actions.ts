@@ -9,7 +9,6 @@ import { loadCustomRequirements } from "@/lib/core/licensed-content";
 import { notify } from "@/lib/core/notifications";
 import { FRAMEWORK_BY_ID } from "@/lib/frameworks/catalog";
 import { baseControls, linkBasis, linkKey } from "@/lib/frameworks/mapping";
-import { crosswalk } from "@/lib/frameworks/scoring";
 import type { FrameworkId, ImplementationStatus } from "@/lib/frameworks/types";
 import { UC_BY_CODE } from "@/lib/frameworks/unified";
 import { randomUUID } from "node:crypto";
