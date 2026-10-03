@@ -6,6 +6,7 @@ import { complianceSnapshot, exportStatement } from "@/lib/core/compliance-engin
 import { engagementFor, periodCoverage, recordDownload } from "@/lib/core/audit-workspace";
 import { canonicalJson, sha256, signDecision, verifyAuditChain } from "@/lib/core/integrity";
 import { buildReadinessReport } from "@/lib/core/report";
+import { evidenceTrail } from "@/lib/core/evidence-trail";
 import { localPath, readLocalDocument } from "@/lib/core/vault-store";
 import { getDb } from "@/lib/db";
 
@@ -68,7 +69,13 @@ export async function buildEvidencePack(actor: Actor, engagementId: string) {
     const machine: unknown[] = [];
     for (const code of codes) {
       const rows = await db.all<{ id: string; collected_at: string; status: string; source: string; content_hash: string; content_json: string }>("SELECT e.id, e.collected_at, e.status, e.source, e.content_hash, e.content_json FROM evidence e JOIN controls c ON c.id = e.control_id WHERE e.tenant_id = ? AND c.code = ? AND e.collected_at >= ? AND e.collected_at <= ? ORDER BY e.collected_at LIMIT ?", actor.tenantId, code, from, to, MAX_MACHINE_POINTS);
-      machine.push({ control: code, evaluations: rows.map((row) => ({ id: row.id, collectedAt: row.collected_at, status: row.status, source: row.source, sha256: row.content_hash, content: JSON.parse(row.content_json) as unknown })) });
+      // What the auditor must also know: the outcome today per target, what could not be evaluated and why, and whether any record in
+      // the population no longer matches its hash. A pack never presents evidence that fails its own hash as sound.
+      const trail = await evidenceTrail(actor.tenantId, { controlCode: code, limit: 1 }).catch(() => null);
+      machine.push({
+        control: code, currentOutcome: trail?.current ?? [], gaps: trail?.gaps ?? [], failedCollections: trail?.failedCollections ?? [],
+        evaluations: rows.map((row) => ({ id: row.id, collectedAt: row.collected_at, status: row.status, source: row.source, sha256: row.content_hash, integrity: sha256(row.content_json) === row.content_hash ? "verified" : "altered", content: JSON.parse(row.content_json) as unknown })),
+      });
     }
     const docs = documents.filter((item) => item.uc_code === control.code);
     add(`controls/${control.code}.json`, JSON.stringify({ code: control.code, title: control.title, domain: control.domainLabel, status: control.status, maturity: control.maturity, attestedBy: control.attestedBy, attestedAt: control.attestedAt, countersignedBy: control.countersignedBy, reviewDue: control.reviewDue, verification: control.verification, linkedControls: codes, documentaryEvidence: docs.map((doc) => ({ id: doc.id, title: doc.title, kind: doc.kind, sha256: doc.content_hash, validUntil: doc.valid_until, uploadedBy: doc.uploaded_by, reviewedBy: doc.reviewed_by, reviewedAt: doc.reviewed_at })), machineEvidence: machine }, null, 2));

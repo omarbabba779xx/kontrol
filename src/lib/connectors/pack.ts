@@ -196,3 +196,16 @@ export function decidedFailure(control: PackControl, facts: Record<string, unkno
     return value !== undefined && value !== null && !evaluatePolicy({ all: [condition] }, facts).passed;
   });
 }
+
+/**
+ * Version of each collector. Raise it whenever the way facts are read or interpreted changes, so that evidence says which logic produced
+ * it (for example: GitHub rulesets are read since r2). Evidence collected by an older revision stays valid but is attributable.
+ */
+export const COLLECTOR_REVISIONS: Record<string, string> = { github: "github-rest 2022-11-28 r2", gitlab: "gitlab-rest v4 r1", aws: "aws-sdk-v3 r1", okta: "okta-management-api r1", google_workspace: "google-admin-sdk r1", entra: "microsoft-graph r1", people: "signed-report r1" };
+
+/** What a collection could not see: every fact a control of this connector needs that came back unreadable. Recorded with the evidence. */
+export function collectionLimits(connector: string, facts: Record<string, unknown>) {
+  const unreadable = new Set<string>();
+  for (const control of PACK.filter((item) => item.connector === connector)) for (const path of missingFacts(control, facts)) unreadable.add(path);
+  return [...unreadable].sort().map((path) => `could not read ${path}`);
+}

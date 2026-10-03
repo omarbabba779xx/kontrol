@@ -15,7 +15,8 @@ import { evaluateControl } from "@/lib/core/policy-engine";
 import { collectAws, collectGitHub, collectOkta, type AwsClients, type Facts, type GitHubApi, type JsonResponse, type OktaApi } from "@/lib/connectors/collectors";
 import { collectEntra, collectGitLab, collectGoogleWorkspace, type Api } from "@/lib/connectors/collectors-identity";
 import { entraAccessToken, googleAccessToken } from "@/lib/connectors/oauth";
-import { PACK, decidedFailure, missingFacts, type ConnectorKind } from "@/lib/connectors/pack";
+import { COLLECTOR_REVISIONS, PACK, collectionLimits, decidedFailure, missingFacts, type ConnectorKind } from "@/lib/connectors/pack";
+import { randomUUID } from "node:crypto";
 
 type Evaluation = Awaited<ReturnType<typeof evaluateControl>>;
 
@@ -75,18 +76,41 @@ async function runPack(actor: Actor, connector: ConnectorKind, facts: Facts, ass
   const skipped: ConnectorSyncResult["skipped"] = [];
   const notApplicable: NonNullable<ConnectorSyncResult["notApplicable"]> = [];
   let first: Evaluation | undefined;
+  const provenance = {
+    collector: { name: connector, version: COLLECTOR_REVISIONS[connector] ?? "unversioned" },
+    scope: { target: assetId, repository: typeof facts.repository === "string" ? facts.repository : undefined, visibility: typeof facts.visibility === "string" ? facts.visibility : undefined },
+    limits: collectionLimits(connector, facts),
+  };
   for (const control of PACK.filter((item) => item.connector === connector)) {
     const reason = control.notApplicable?.(facts) ?? null;
     if (reason) { notApplicable.push({ controlCode: control.code, reason }); continue; }
     const missing = missingFacts(control, facts);
     // Unreadable is not failed, but a known failing condition already settles an `all` policy.
     if (missing.length && !decidedFailure(control, facts)) { skipped.push({ controlCode: control.code, missing }); continue; }
-    const result = await evaluateControl(actor, { controlCode: control.code, assetId, facts, source, validForDays: control.validForDays });
+    const result = await evaluateControl(actor, { controlCode: control.code, assetId, facts, source, validForDays: control.validForDays, provenance });
     first ??= result;
     evaluations.push({ controlCode: control.code, passed: result.passed, finding: result.finding });
   }
+  await recordGaps(actor, connector, assetId, source, skipped, notApplicable, evaluations.map((item) => item.controlCode));
   if (!source.endsWith(":demo")) await supersedeSampleFindings(actor, connector, assetId);
   return { evaluations, skipped, notApplicable, first };
+}
+
+/**
+ * Keeps what a collection could not do visible: a control skipped for lack of access is neither compliant nor failing, it is unknown,
+ * and the reason has to be somewhere an auditor can find it. A control that is evaluated later clears its gap.
+ */
+async function recordGaps(actor: Actor, connector: ConnectorKind, assetId: string, source: string, skipped: ConnectorSyncResult["skipped"], notApplicable: NonNullable<ConnectorSyncResult["notApplicable"]>, evaluated: string[]) {
+  const db = (await getDb()).scope(actor.tenantId);
+  const at = new Date().toISOString();
+  const gaps = [
+    ...skipped.map((item) => ({ code: item.controlCode, kind: "skipped", detail: { missing: item.missing } })),
+    ...notApplicable.map((item) => ({ code: item.controlCode, kind: "not_applicable", detail: { reason: item.reason } })),
+  ];
+  await db.transaction(async (tx) => {
+    for (const code of [...evaluated, ...gaps.map((gap) => gap.code)]) await tx.run("DELETE FROM evidence_gaps WHERE tenant_id = ? AND asset_id = ? AND control_code = ?", actor.tenantId, assetId, code);
+    for (const gap of gaps) await tx.run("INSERT INTO evidence_gaps (id,tenant_id,connector,asset_id,control_code,kind,detail_json,source,recorded_at) VALUES (?,?,?,?,?,?,?,?,?)", `gap_${randomUUID()}`, actor.tenantId, connector, assetId, gap.code, gap.kind, JSON.stringify(gap.detail), source, at);
+  });
 }
 
 /** A live collection replaces sample findings for the same asset: they described invented facts and must not stay open beside real ones. */
