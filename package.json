@@ -18,7 +18,10 @@
     "export:crosswalk": "node --conditions=react-server --import tsx scripts/export-crosswalk.ts",
     "test:live": "node --conditions=react-server --import tsx --test tests/live/live.test.ts",
     "db:status": "node --conditions=react-server --import tsx scripts/db.ts status",
-    "db:upgrade": "node --conditions=react-server --import tsx scripts/db.ts upgrade"
+    "db:upgrade": "node --conditions=react-server --import tsx scripts/db.ts upgrade",
+    "setup": "npm ci --ignore-scripts && npm rebuild esbuild unrs-resolver",
+    "verify": "node scripts/verify.mjs",
+    "verify:strict": "node scripts/verify.mjs --strict --e2e"
   },
   "dependencies": {
     "@aws-sdk/client-cloudtrail": "^3.1144.0",
@@ -64,5 +67,8 @@
     "tailwindcss": "^4",
     "tsx": "^4.23.15",
     "typescript": "^5"
+  },
+  "engines": {
+    "node": ">=24 <25"
   }
 }

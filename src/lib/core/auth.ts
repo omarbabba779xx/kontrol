@@ -92,6 +92,15 @@ async function actorFromApiKey(token: string): Promise<Actor | null> {
   return { apiKeyId: row.id, userId: row.user_id, tenantId: row.tenant_id, email: row.email, name: row.name, role: row.role, external: Number(row.external) === 1 };
 }
 
+/**
+ * The role a session acts with. A session may be narrowed (a token minted with fewer permissions than the account has) but never
+ * widened: if the token claims a role whose permissions the account no longer holds (a demotion), the account role applies.
+ */
+export function effectiveRole(claimed: Role, current: Role): Role {
+  const held = new Set(permissions[current]);
+  return permissions[claimed].every((permission) => held.has(permission)) ? claimed : current;
+}
+
 export async function authenticate(request: Request): Promise<Actor | null> {
   const authorization = request.headers.get("authorization");
   const cookie = request.headers.get("cookie")?.match(/(?:^|;\s*)kontrol_session=([^;]+)/)?.[1];
@@ -103,10 +112,12 @@ export async function authenticate(request: Request): Promise<Actor | null> {
     try {
       const { payload } = await jwtVerify(token, sessionKey(), { issuer: "kontrol", audience: "kontrol-api", algorithms: ["HS256"] });
       if (!payload.sub || !payload.tenantId || !roles.includes(payload.role as Role)) return null;
-      // A disabled user's session stops working immediately, not when the token expires.
-      const account = await (await getDb()).system().get<{ status: string; external: number }>("SELECT status, external FROM users WHERE id = ? AND tenant_id = ?", payload.sub, String(payload.tenantId));
-      if (!account || account.status !== "active") return null;
-      return { userId: payload.sub, tenantId: String(payload.tenantId), email: String(payload.email ?? ""), name: String(payload.name ?? ""), role: payload.role as Role, external: Number(account.external) === 1 };
+      // The account in the database is authoritative: a disabled user, a revoked session or a changed role takes effect on the next
+      // request, not when the token expires. The role claim in the token is informational only.
+      const account = await (await getDb()).system().get<{ status: string; external: number; role: string; sessions_valid_after: string | null }>("SELECT status, external, role, sessions_valid_after FROM users WHERE id = ? AND tenant_id = ?", payload.sub, String(payload.tenantId));
+      if (!account || account.status !== "active" || !roles.includes(account.role as Role)) return null;
+      if (account.sessions_valid_after && (payload.iat ?? 0) <= Math.floor(Date.parse(account.sessions_valid_after) / 1000)) return null;
+      return { userId: payload.sub, tenantId: String(payload.tenantId), email: String(payload.email ?? ""), name: String(payload.name ?? ""), role: effectiveRole(payload.role as Role, account.role as Role), external: Number(account.external) === 1 };
     } catch {
       return null;
     }

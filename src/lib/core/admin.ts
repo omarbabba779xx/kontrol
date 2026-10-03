@@ -112,3 +112,14 @@ export async function revokeApiKey(actor: Actor, keyId: string) {
   });
   return { id: keyId };
 }
+
+/** Signs a user out everywhere: every session issued up to now stops working at once. API keys are separate and are revoked individually. */
+export async function revokeSessions(actor: Actor, input: { userId: string }) {
+  const user = await target(actor, input.userId);
+  const at = new Date().toISOString();
+  await (await getDb()).scope(actor.tenantId).transaction(async (tx) => {
+    await tx.run("UPDATE users SET sessions_valid_after = ? WHERE tenant_id = ? AND id = ?", at, actor.tenantId, user.id);
+    await appendAudit({ tenantId: actor.tenantId, actorId: actor.userId, action: "admin.sessions_revoked", objectType: "user", objectId: user.id, payload: { email: user.email } }, tx);
+  });
+  return { id: user.id, revokedAt: at };
+}

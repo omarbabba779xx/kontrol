@@ -2,7 +2,7 @@ import { z } from "zod";
 import { requireActor, type Permission } from "@/lib/core/auth";
 import { rotateSecretKeys } from "@/lib/core/key-rotation";
 import { apiError } from "@/lib/core/api";
-import { adminSnapshot, createApiKey, inviteUser, KEY_ROLES, revokeApiKey, ROLES, setUserRole, setUserStatus } from "@/lib/core/admin";
+import { adminSnapshot, createApiKey, inviteUser, KEY_ROLES, revokeApiKey, revokeSessions, ROLES, setUserRole, setUserStatus } from "@/lib/core/admin";
 import { CREDENTIAL_KINDS, deleteCredentials, saveCredentials, type CredentialKind } from "@/lib/core/credentials";
 
 const role = z.enum(ROLES as [string, ...string[]]);
@@ -16,6 +16,7 @@ const actionSchema = z.discriminatedUnion("action", [
   z.object({ action: z.literal("revoke_api_key"), keyId: z.string().min(3) }),
   z.object({ action: z.literal("save_credentials"), kind, values: z.record(z.string(), z.unknown()) }),
   z.object({ action: z.literal("rotate_keys") }),
+  z.object({ action: z.literal("revoke_sessions"), userId: z.string().min(3) }),
   z.object({ action: z.literal("delete_credentials"), kind }),
 ]);
 
@@ -38,6 +39,7 @@ export async function POST(request: Request) {
       case "create_api_key": return Response.json(await createApiKey(actor, { name: input.name, role: input.role as never, expiresInDays: input.expiresInDays }), { status: 201 });
       case "revoke_api_key": return Response.json(await revokeApiKey(actor, input.keyId));
       case "save_credentials": return Response.json(await saveCredentials(actor, input.kind as CredentialKind, input.values), { status: 201 });
+      case "revoke_sessions": return Response.json(await revokeSessions(actor, { userId: input.userId }));
       case "rotate_keys": return Response.json(await rotateSecretKeys(actor));
       case "delete_credentials": return Response.json(await deleteCredentials(actor, input.kind as CredentialKind));
     }
