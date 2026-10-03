@@ -1,6 +1,7 @@
 import "server-only";
 
-import { writeLocalDocument } from "@/lib/core/vault-store";
+import { sealField } from "@/lib/core/secrets";
+import { excerptAad, textAad, writeLocalDocument } from "@/lib/core/vault-store";
 import { randomUUID } from "node:crypto";
 import postgres from "postgres";
 import { allTables } from "@/lib/db/migrations";
@@ -61,7 +62,7 @@ export async function storeVaultDocument(actor: Actor, file: File, documentType:
   else { storageUri = writeLocalDocument(actor.tenantId, id, file.name, bytes); }
   const text = file.type.startsWith("text/") || file.type === "application/json" ? bytes.toString("utf8").slice(0, 200_000) : ""; const exceptions = text.split(/\r?\n/).filter((line) => /exception|qualified|adverse|non[- ]conform/i.test(line)).slice(0, 50);
   const signature = signDecision({ id, hash, name: file.name, uploadedAt: new Date().toISOString() }); const now = new Date().toISOString();
-  await db.run("INSERT INTO vault_documents (id,tenant_id,name,document_type,storage_uri,content_hash,previous_version_id,version,content_type,size_bytes,extracted_text,exceptions_json,signature,retention_until,status,uploaded_by,uploaded_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)", id, actor.tenantId, file.name, documentType, storageUri, hash, previous?.id ?? null, (previous?.version ?? 0) + 1, file.type || "application/octet-stream", bytes.length, text || null, JSON.stringify(exceptions), signature, new Date(Date.now() + 365 * 86_400_000).toISOString(), text ? "analyzed" : "stored_pending_extraction", actor.userId, now);
+  await db.run("INSERT INTO vault_documents (id,tenant_id,name,document_type,storage_uri,content_hash,previous_version_id,version,content_type,size_bytes,extracted_text,exceptions_json,signature,retention_until,status,uploaded_by,uploaded_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)", id, actor.tenantId, file.name, documentType, storageUri, hash, previous?.id ?? null, (previous?.version ?? 0) + 1, file.type || "application/octet-stream", bytes.length, text ? sealField(text, textAad(actor.tenantId, id)) : null, sealField(JSON.stringify(exceptions), excerptAad(actor.tenantId, id)), signature, new Date(Date.now() + 365 * 86_400_000).toISOString(), text ? "analyzed" : "stored_pending_extraction", actor.userId, now);
   await appendAudit({ tenantId: actor.tenantId, actorId: actor.userId, action: "vault.document_stored", objectType: "vault_document", objectId: id, payload: { hash, storageUri, documentType } }); return { id, duplicate: false, hash, signature, version: (previous?.version ?? 0) + 1, exceptions };
 }
 

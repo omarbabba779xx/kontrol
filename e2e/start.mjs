@@ -9,7 +9,7 @@ rmSync(".data/e2e", { recursive: true, force: true });
 const next = createRequire(import.meta.url).resolve("next/dist/bin/next");
 const child = spawn(process.execPath, [next, "dev", "-p", port], {
   stdio: "inherit",
-  env: { ...process.env, KONTROL_DATABASE_PATH: ".data/e2e/kontrol.db", KONTROL_AUTH_MODE: "demo", KONTROL_DB_DRIVER: "sqlite", KONTROL_SEED: "true", NEXT_TELEMETRY_DISABLED: "1", OPA_URL: "" },
+  env: { ...process.env, KONTROL_DATABASE_PATH: ".data/e2e/kontrol.db", KONTROL_AUTH_MODE: "demo", KONTROL_DB_DRIVER: "sqlite", KONTROL_SEED: "true", NEXT_TELEMETRY_DISABLED: "1", NODE_OPTIONS: `${process.env.NODE_OPTIONS ?? ""} --max-old-space-size=4096`.trim(), OPA_URL: "" },
 });
 for (const signal of ["SIGINT", "SIGTERM"]) process.on(signal, () => child.kill());
 child.on("exit", (code) => process.exit(code ?? 0));

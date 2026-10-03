@@ -141,3 +141,34 @@ test("the download route serves verified bytes with their hash, and only to peop
   assert.match(ok.headers.get("x-content-sha256") ?? "", /^[0-9a-f]{64}$/);
   assert.equal((await call("admin", "vault_nope")).status, 404);
 });
+
+test("text extracted from a document is encrypted in the database, readable by an authorised reader, and sealed again on rotation", async () => {
+  const { retrieveExtractedText, resealDocuments } = await store();
+  const secret = "Audit finding: qualified opinion because the production database password is in the wiki";
+  const stored = await upload("finding.txt", secret);
+  const sys = (await db()).system();
+  const raw = await sys.get<{ extracted_text: string; exceptions_json: string }>("SELECT extracted_text, exceptions_json FROM vault_documents WHERE id = ?", stored.id);
+  assert.match(raw!.extracted_text, /^enc1:/);
+  assert.match(raw!.exceptions_json, /^enc1:/);
+  assert.ok(!raw!.extracted_text.includes("password") && !raw!.exceptions_json.includes("qualified"), "neither column holds readable text");
+
+  const read = await retrieveExtractedText(admin, stored.id);
+  assert.equal(read.text, secret);
+  assert.deepEqual(read.exceptions, [secret]);
+  await assert.rejects(retrieveExtractedText({ ...admin, tenantId: "tenant_other" }, stored.id), /not found/);
+
+  // A value moved to another document does not open: the row is part of what is authenticated.
+  const other = await upload("other-finding.txt", "something else entirely");
+  await sys.run("UPDATE vault_documents SET extracted_text = ? WHERE id = ?", raw!.extracted_text, other.id);
+  await assert.rejects(retrieveExtractedText(admin, other.id));
+
+  // Rows written before this encryption existed are plaintext: still readable, sealed by rotation.
+  await sys.run("UPDATE vault_documents SET extracted_text = ?, exceptions_json = ? WHERE id = ?", "legacy plaintext", JSON.stringify(["legacy line"]), other.id);
+  assert.equal((await retrieveExtractedText(admin, other.id)).text, "legacy plaintext");
+  const result = await resealDocuments(admin);
+  assert.ok(result.textFieldsResealed >= 2 && result.failed.length === 0);
+  const after = await sys.get<{ extracted_text: string }>("SELECT extracted_text FROM vault_documents WHERE id = ?", other.id);
+  assert.match(after!.extracted_text, /^enc1:/);
+  assert.equal((await retrieveExtractedText(admin, other.id)).text, "legacy plaintext");
+  assert.equal((await resealDocuments(admin)).textFieldsResealed, 0, "nothing left to seal");
+});

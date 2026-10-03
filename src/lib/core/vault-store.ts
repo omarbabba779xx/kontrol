@@ -6,6 +6,7 @@ import type { Actor } from "@/lib/core/auth";
 import { UserError, userError } from "@/lib/core/errors";
 import { appendAudit, sha256 } from "@/lib/core/integrity";
 import { log } from "@/lib/core/log";
+import { openField, sealField, fieldSealedWithCurrentKey } from "@/lib/core/secrets";
 import { openBytes, sealBytes } from "@/lib/core/vault-crypto";
 import { getDb } from "@/lib/db";
 
@@ -20,6 +21,8 @@ export type VaultRow = { id: string; tenant_id: string; name: string; storage_ur
 
 const root = () => resolve(process.env.KONTROL_VAULT_DIR ?? join(process.cwd(), ".data", "vault"));
 export const aadFor = (tenantId: string, documentId: string) => `vault:${tenantId}:${documentId}`;
+export const textAad = (tenantId: string, documentId: string) => `vault-text:${tenantId}:${documentId}`;
+export const excerptAad = (tenantId: string, documentId: string) => `vault-excerpt:${tenantId}:${documentId}`;
 
 /** The file behind a local-vault URI, or null when the URI is not local, belongs to another tenant, or points outside the vault. */
 export function localPath(tenantId: string, storageUri: string) {
@@ -68,6 +71,7 @@ export async function retrieveDocument(actor: Actor, documentId: string) {
 /** Re-encrypts every local document with the current key (and encrypts any written before encryption existed). */
 export async function resealDocuments(actor: Actor) {
   const db = (await getDb()).scope(actor.tenantId);
+  const text = await resealTextFields(actor);
   const rows = await db.all<VaultRow>("SELECT id, tenant_id, name, storage_uri, content_hash, size_bytes, status, retention_until FROM vault_documents WHERE tenant_id = ? AND status <> 'deleted'", actor.tenantId);
   let resealed = 0, current = 0, skipped = 0;
   const failed: Array<{ id: string; reason: string }> = [];
@@ -83,7 +87,7 @@ export async function resealDocuments(actor: Actor) {
       resealed += 1;
     } catch (error) { failed.push({ id: row.id, reason: error instanceof Error ? error.message : "unknown error" }); }
   }
-  return { resealed, alreadyCurrent: current, notLocal: skipped, failed };
+  return { resealed, alreadyCurrent: current, notLocal: skipped, failed: [...failed, ...text.failed], textFieldsResealed: text.resealed };
 }
 
 /**
@@ -106,4 +110,35 @@ export async function deleteDocument(actor: Actor, input: { id: string; reason: 
   });
   if (path) rmSync(path, { force: true });
   return { id: row.id };
+}
+
+
+/** Seals the extracted text and the excerpt of every document with the current key (and seals those stored before encryption existed). */
+async function resealTextFields(actor: Actor) {
+  const db = (await getDb()).scope(actor.tenantId);
+  const rows = await db.all<{ id: string; extracted_text: string | null; exceptions_json: string | null }>("SELECT id, extracted_text, exceptions_json FROM vault_documents WHERE tenant_id = ?", actor.tenantId);
+  let resealed = 0;
+  const failed: Array<{ id: string; reason: string }> = [];
+  for (const row of rows) {
+    try {
+      const parts: Array<[string, string | null, string]> = [["extracted_text", row.extracted_text, textAad(actor.tenantId, row.id)], ["exceptions_json", row.exceptions_json, excerptAad(actor.tenantId, row.id)]];
+      for (const [column, value, aad] of parts) {
+        if (!value || fieldSealedWithCurrentKey(value, aad)) continue;
+        await db.run(`UPDATE vault_documents SET ${column} = ? WHERE tenant_id = ? AND id = ?`, sealField(openField(value, aad), aad), actor.tenantId, row.id);
+        resealed += 1;
+      }
+    } catch (error) { failed.push({ id: row.id, reason: error instanceof Error ? error.message : "unknown error" }); }
+  }
+  return { resealed, failed };
+}
+
+/** The text extracted from a document, decrypted for an authorised reader, with a trace of the read. */
+export async function retrieveExtractedText(actor: Actor, documentId: string) {
+  const db = (await getDb()).scope(actor.tenantId);
+  const row = await db.get<{ id: string; extracted_text: string | null; exceptions_json: string | null; status: string }>("SELECT id, extracted_text, exceptions_json, status FROM vault_documents WHERE tenant_id = ? AND id = ?", actor.tenantId, documentId);
+  if (!row || row.status === "deleted") throw userError("Document not found");
+  const text = row.extracted_text ? openField(row.extracted_text, textAad(actor.tenantId, row.id)) : null;
+  const exceptions = row.exceptions_json ? (JSON.parse(openField(row.exceptions_json, excerptAad(actor.tenantId, row.id))) as string[]) : [];
+  await appendAudit({ tenantId: actor.tenantId, actorId: actor.userId, action: "vault.text_read", objectType: "vault_document", objectId: row.id, payload: {} });
+  return { text, exceptions };
 }

@@ -4,7 +4,8 @@ import { expect, test, type Page } from "@playwright/test";
 test.describe.configure({ mode: "serial" });
 
 const tab = (page: Page, name: string) => page.getByRole("tab", { name, exact: true });
-const serious = async (page: Page) => (await new AxeBuilder({ page }).withTags(["wcag2a", "wcag2aa"]).analyze()).violations.filter((item) => item.impact === "serious" || item.impact === "critical").map((item) => `${item.id} (${item.nodes.length})`);
+// Buttons fade while a request is pending; let the transition finish before measuring contrast.
+const serious = async (page: Page) => (await page.waitForTimeout(500), await new AxeBuilder({ page }).withTags(["wcag2a", "wcag2aa"]).analyze()).violations.filter((item) => item.impact === "serious" || item.impact === "critical").map((item) => `${item.id} (${item.nodes.length})`);
 
 test("an administrator adds a user and cannot demote the last administrator", async ({ page }) => {
   await page.goto("/admin");
