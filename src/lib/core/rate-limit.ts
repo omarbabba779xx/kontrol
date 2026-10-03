@@ -42,18 +42,19 @@ export function resetRateLimits() {
  * fails open on an outage would be an invitation, one that fails closed would turn an outage into a lockout of everybody.
  */
 export async function consumeSharedRateLimit(key: string, limit: number, windowMs = WINDOW_MS, now = Date.now()) {
-  const windowStart = Math.floor(now / windowMs) * windowMs;
   try {
     const db = (await getDb()).system();
-    const row = await db.get<{ count: number | string }>(
-      "INSERT INTO rate_limits (key, window_start, count) VALUES (?, ?, 1) ON CONFLICT (key) DO UPDATE SET count = CASE WHEN rate_limits.window_start = excluded.window_start THEN rate_limits.count + 1 ELSE 1 END, window_start = excluded.window_start RETURNING count",
-      key,
-      windowStart,
+    // The window opens at the first request and lasts windowMs, so it is not tied to the wall clock: a burst cannot be split in two by
+    // a minute boundary it happened to straddle.
+    const expired = "? - rate_limits.window_start >= ?";
+    const row = await db.get<{ count: number | string; window_start: number | string }>(
+      `INSERT INTO rate_limits (key, window_start, count) VALUES (?, ?, 1) ON CONFLICT (key) DO UPDATE SET count = CASE WHEN ${expired} THEN 1 ELSE rate_limits.count + 1 END, window_start = CASE WHEN ${expired} THEN ? ELSE rate_limits.window_start END RETURNING count, window_start`,
+      key, now, now, windowMs, now, windowMs, now,
     );
     const count = Number(row?.count ?? 1);
+    const windowStart = Number(row?.window_start ?? now);
     // Old windows are removed now and then rather than on a timer, so there is nothing to schedule.
-    if (Math.random() < 0.01)
-      await db.run("DELETE FROM rate_limits WHERE window_start < ?", now - 3_600_000 - windowMs).catch(() => undefined);
+    if (Math.random() < 0.01) await db.run("DELETE FROM rate_limits WHERE window_start < ?", now - 3_600_000 - windowMs).catch(() => undefined);
     return {
       allowed: count <= limit,
       remaining: Math.max(0, limit - count),

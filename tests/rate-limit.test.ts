@@ -19,7 +19,7 @@ test("a shared limit counts in the database, so it holds after the process-local
   const blocked = await consumeSharedRateLimit("probe:a", 5, 60_000, now);
   assert.equal(blocked.allowed, false);
   assert.equal(blocked.remaining, 0);
-  assert.equal(blocked.retryAfterSeconds, 50);
+  assert.equal(blocked.retryAfterSeconds, 60, "the window opened at the first request");
 });
 
 test("keys are independent and the count starts over in the next window", async () => {
@@ -28,6 +28,7 @@ test("keys are independent and the count starts over in the next window", async 
   for (let call = 0; call < 3; call += 1) await consumeSharedRateLimit("probe:b", 2, 60_000, now);
   assert.equal((await consumeSharedRateLimit("probe:b", 2, 60_000, now)).allowed, false);
   assert.equal((await consumeSharedRateLimit("probe:c", 2, 60_000, now)).allowed, true, "another key is not affected");
+  assert.equal((await consumeSharedRateLimit("probe:b", 2, 60_000, now + 59_000)).allowed, false, "still inside the window opened at the first request");
   assert.equal((await consumeSharedRateLimit("probe:b", 2, 60_000, now + 60_000)).allowed, true, "the next window starts at one");
 });
 
