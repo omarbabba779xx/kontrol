@@ -12,7 +12,9 @@ import { errorMessage, fetchJson, isAbort } from "@/components/api-client";
 type FrameworkId = "iso27001" | "nist_csf" | "soc2" | "gdpr" | "nis2" | "dora" | "eu_ai_act" | "iso42001" | "pci_dss" | "cis_v8";
 type Status = "not_started" | "planned" | "partial" | "implemented" | "not_applicable";
 type ReqStatus = "compliant" | "partial" | "initial" | "gap" | "not_applicable";
-type Score = { frameworkId: FrameworkId; score: number; verifiedShare: number; applicable: number; compliant: number; partial: number; gaps: number; notApplicable: number; readiness: string; groups: Array<{ group: string; score: number; applicable: number }> };
+type ReadinessLevel = "not_ready" | "in_progress" | "ready_with_reservations" | "audit_ready";
+type Assessment = { dimensions: { declared: number; documentary: number; technical: number; backed: number }; blockers: string[]; reservations: string[]; nextSteps: string[]; criteria: Array<{ id: string; label: string; met: boolean; blocking: boolean; value: string; threshold: string }>; scope: { controls: number; requirements: number; excluded: number; excludedShare: number; scoreWithoutExclusions: number; exclusionEffect: number } };
+type Score = { frameworkId: FrameworkId; score: number; verifiedShare: number; applicable: number; compliant: number; partial: number; gaps: number; notApplicable: number; readiness: string; readinessLevel: ReadinessLevel; declaredBand: string; assessment: Assessment; groups: Array<{ group: string; score: number; applicable: number }> };
 type EvidenceItem = { id: string; uc_code: string; title: string; kind: string; content_hash: string; note: string; valid_until: string; uploaded_by: string; uploaded_at: string; status: "pending" | "accepted" | "rejected"; reviewed_by: string | null; review_note: string | null };
 type ImportRecord = { id: string; framework_id: string; source_label: string; licence_reference: string; acknowledged_by: string; acknowledged_at: string; items: number; content_hash: string };
 type Control = { code: string; title: string; domain: string; domainLabel: string; description: string; status: Status; maturity: number; linkedControlCode: string | null; notes: string; source: string; verification: string; excepted: boolean; reviewDue: string | null; attestedBy: string | null; attestedAt: string | null; countersignedBy: string | null; attestationExpired: boolean; awaitingCountersignature: boolean; frameworks: Array<{ frameworkId: string; requirements: number }> };
@@ -196,12 +198,22 @@ function Overview({ snapshot, adopted, gapTotal, open, adopt, pending, evidence 
           {snapshot.scores.map((score) => {
             const info = snapshot.catalog.find((item) => item.id === score.frameworkId)!;
             return (
-              <button key={score.frameworkId} type="button" onClick={() => open(score.frameworkId)} className="border border-[#cbc7bd] bg-[#f8f6f0] p-4 text-start transition-colors hover:border-[#171713]">
+              <div key={score.frameworkId}>
+                <button type="button" onClick={() => open(score.frameworkId)} className="border border-[#cbc7bd] bg-[#f8f6f0] p-4 text-start transition-colors hover:border-[#171713]">
                 <div className="flex items-start justify-between gap-2"><div><p className="text-[12px] font-semibold">{info.name}</p><p className="font-mono text-[8px] uppercase tracking-wider text-[#63615a]">{info.version}</p></div><Spark points={trendFor(score.frameworkId)} /></div>
-                <div className="mt-4 flex items-end justify-between"><span className="text-3xl font-semibold tracking-tight">{score.score}<span className="text-sm">%</span></span><Badge value={score.score >= 70 ? "compliant" : score.score >= 40 ? "partial" : "gap"} label={score.readiness} /></div>
+                <div className="mt-4 flex items-end justify-between"><span className="text-3xl font-semibold tracking-tight">{score.score}<span className="text-sm">%</span></span><Badge value={score.readinessLevel === "audit_ready" ? "compliant" : score.readinessLevel === "not_ready" ? "gap" : "partial"} label={score.readiness} /></div>
                 <Bar value={score.score} className="mt-2" />
                 <div className="mt-3 grid grid-cols-4 gap-1 font-mono text-[8px] text-[#5f5d56]"><span>{score.compliant} conformes</span><span>{score.partial} partiels</span><span>{score.gaps} écarts</span><span>{score.verifiedShare}% prouvé</span></div>
               </button>
+                <details className="border border-t-0 border-[#cbc7bd] bg-[#f1eee5] p-3 text-[9px]">
+                  <summary className="cursor-pointer font-mono text-[8px] uppercase tracking-wider text-[#5f5d56]">Why this level</summary>
+                  <p className="mt-2 text-[#34332e]">Declared {score.assessment.dimensions.declared}% · documents {score.assessment.dimensions.documentary}% · machine-verified {score.assessment.dimensions.technical}% · backed {score.assessment.dimensions.backed}% of {score.assessment.scope.controls} controls in scope.{score.assessment.scope.excluded > 0 ? ` ${score.assessment.scope.excluded} requirement(s) are excluded with a justification; without the exclusions the score would be ${score.assessment.scope.scoreWithoutExclusions}% (the exclusions are worth ${score.assessment.scope.exclusionEffect > 0 ? "+" : ""}${score.assessment.scope.exclusionEffect} points).` : ""}</p>
+                  {score.assessment.blockers.map((text) => <p key={text} className="mt-1 border-s-2 border-[#b8322a] ps-2">Blocking: {text}</p>)}
+                  {score.assessment.reservations.map((text) => <p key={text} className="mt-1 border-s-2 border-[#a98a45] ps-2">Reservation: {text}</p>)}
+                  {score.assessment.nextSteps.length ? <ul className="mt-2 list-disc ps-4">{score.assessment.nextSteps.map((text) => <li key={text}>{text}</li>)}</ul> : null}
+                  <ul className="mt-2 space-y-0.5">{score.assessment.criteria.map((item) => <li key={item.id} className="flex justify-between gap-3"><span>{item.met ? "✓" : item.blocking ? "✗" : "!"} {item.label}</span><span className="font-mono text-[#5f5d56]">{item.value} · {item.threshold}</span></li>)}</ul>
+                </details>
+              </div>
             );
           })}
         </div>

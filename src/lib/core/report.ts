@@ -194,6 +194,10 @@ export async function buildReadinessReport(actor: Actor, options: { frameworkId?
   for (const detail of details) {
     layout.heading(`${detail.framework?.name} ${detail.framework?.version}`, 2);
     layout.text(`${detail.score}% · ${detail.readiness} · ${detail.applicable} applicable requirement(s), ${detail.notApplicable} excluded with justification. ${detail.framework?.granularity}.`, { size: 8.5, color: MUTED });
+    const dimensions = detail.assessment.dimensions;
+    layout.text(`Audit readiness: ${detail.readiness}. Declared ${dimensions.declared}%, documents ${dimensions.documentary}%, machine-verified ${dimensions.technical}%, backed by either ${dimensions.backed}% of ${detail.assessment.scope.controls} controls in scope.`, { size: 8.5, font: layout.bold });
+    for (const text of detail.assessment.blockers) layout.text(`Blocking: ${text}`, { size: 8.5, color: BAD });
+    for (const text of detail.assessment.reservations) layout.text(`Reservation: ${text}`, { size: 8.5, color: MUTED });
     for (const group of detail.groups) layout.bar(group.group, group.score);
     const open = detail.requirements.filter((item) => item.status === "gap" || item.status === "initial").slice(0, 20);
     if (open.length) {
