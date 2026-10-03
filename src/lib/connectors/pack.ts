@@ -1,4 +1,4 @@
-import type { Policy } from "@/lib/core/policy-engine";
+import { evaluatePolicy, type Policy } from "@/lib/core/policy-engine";
 
 export type ConnectorKind = "github" | "aws" | "okta" | "people" | "google_workspace" | "entra" | "gitlab";
 
@@ -18,6 +18,8 @@ export type PackControl = {
    * never masquerades as a gap in compliance.
    */
   requires: string[];
+  /** Returns the reason when the control has no object for these facts (for example an organisation-level control on a personal account). */
+  notApplicable?: (facts: Record<string, unknown>) => string | null;
 };
 
 export const PACK: PackControl[] = [
@@ -45,6 +47,7 @@ export const PACK: PackControl[] = [
     code: "CTL-GH-005", title: "Organisation requires two-factor authentication", objective: "Every member of the source-control organisation authenticates with a second factor.", connector: "github", frequency: "daily",
     policy: { all: [{ path: "org.twoFactorRequired", op: "eq", value: true }] },
     requires: ["org.twoFactorRequired"],
+    notApplicable: (facts) => (factAt(facts, "org.isOrganization") === false ? "The repository belongs to a personal account, not an organisation: there is no organisation-wide two-factor setting to check." : null),
   },
   {
     code: "CTL-AWS-001", title: "Root account protected", objective: "The AWS root user has MFA and no access keys.", connector: "aws", frequency: "daily",
@@ -181,4 +184,15 @@ export function factAt(facts: unknown, path: string): unknown {
 /** Paths a control needs that the collector could not provide. */
 export function missingFacts(control: PackControl, facts: Record<string, unknown>) {
   return control.requires.filter((path) => { const value = factAt(facts, path); return value === undefined || value === null; });
+}
+
+/**
+ * A control that cannot be fully assessed is still decided when the facts that are known already settle it: in an `all` policy a single
+ * known condition that fails fails the whole policy, whatever the unknown ones turn out to be. Only an undecided control is skipped.
+ */
+export function decidedFailure(control: PackControl, facts: Record<string, unknown>) {
+  return (control.policy.all ?? []).some((condition) => {
+    const value = factAt(facts, condition.path);
+    return value !== undefined && value !== null && !evaluatePolicy({ all: [condition] }, facts).passed;
+  });
 }

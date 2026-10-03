@@ -77,9 +77,8 @@ test("a connector can be tested, scheduled and run on demand", async ({ page }) 
   await page.getByLabel("Okta schedule").selectOption("1440");
   await expect(page.getByText("Schedule saved")).toBeVisible();
   await okta.getByRole("button", { name: "Run now" }).click();
-  await expect(page.getByText("Collection finished")).toBeVisible();
-  await expect(okta.getByText(/^ok · last/)).toBeVisible();
-  await expect(page.getByRole("row", { name: /okta.*MANUAL.*OK/i })).toBeVisible();
+  // Without stored credentials a collection fails loudly instead of recording sample data under a real name.
+  await expect(page.getByRole("row", { name: /okta.*MANUAL.*FAILED.*No okta credentials are stored/i })).toBeVisible();
   expect(await serious(page)).toEqual([]);
 
   await page.getByLabel("Okta schedule").selectOption("0");

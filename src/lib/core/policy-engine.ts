@@ -93,6 +93,8 @@ export async function evaluateControl(actor: Actor, input: { controlCode: string
   const evaluatedAt = new Date(nowMs).toISOString();
   const policy = JSON.parse(control.policy_json) as Policy;
   const result = evaluatePolicy(policy, input.facts, nowMs);
+  // Findings from sample data say so in their title, so they cannot be mistaken for facts about a real system.
+  const sample = input.source.endsWith(":demo");
   const opa = await crossCheckWithOpa(policy, input.facts, nowMs, result.passed);
   const evidenceId = `evidence_${randomUUID()}`;
   const evidencePayload = { control: control.code, asset: asset.id, facts: input.facts, result, opa, evaluatedAt };
@@ -106,12 +108,12 @@ export async function evaluateControl(actor: Actor, input: { controlCode: string
     if (!result.passed) {
       const existing = await tx.get<{ id: string }>("SELECT id FROM findings WHERE tenant_id = ? AND control_id = ? AND asset_id = ? AND status IN ('open','remediating') LIMIT 1", actor.tenantId, control.id, asset.id);
       if (existing) {
-        await tx.run("UPDATE findings SET evidence_id = ?, reason = ?, opened_at = ? WHERE id = ?", evidenceId, JSON.stringify(result.failed), evaluatedAt, existing.id);
+        await tx.run("UPDATE findings SET evidence_id = ?, reason = ?, opened_at = ?, title = ? WHERE id = ?", evidenceId, JSON.stringify(result.failed), evaluatedAt, `${sample ? "[Sample data] " : ""}${control.title} failed on ${asset.name}`, existing.id);
         outcome = existing.id;
       } else {
         const findingId = `finding_${randomUUID()}`;
         await tx.run(`INSERT INTO findings (id,tenant_id,control_id,asset_id,evidence_id,title,severity,status,reason,remediation,owner_id,due_at,opened_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)`,
-          findingId, actor.tenantId, control.id, asset.id, evidenceId, `${control.title} failed on ${asset.name}`, "high", "open", JSON.stringify(result.failed), `Remediate failed policy conditions for ${control.code}, then trigger a re-test.`, actor.userId, new Date(Date.now() + 14 * 86_400_000).toISOString(), evaluatedAt);
+          findingId, actor.tenantId, control.id, asset.id, evidenceId, `${sample ? "[Sample data] " : ""}${control.title} failed on ${asset.name}`, "high", "open", JSON.stringify(result.failed), `Remediate failed policy conditions for ${control.code}, then trigger a re-test.`, actor.userId, new Date(Date.now() + 14 * 86_400_000).toISOString(), evaluatedAt);
         outcome = findingId;
       }
     } else {

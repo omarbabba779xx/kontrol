@@ -69,7 +69,7 @@ export async function listSchedules(tenantId: string) {
 }
 
 function summarise(result: ConnectorSyncResult) {
-  return { mode: result.mode, passed: result.evaluations.filter((item) => item.passed).length, failed: result.evaluations.filter((item) => !item.passed).length, skipped: result.skipped.length };
+  return { mode: result.mode, passed: result.evaluations.filter((item) => item.passed).length, failed: result.evaluations.filter((item) => !item.passed).length, skipped: result.skipped.length, notApplicable: result.notApplicable?.length ?? 0 };
 }
 
 /** Never store more of an error than a person needs to act on, and never anything that looks like a credential. */

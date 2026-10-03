@@ -35,7 +35,7 @@ test("a due schedule runs once, records the run and moves to its next slot", asy
   const results = await runDueJobs({ now });
   const mine = results.find((item) => item.scheduleId === okta.id)!;
   assert.equal(mine.status, "ok");
-  assert.deepEqual(Object.keys(mine.summary as object).sort(), ["failed", "mode", "passed", "skipped"]);
+  assert.deepEqual(Object.keys(mine.summary as object).sort(), ["failed", "mode", "notApplicable", "passed", "skipped"]);
 
   const after = (await listSchedules(admin.tenantId)).schedules.find((item) => item.id === okta.id)!;
   assert.equal(after.lastStatus, "ok");

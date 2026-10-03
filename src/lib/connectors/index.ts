@@ -15,7 +15,7 @@ import { evaluateControl } from "@/lib/core/policy-engine";
 import { collectAws, collectGitHub, collectOkta, type AwsClients, type Facts, type GitHubApi, type JsonResponse, type OktaApi } from "@/lib/connectors/collectors";
 import { collectEntra, collectGitLab, collectGoogleWorkspace, type Api } from "@/lib/connectors/collectors-identity";
 import { entraAccessToken, googleAccessToken } from "@/lib/connectors/oauth";
-import { PACK, missingFacts, type ConnectorKind } from "@/lib/connectors/pack";
+import { PACK, decidedFailure, missingFacts, type ConnectorKind } from "@/lib/connectors/pack";
 
 type Evaluation = Awaited<ReturnType<typeof evaluateControl>>;
 
@@ -29,6 +29,8 @@ export type ConnectorSyncResult = {
   evaluations: Array<{ controlCode: string; passed: boolean; finding: Evaluation["finding"] }>;
   /** Controls not evaluated because a required fact could not be read, with the missing paths. */
   skipped: Array<{ controlCode: string; missing: string[] }>;
+  /** Controls with no object for this target (for example an organisation control on a personal account): not a gap, not a failure. */
+  notApplicable?: Array<{ controlCode: string; reason: string }>;
 };
 
 type Asset = { id: string; type: string; name: string };
@@ -71,15 +73,32 @@ async function runPack(actor: Actor, connector: ConnectorKind, facts: Facts, ass
   await installControlPack(actor, connector);
   const evaluations: ConnectorSyncResult["evaluations"] = [];
   const skipped: ConnectorSyncResult["skipped"] = [];
+  const notApplicable: NonNullable<ConnectorSyncResult["notApplicable"]> = [];
   let first: Evaluation | undefined;
   for (const control of PACK.filter((item) => item.connector === connector)) {
+    const reason = control.notApplicable?.(facts) ?? null;
+    if (reason) { notApplicable.push({ controlCode: control.code, reason }); continue; }
     const missing = missingFacts(control, facts);
-    if (missing.length) { skipped.push({ controlCode: control.code, missing }); continue; }
+    // Unreadable is not failed, but a known failing condition already settles an `all` policy.
+    if (missing.length && !decidedFailure(control, facts)) { skipped.push({ controlCode: control.code, missing }); continue; }
     const result = await evaluateControl(actor, { controlCode: control.code, assetId, facts, source, validForDays: control.validForDays });
     first ??= result;
     evaluations.push({ controlCode: control.code, passed: result.passed, finding: result.finding });
   }
-  return { evaluations, skipped, first };
+  if (!source.endsWith(":demo")) await supersedeSampleFindings(actor, connector, assetId);
+  return { evaluations, skipped, notApplicable, first };
+}
+
+/** A live collection replaces sample findings for the same asset: they described invented facts and must not stay open beside real ones. */
+async function supersedeSampleFindings(actor: Actor, connector: ConnectorKind, assetId: string) {
+  const db = (await getDb()).scope(actor.tenantId);
+  const stale = await db.all<{ id: string }>("SELECT id FROM findings WHERE tenant_id = ? AND asset_id = ? AND status IN ('open','remediating') AND evidence_id IN (SELECT id FROM evidence WHERE tenant_id = ? AND source = ?)", actor.tenantId, assetId, actor.tenantId, `${connector}:demo`);
+  if (!stale.length) return;
+  await db.transaction(async (tx) => {
+    const at = new Date().toISOString();
+    for (const item of stale) await tx.run("UPDATE findings SET status = 'closed', closed_at = ? WHERE tenant_id = ? AND id = ?", at, actor.tenantId, item.id);
+    await appendAudit({ tenantId: actor.tenantId, actorId: actor.userId, action: "findings.sample_superseded", objectType: "asset", objectId: assetId, payload: { connector, closed: stale.length } }, tx);
+  });
 }
 
 // ---------------------------------------------------------------- GitHub ------------------------------------------------
@@ -102,9 +121,9 @@ export async function syncGitHub(actor: Actor, input: { owner: string; repositor
   const assetId = input.assetId ?? `asset_repo_${slug(`${input.owner}_${input.repository}`)}`;
   await ensureAsset(actor, { id: assetId, type: "repository", name: `${input.owner}/${input.repository}` });
   const facts = useDemo ? demoGitHubFacts(input.owner, input.repository) : await collectGitHub(api ?? githubApi(token!), input.owner, input.repository);
-  const { evaluations, skipped, first } = await runPack(actor, "github", facts, assetId, useDemo ? "github:demo" : "github:api");
+  const { evaluations, skipped, notApplicable, first } = await runPack(actor, "github", facts, assetId, useDemo ? "github:demo" : "github:api");
   await updateConnector(actor, "github", useDemo ? "demo" : "healthy", facts);
-  return { connector: "github", mode: useDemo ? "demo" : "live", collectedAt: new Date().toISOString(), facts, evaluation: first, evaluations, skipped };
+  return { connector: "github", mode: useDemo ? "demo" : "live", collectedAt: new Date().toISOString(), facts, evaluation: first, evaluations, skipped, notApplicable };
 }
 
 // ---------------------------------------------------------------- GitLab ------------------------------------------------
@@ -127,10 +146,10 @@ export async function syncGitLab(actor: Actor, input: { project: string; assetId
   const assetId = input.assetId ?? `asset_repo_${slug(input.project)}`;
   await ensureAsset(actor, { id: assetId, type: "repository", name: input.project });
   const facts = useDemo ? demoGitLabFacts(input.project) : await collectGitLab(api ?? gitlabApi(stored!.baseUrl, stored!.token), input.project, stored?.group);
-  const { evaluations, skipped } = await runPack(actor, "gitlab", facts, assetId, useDemo ? "gitlab:demo" : "gitlab:api");
+  const { evaluations, skipped, notApplicable } = await runPack(actor, "gitlab", facts, assetId, useDemo ? "gitlab:demo" : "gitlab:api");
   await persistConnectorEvidence(actor, "gitlab", `GitLab project posture (${input.project})`, facts, useDemo);
   await updateConnector(actor, "gitlab", useDemo ? "demo" : "healthy", facts);
-  return { connector: "gitlab", mode: useDemo ? "demo" : "live", collectedAt: new Date().toISOString(), facts, evaluations, skipped };
+  return { connector: "gitlab", mode: useDemo ? "demo" : "live", collectedAt: new Date().toISOString(), facts, evaluations, skipped, notApplicable };
 }
 
 // ---------------------------------------------------------------- AWS ---------------------------------------------------
