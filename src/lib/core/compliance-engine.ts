@@ -10,8 +10,10 @@ import { FRAMEWORKS, FRAMEWORK_BY_ID } from "@/lib/frameworks/catalog";
 import { SUGGESTED_LINKS } from "@/lib/connectors/pack";
 import { storeVaultDocument } from "@/lib/core/enterprise-engine";
 import { listImports, loadCustomRequirements, loadLicensedText } from "@/lib/core/licensed-content";
+import { notify } from "@/lib/core/notifications";
 import { allLinks, allSuggestions, baseControls, linkBasis, linkKey, linkSource, suggestedControls } from "@/lib/frameworks/mapping";
-import { buildRoadmap, controlWeight, crosswalk, isBacked, mappedControls, overlapMatrix, readinessLabel, requirementsOf, scoreFramework, type ControlState, type MappingOverrides, type NotApplicable, type Verification } from "@/lib/frameworks/scoring";
+import { buildRoadmap, controlWeight, crosswalk, isBacked, mappedControls, overlapMatrix, requirementsOf, scoreFramework, type ControlState, type MappingOverrides, type NotApplicable, type Verification } from "@/lib/frameworks/scoring";
+import { assessReadiness, LEVEL_LABEL, weakestLevel } from "@/lib/frameworks/audit-readiness";
 import { DOMAIN_LABELS, UNIFIED_CONTROLS, UC_BY_CODE } from "@/lib/frameworks/unified";
 import type { FrameworkId, ImplementationStatus } from "@/lib/frameworks/types";
 
@@ -134,8 +136,29 @@ async function adoptedIds(tenantId: string) {
   return (await (await scope(tenantId)).all<{ framework_id: FrameworkId; scope: string; target_date: string | null; adopted_at: string; source: string }>("SELECT framework_id, scope, target_date, adopted_at, source FROM framework_adoptions WHERE tenant_id = ? ORDER BY adopted_at", tenantId));
 }
 
-function summary(score: ReturnType<typeof scoreFramework>) {
-  return { frameworkId: score.frameworkId, score: score.score, verifiedShare: score.verifiedShare, applicable: score.applicable, compliant: score.compliant, partial: score.partial, gaps: score.gaps, notApplicable: score.notApplicable, readiness: score.readiness, groups: score.groups };
+function summary(score: ReturnType<typeof scoreFramework>, assessment: ReturnType<typeof assess>) {
+  return { frameworkId: score.frameworkId, score: score.score, verifiedShare: score.verifiedShare, applicable: score.applicable, compliant: score.compliant, partial: score.partial, gaps: score.gaps, notApplicable: score.notApplicable, declaredBand: score.declaredBand, readiness: assessment.label, readinessLevel: assessment.level, assessment, groups: score.groups };
+}
+
+/**
+ * What audit readiness needs beyond the score: which controls have a reviewed, unexpired document, how many high findings are open, whether
+ * risk acceptances have lapsed, and whether any exclusion lacks its justification. Gathered once per snapshot.
+ */
+async function readinessContext(tenantId: string, documents: EvidenceRow[], scopes: Map<FrameworkId, NotApplicable>) {
+  const db = await scope(tenantId);
+  const now = new Date().toISOString();
+  const documented = new Set(documents.filter((item) => item.status === 'accepted' && item.valid_until > now).map((item) => item.uc_code));
+  const findings = await db.get<{ n: number | string }>("SELECT COUNT(*) AS n FROM findings WHERE tenant_id = ? AND status IN ('open','remediating') AND severity IN ('high','critical')", tenantId);
+  const lapsed = await db.get<{ n: number | string }>("SELECT COUNT(*) AS n FROM compliance_exceptions WHERE tenant_id = ? AND status = 'approved' AND expires_at <= ?", tenantId, now);
+  const unjustified = (frameworkId: FrameworkId) => [...(scopes.get(frameworkId) ?? new Map<string, string>()).values()].filter((text) => text.trim().length === 0).length;
+  return { documented, openHighFindings: Number(findings?.n ?? 0), expiredExceptions: Number(lapsed?.n ?? 0), unjustified, requireCountersignature: requireCountersignature() };
+}
+
+function assess(score: ReturnType<typeof scoreFramework>, states: Map<string, ControlState>, context: Awaited<ReturnType<typeof readinessContext>>, overrides: MappingOverrides) {
+  // What the exclusions are worth: the same posture scored with nothing excluded. A big positive gap means the score leans on the scope.
+  const withoutExclusions = score.notApplicable > 0 ? scoreFramework(score.frameworkId, states, new Map(), overrides).score : score.score;
+  const assessment = assessReadiness({ score, states, documented: context.documented, openHighFindings: context.openHighFindings, expiredExceptions: context.expiredExceptions, unjustifiedExclusions: context.unjustified(score.frameworkId), requireCountersignature: context.requireCountersignature });
+  return { ...assessment, scope: { ...assessment.scope, scoreWithoutExclusions: withoutExclusions, exclusionEffect: Math.round((score.score - withoutExclusions) * 10) / 10 } };
 }
 
 export async function complianceSnapshot(tenantId: string) {
@@ -144,10 +167,13 @@ export async function complianceSnapshot(tenantId: string) {
   const overrides = toOverrides(reviews, custom);
   const adopted = adoptions.map((row) => row.framework_id);
   const scores = adopted.map((id) => scoreFramework(id, states, scopes.get(id), overrides));
+  const context = await readinessContext(tenantId, documents, scopes);
+  const assessments = scores.map((item) => assess(item, states, context, overrides));
 
   const exceptions = await db.all<ExceptionRow>("SELECT * FROM compliance_exceptions WHERE tenant_id = ? ORDER BY created_at DESC LIMIT 200", tenantId);
   const policies = await db.all<PolicyRow>("SELECT * FROM policy_register WHERE tenant_id = ? ORDER BY updated_at DESC LIMIT 200", tenantId);
-  const trend = await db.all<{ framework_id: string; score: number; calculated_at: string }>("SELECT framework_id, score, calculated_at FROM compliance_snapshots WHERE tenant_id = ? ORDER BY calculated_at DESC LIMIT 400", tenantId);
+  const trendRows = await db.all<{ framework_id: string; score: number; calculated_at: string; readiness: string | null; changes_json: string | null }>("SELECT framework_id, score, calculated_at, readiness, changes_json FROM compliance_snapshots WHERE tenant_id = ? ORDER BY calculated_at DESC LIMIT 400", tenantId);
+  const trend = trendRows.map((row) => ({ framework_id: row.framework_id, score: row.score, calculated_at: row.calculated_at, readiness: row.readiness, changes: row.changes_json ? (JSON.parse(row.changes_json) as { scoreFrom: number | null; scoreTo: number; levelFrom: string | null; levelTo: string; blockers: string[]; controls: Array<{ code: string; title: string; from: string; to: string }> }) : null }));
   const now = new Date().toISOString();
 
   const implementation = new Map(rows.map((row) => [row.uc_code, row]));
@@ -186,8 +212,9 @@ export async function complianceSnapshot(tenantId: string) {
     catalog: FRAMEWORKS.map((framework) => ({ id: framework.id, name: framework.name, version: framework.version, authority: framework.authority, kind: framework.kind, granularity: framework.granularity, sourceUrl: framework.sourceUrl, requirements: framework.requirements.length, imported: custom.get(framework.id)?.length ?? 0 })),
     imports: await listImports(tenantId),
     adoptions: adoptions.map((row) => ({ frameworkId: row.framework_id, scope: row.scope, targetDate: row.target_date, adoptedAt: row.adopted_at })),
-    scores: scores.map(summary),
-    overall: { score: overall, readiness: readinessLabel(overall), frameworks: scores.length },
+    scores: scores.map((item, index) => summary(item, assessments[index])),
+    // Readiness is the weakest framework's, not an average: the organisation is as ready as its least ready scope.
+    overall: { score: overall, readiness: assessments.length ? LEVEL_LABEL[weakestLevel(assessments.map((item) => item.level))!] : 'Not assessed', frameworks: scores.length },
     controls,
     roadmap: buildRoadmap(adopted, states, scopes, overrides).slice(0, 25),
     mapping: FRAMEWORKS.map((framework) => ({ frameworkId: framework.id, ...mappingStats(framework.id, reviews) })),
@@ -212,13 +239,15 @@ export async function complianceSnapshot(tenantId: string) {
 
 export async function frameworkDetail(tenantId: string, frameworkId: FrameworkId) {
   if (!FRAMEWORK_BY_ID.has(frameworkId)) throw userError(`Framework ${frameworkId} not found`);
-  const [{ states }, scopes, reviews, custom, licensedText] = await Promise.all([loadStates(tenantId), loadScope(tenantId), loadReviews(tenantId), loadCustomRequirements(tenantId), loadLicensedText(tenantId, frameworkId)]);
+  const [{ states, documents }, scopes, reviews, custom, licensedText] = await Promise.all([loadStates(tenantId), loadScope(tenantId), loadReviews(tenantId), loadCustomRequirements(tenantId), loadLicensedText(tenantId, frameworkId)]);
   const overrides = toOverrides(reviews, custom);
   const baseOf = (requirementId: string) => custom.get(frameworkId)?.find((item) => item.id === requirementId)?.controls ?? baseControls(frameworkId, requirementId);
   const score = scoreFramework(frameworkId, states, scopes.get(frameworkId), overrides);
+  const assessment = assess(score, states, await readinessContext(tenantId, documents, scopes), overrides);
   const decisions = new Map(reviews.filter((row) => row.framework_id === frameworkId).map((row) => [`${row.requirement_id}|${row.uc_code}`, row]));
   return {
     ...score,
+    readiness: assessment.label, readinessLevel: assessment.level, assessment,
     framework: FRAMEWORK_BY_ID.get(frameworkId),
     mapping: mappingStats(frameworkId, reviews),
     requirements: score.requirements.map((requirement) => ({
@@ -238,19 +267,29 @@ export async function frameworkDetail(tenantId: string, frameworkId: FrameworkId
 }
 
 /** Appends a trend point per adopted framework when its score moved since the last snapshot. */
-async function recordSnapshots(tx: Executor, actor: Actor, adopted: FrameworkId[], states: Map<string, ControlState>, scopes: Map<FrameworkId, NotApplicable>, overrides: MappingOverrides, force = false) {
+async function recordSnapshots(tx: Executor, actor: Actor, adopted: FrameworkId[], states: Map<string, ControlState>, context: Awaited<ReturnType<typeof readinessContext>>, overrides: MappingOverrides, scopes: Map<FrameworkId, NotApplicable>, force = false) {
   const at = new Date().toISOString();
+  // The state of every control the history is about, kept compactly, so the next point can say what changed and why the score moved.
+  const snapshotStates = Object.fromEntries([...states].map(([code, state]) => [code, `${state.status}|${state.verification}${state.excepted ? '|excepted' : ''}`]));
   for (const id of adopted) {
     const score = scoreFramework(id, states, scopes.get(id), overrides);
-    const last = await tx.get<{ score: number }>("SELECT score FROM compliance_snapshots WHERE tenant_id = ? AND framework_id = ? ORDER BY calculated_at DESC LIMIT 1", actor.tenantId, id);
-    if (!force && last && Math.abs(last.score - score.score) < 0.05) continue;
-    await tx.run("INSERT INTO compliance_snapshots (id,tenant_id,framework_id,score,verified_share,compliant,gaps,calculated_at) VALUES (?,?,?,?,?,?,?,?)", `snap_${randomUUID()}`, actor.tenantId, id, score.score, score.verifiedShare, score.compliant, score.gaps, at);
+    const assessment = assess(score, states, context, overrides);
+    const last = await tx.get<{ score: number; readiness: string | null; states_json: string | null }>("SELECT score, readiness, states_json FROM compliance_snapshots WHERE tenant_id = ? AND framework_id = ? ORDER BY calculated_at DESC LIMIT 1", actor.tenantId, id);
+    const previousStates = last?.states_json ? (JSON.parse(last.states_json) as Record<string, string>) : {};
+    const controls = Object.keys({ ...previousStates, ...snapshotStates }).filter((code) => previousStates[code] !== snapshotStates[code]).slice(0, 60).map((code) => ({ code, title: UC_BY_CODE.get(code)?.title ?? code, from: previousStates[code] ?? 'not recorded', to: snapshotStates[code] ?? 'removed' }));
+    const levelChanged = Boolean(last) && last!.readiness !== assessment.level;
+    const scoreMoved = !last || Math.abs(last.score - score.score) >= 0.05;
+    if (!force && last && !scoreMoved && !levelChanged && controls.length === 0) continue;
+    const changes = { scoreFrom: last?.score ?? null, scoreTo: score.score, levelFrom: last?.readiness ?? null, levelTo: assessment.level, blockers: assessment.blockers, controls };
+    await tx.run("INSERT INTO compliance_snapshots (id,tenant_id,framework_id,score,verified_share,compliant,gaps,calculated_at,readiness,states_json,changes_json) VALUES (?,?,?,?,?,?,?,?,?,?,?)", `snap_${randomUUID()}`, actor.tenantId, id, score.score, score.verifiedShare, score.compliant, score.gaps, at, assessment.level, JSON.stringify(snapshotStates), JSON.stringify(changes));
   }
 }
 
 async function refreshSnapshots(actor: Actor, force = false) {
-  const [{ states }, scopes, adoptions, overrides] = await Promise.all([loadStates(actor.tenantId), loadScope(actor.tenantId), adoptedIds(actor.tenantId), loadOverrides(actor.tenantId)]);
-  await (await scope(actor.tenantId)).transaction((tx) => recordSnapshots(tx, actor, adoptions.map((row) => row.framework_id), states, scopes, overrides, force));
+  const [{ states, documents }, scopes, adoptions, overrides] = await Promise.all([loadStates(actor.tenantId), loadScope(actor.tenantId), adoptedIds(actor.tenantId), loadOverrides(actor.tenantId)]);
+  // Everything that needs a read is gathered before the transaction opens: on SQLite a statement outside it waits for it to end.
+  const context = await readinessContext(actor.tenantId, documents, scopes);
+  await (await scope(actor.tenantId)).transaction((tx) => recordSnapshots(tx, actor, adoptions.map((row) => row.framework_id), states, context, overrides, scopes, force));
 }
 
 /** Records a trend point when a score moved, for changes made outside this module (for example a licensed-content import). */
@@ -380,6 +419,7 @@ export async function attachEvidence(actor: Actor, input: { ucCode: string; titl
       id, actor.tenantId, input.ucCode, input.title, input.kind, stored.id, stored.hash, input.note, new Date(until).toISOString(), actor.userId, new Date().toISOString(), "pending");
     await appendAudit({ tenantId: actor.tenantId, actorId: actor.userId, action: "compliance.evidence_attached", objectType: "control_evidence", objectId: id, payload: { ucCode: input.ucCode, hash: stored.hash, kind: input.kind, vaultDocumentId: stored.id } }, tx);
   });
+  await notify(actor.tenantId, { type: "evidence.pending_review", severity: "low", title: `Evidence awaiting review: ${input.title}`, body: `${actor.name} uploaded evidence for ${input.ucCode}. Someone else must review it.`, dedupeKey: `evidence.pending:${id}:new` }).catch(() => undefined);
   return { id, status: "pending", hash: stored.hash, duplicateDocument: stored.duplicate };
 }
 
@@ -429,6 +469,7 @@ export async function requestException(actor: Actor, input: { ucCode: string; ti
       id, actor.tenantId, input.ucCode, input.title, input.justification, input.compensatingControls, input.riskLevel, actor.userId, "pending", new Date(expires).toISOString(), at);
     await appendAudit({ tenantId: actor.tenantId, actorId: actor.userId, action: "compliance.exception_requested", objectType: "exception", objectId: id, payload: { ucCode: input.ucCode, riskLevel: input.riskLevel, expiresAt: input.expiresAt } }, tx);
   });
+  await notify(actor.tenantId, { type: "exception.pending", severity: "medium", title: `Risk acceptance awaiting a decision: ${input.title}`, body: `${actor.name} requested an exception for ${input.ucCode} (${input.riskLevel} risk).`, dedupeKey: `exception.pending:${id}:requested` }).catch(() => undefined);
   return { id, status: "pending" };
 }
 

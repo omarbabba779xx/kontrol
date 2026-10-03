@@ -3,7 +3,7 @@ import "server-only";
 import Database from "better-sqlite3";
 import { mkdirSync } from "node:fs";
 import { dirname } from "node:path";
-import { renderSchema } from "@/lib/db/schema";
+import { applySqlite } from "@/lib/db/migrations/apply";
 import type { Db, Scope, Tx } from "@/lib/db/types";
 
 function executor(db: Database.Database): Tx {
@@ -21,7 +21,7 @@ export function createSqliteDb(path: string): Db {
   db.pragma("journal_mode = WAL");
   db.pragma("foreign_keys = ON");
   db.pragma("busy_timeout = 5000");
-  for (const statement of renderSchema("sqlite")) db.exec(statement);
+  applySqlite(db, { check: process.env.KONTROL_AUTO_MIGRATE === "false" });
 
   const base = executor(db);
   // better-sqlite3 is a single synchronous connection. Transactions are explicit BEGIN/COMMIT blocks and

@@ -67,12 +67,12 @@ test("sub-requirements inherit their group mapping unless refined", () => {
 test("scores scale with implementation and an empty posture scores zero", () => {
   const empty = scoreFramework("iso27001", new Map());
   assert.equal(empty.score, 0);
-  assert.equal(empty.readiness, "Early stage");
+  assert.equal(empty.declaredBand, "Not started");
   const all = new Map(UNIFIED_CONTROLS.map((control) => [control.code, state({ status: "implemented", verification: "verified" })]));
   const full = scoreFramework("iso27001", all);
   assert.equal(full.score, 100);
   assert.equal(full.verifiedShare, 100);
-  assert.equal(full.readiness, "Audit ready");
+  assert.equal(full.declaredBand, "Strong", "a declared score says how far people claim to be; audit readiness is assessed from the evidence");
   const half = scoreFramework("iso27001", new Map(UNIFIED_CONTROLS.map((control) => [control.code, state({ status: "partial" })])));
   assert.equal(half.score, 50);
   for (const framework of FRAMEWORKS) assert.equal(scoreFramework(framework.id, all).score, 100, `${framework.id} fully implemented`);

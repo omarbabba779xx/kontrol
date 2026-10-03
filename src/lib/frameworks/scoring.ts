@@ -98,13 +98,14 @@ export type FrameworkScore = {
   partial: number;
   gaps: number;
   notApplicable: number;
-  readiness: "Audit ready" | "Near ready" | "In progress" | "Early stage";
+  /** How far the declared score has come. It says nothing about evidence: audit readiness is assessed separately (audit-readiness.ts). */
+  declaredBand: "Strong" | "Advancing" | "Early" | "Not started";
   groups: Array<{ group: string; score: number; applicable: number }>;
   requirements: RequirementResult[];
 };
 
-export function readinessLabel(score: number): FrameworkScore["readiness"] {
-  return score >= 90 ? "Audit ready" : score >= 70 ? "Near ready" : score >= 40 ? "In progress" : "Early stage";
+export function declaredBand(score: number): FrameworkScore["declaredBand"] {
+  return score >= 85 ? "Strong" : score >= 60 ? "Advancing" : score >= 30 ? "Early" : "Not started";
 }
 
 export type NotApplicable = Map<string, string>;
@@ -159,7 +160,7 @@ export function scoreFramework(frameworkId: FrameworkId, states: Map<string, Con
     partial: scored.filter((requirement) => requirement.status === "partial" || requirement.status === "initial").length,
     gaps: scored.filter((requirement) => requirement.status === "gap").length,
     notApplicable: requirements.length - scored.length,
-    readiness: readinessLabel(score),
+    declaredBand: declaredBand(score),
     groups: [...groups.entries()].map(([group, entry]) => ({ group, score: Math.round((entry.sum / entry.count) * 1000) / 10, applicable: entry.count })),
     requirements,
   };

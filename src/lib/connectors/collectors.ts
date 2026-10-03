@@ -31,7 +31,7 @@ export async function collectGitHub(api: GitHubApi, owner: string, repository: s
   const analysis = record(data.security_and_analysis);
   const status = (key: string) => text(record(analysis[key]).status);
 
-  // 404 with "Branch not protected" means unprotected; any other failure means we could not tell.
+  // Classic branch protection. 404 with "Branch not protected" means none; any other failure means we could not tell.
   let protection: Facts | null = null;
   const response = await api(`${base}/branches/${encodeURIComponent(defaultBranch)}/protection`);
   if (response.status === 200) {
@@ -39,6 +39,7 @@ export async function collectGitHub(api: GitHubApi, owner: string, repository: s
     const reviews = record(body.required_pull_request_reviews);
     protection = {
       enabled: true,
+      source: "branch_protection",
       requiredReviews: Number(reviews.required_approving_review_count ?? 0),
       enforceAdmins: record(body.enforce_admins).enabled === true,
       dismissStaleReviews: reviews.dismiss_stale_reviews === true,
@@ -46,7 +47,28 @@ export async function collectGitHub(api: GitHubApi, owner: string, repository: s
       requireSignedCommits: record(body.required_signatures).enabled === true,
     };
   } else if (response.status === 404 && /not protected/i.test(text(record(response.body).message) ?? "")) {
-    protection = { enabled: false, requiredReviews: 0, enforceAdmins: false, dismissStaleReviews: false, requireCodeOwnerReviews: false, requireSignedCommits: false };
+    // No classic protection: repository rulesets can protect the branch instead, so they must be read before concluding it is open.
+    const rules = await api(`${base}/rules/branches/${encodeURIComponent(defaultBranch)}`);
+    if (rules.status === 200 && Array.isArray(rules.body)) {
+      const list = (rules.body as unknown[]).map(record);
+      const pull = list.find((rule) => rule.type === "pull_request");
+      if (pull) {
+        const parameters = record(pull.parameters);
+        protection = {
+          enabled: true,
+          source: "ruleset",
+          requiredReviews: Number(parameters.required_approving_review_count ?? 0),
+          // Who may bypass a ruleset is not exposed by this endpoint, so whether administrators are bound is unknown, not false.
+          enforceAdmins: null,
+          dismissStaleReviews: parameters.dismiss_stale_reviews_on_push === true,
+          requireCodeOwnerReviews: parameters.require_code_owner_review === true,
+          requireSignedCommits: list.some((rule) => rule.type === "required_signatures"),
+        };
+      } else {
+        protection = { enabled: false, source: "none", requiredReviews: 0, enforceAdmins: false, dismissStaleReviews: false, requireCodeOwnerReviews: false, requireSignedCommits: false };
+      }
+    }
+    // Rulesets unreadable: protection stays unknown (null) rather than being reported as absent.
   }
 
   // 204 = enabled. GitHub also answers 404 when the caller may not see the setting, so 404 only means
@@ -55,7 +77,8 @@ export async function collectGitHub(api: GitHubApi, owner: string, repository: s
   const vulnerabilityAlertsEnabled = alerts.status === 204 ? true : alerts.status === 404 && /alerts are disabled/i.test(text(record(alerts.body).message) ?? "") ? false : null;
 
   let twoFactorRequired: boolean | null = null;
-  if (record(data.owner).type === "Organization") {
+  const isOrganization = record(data.owner).type === "Organization";
+  if (isOrganization) {
     const org = await api(`/orgs/${encodeURIComponent(owner)}`);
     const flag = record(org.body).two_factor_requirement_enabled;
     if (org.status === 200 && typeof flag === "boolean") twoFactorRequired = flag;
@@ -70,7 +93,7 @@ export async function collectGitHub(api: GitHubApi, owner: string, repository: s
     branchProtection: protection,
     security: { secretScanning: status("secret_scanning"), pushProtection: status("secret_scanning_push_protection"), dependabotSecurityUpdates: status("dependabot_security_updates") },
     vulnerabilityAlertsEnabled,
-    org: { twoFactorRequired },
+    org: { isOrganization, twoFactorRequired },
   };
 }
 

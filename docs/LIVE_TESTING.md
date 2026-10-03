@@ -51,3 +51,15 @@ Sign `${timestamp}.${body}` with HMAC-SHA-256 and send it as `X-Kontrol-Signatur
 `{ "asOf": "<ISO date>", "training": { "enrolled": 120, "completed": 117 } }` and `POST /api/ingest/hris` with
 `{ "asOf": "<ISO date>", "hr": { "overdueDeprovisioning": 0, "unscreenedActiveStarters": 0 } }`. Reports must be at most 35 days old,
 cannot be replayed, and are evaluated by the same executable controls as the other connectors.
+
+## How verdicts are decided
+
+Each GitHub control declares the facts it needs. The result is one of:
+
+- **passed / failed**: every fact it needs was read, or the facts that were read already settle it. A policy where all conditions must hold fails as soon as one *known* condition fails, even if another fact could not be read (alerts off fails "automated dependency handling" whatever Dependabot updates say).
+- **skipped (unreadable)**: a needed fact could not be read (missing permission, feature not available on the plan) and nothing known settles the verdict. This is an access gap, never counted as a compliance failure.
+- **not applicable**: the control has no object for this target. Organisation-level two-factor enforcement does not apply to a repository owned by a personal account.
+
+Branch protection is read from classic protection first and, when none exists, from repository rulesets (rules that apply to the default branch). A ruleset that requires pull requests satisfies "production branch protection". Who may bypass a ruleset is not exposed by the API, so "applies to administrators" stays skipped for ruleset-protected branches. If rulesets cannot be read, protection is reported as unknown rather than absent.
+
+A scheduled or "Run now" collection never falls back to sample data: with no stored credentials it fails with an explicit message. Sample collections remain available from the Control plane, are tagged `:demo`, and their findings are titled "[Sample data]". A live collection closes the sample findings it replaces.

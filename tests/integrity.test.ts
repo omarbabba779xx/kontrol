@@ -48,3 +48,9 @@ test("sha256 matches a known vector", async () => {
   const { sha256 } = await import("../src/lib/core/integrity");
   assert.equal(sha256("abc"), "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad");
 });
+
+test("canonical JSON drops undefined values instead of producing invalid JSON", async () => {
+  const { canonicalJson } = await import("../src/lib/core/integrity");
+  assert.equal(canonicalJson({ b: 1, a: undefined, c: [undefined, 2] }), '{"b":1,"c":[null,2]}');
+  assert.doesNotThrow(() => JSON.parse(canonicalJson({ x: undefined, y: { z: undefined } })));
+});

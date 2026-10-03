@@ -58,7 +58,7 @@ test("GitHub: an administrator token yields complete facts and every GitHub cont
     "/orgs/open-policy-agent": { status: 200, body: { ...realOrg, two_factor_requirement_enabled: true } },
   }), "open-policy-agent", "opa");
 
-  assert.deepEqual(facts.branchProtection, { enabled: true, requiredReviews: 2, enforceAdmins: true, dismissStaleReviews: true, requireCodeOwnerReviews: true, requireSignedCommits: false });
+  assert.deepEqual(facts.branchProtection, { enabled: true, source: "branch_protection", requiredReviews: 2, enforceAdmins: true, dismissStaleReviews: true, requireCodeOwnerReviews: true, requireSignedCommits: false });
   for (const control of PACK.filter((item) => item.connector === "github")) {
     assert.deepEqual(missingFacts(control, facts), [], `${control.code} facts available`);
     assert.equal(evaluatePolicy(control.policy, facts).passed, true, `${control.code} should pass`);
@@ -69,6 +69,7 @@ test("GitHub: documented 404 answers distinguish an unprotected branch and disab
   const facts = await collectGitHub(router({
     [OPA]: { status: 200, body: adminRepo },
     [`${OPA}/branches/main/protection`]: { status: 404, body: { message: "Branch not protected" } },
+    [`${OPA}/rules/branches/main`]: { status: 200, body: [] },
     [`${OPA}/vulnerability-alerts`]: { status: 404, body: { message: "Vulnerability alerts are disabled." } },
   }), "open-policy-agent", "opa");
   assert.equal((facts.branchProtection as { enabled: boolean }).enabled, false);
@@ -200,6 +201,7 @@ test("a sync installs the control pack, opens findings for failures and records 
   const github = await syncGitHub(admin, { owner: "open-policy-agent", repository: "opa", assetId: "asset_repo_lending", demo: false }, router({
     [OPA]: { status: 200, body: adminRepo },
     [`${OPA}/branches/main/protection`]: { status: 404, body: { message: "Branch not protected" } },
+    [`${OPA}/rules/branches/main`]: { status: 200, body: [] },
     [`${OPA}/vulnerability-alerts`]: { status: 204, body: null },
   }));
   assert.equal(github.mode, "live");
@@ -216,7 +218,8 @@ test("a sync installs the control pack, opens findings for failures and records 
 
   const db = (await getDb()).scope(admin.tenantId);
   const codes = (await db.all<{ code: string }>("SELECT code FROM controls WHERE tenant_id = ? AND code LIKE 'CTL-%' ORDER BY code", admin.tenantId)).map((row) => row.code);
-  for (const control of PACK.filter((item) => item.connector !== "people")) assert.ok(codes.includes(control.code), `${control.code} installed`);
+  const synced = ["github", "aws", "okta"];
+  for (const control of PACK.filter((item) => synced.includes(item.connector))) assert.ok(codes.includes(control.code), `${control.code} installed`);
   assert.ok(!codes.includes("CTL-HR-001"), "people controls wait for their first report or an explicit install");
   const open = await db.all<{ title: string }>("SELECT title FROM findings WHERE tenant_id = ? AND status = 'open'", admin.tenantId);
   assert.ok(open.some((finding) => finding.title.includes("Production branch protection")));
@@ -224,7 +227,7 @@ test("a sync installs the control pack, opens findings for failures and records 
   assert.ok(!open.some((finding) => finding.title.includes("CloudTrail")));
 
   const { installControlPack } = await import("../src/lib/connectors");
-  assert.deepEqual((await installControlPack(admin)).installed, ["CTL-HR-001", "CTL-HR-002", "CTL-HR-003"], "an explicit install adds what is missing");
+  assert.deepEqual((await installControlPack(admin)).installed, PACK.filter((item) => !synced.includes(item.connector)).map((item) => item.code), "an explicit install adds what is missing");
   assert.deepEqual((await installControlPack(admin)).installed, [], "installing the pack twice changes nothing");
 });
 
@@ -238,4 +241,72 @@ test("demo mode is clearly tagged and uses facts that satisfy the same pack", as
   assert.equal(github.skipped.length, 0);
   const sources = (await (await getDb()).scope(admin.tenantId).all<{ source: string }>("SELECT DISTINCT source FROM evidence WHERE tenant_id = ?", admin.tenantId)).map((row) => row.source);
   assert.ok(sources.includes("github:demo") && sources.includes("aws:demo") && sources.includes("okta:demo"));
+});
+
+const J = "/repos/jane/repo";
+const user = (extra = {}) => ({ ...adminRepo, owner: { login: "jane", type: "User" }, ...extra });
+
+test("GitHub: a ruleset protects the branch when classic protection is absent, and whether administrators can bypass it is unknown", async () => {
+  const facts = await collectGitHub(router({
+    [J]: { status: 200, body: user() },
+    [`${J}/branches/main/protection`]: { status: 404, body: { message: "Branch not protected" } },
+    [`${J}/rules/branches/main`]: { status: 200, body: [{ type: "pull_request", parameters: { required_approving_review_count: 2, dismiss_stale_reviews_on_push: true, require_code_owner_review: false } }] },
+    [`${J}/vulnerability-alerts`]: { status: 204, body: null },
+  }), "jane", "repo");
+  assert.deepEqual(facts.branchProtection, { enabled: true, source: "ruleset", requiredReviews: 2, enforceAdmins: null, dismissStaleReviews: true, requireCodeOwnerReviews: false, requireSignedCommits: false });
+  const sdlc = PACK.find((control) => control.code === "CTL-SDLC-004")!;
+  assert.equal(evaluatePolicy(sdlc.policy, facts).passed, true, "a ruleset requiring reviews satisfies production branch protection");
+  const admins = PACK.find((control) => control.code === "CTL-GH-004")!;
+  assert.deepEqual(missingFacts(admins, facts), ["branchProtection.enforceAdmins"], "bypass actors are not visible, so this control cannot be decided");
+});
+
+test("GitHub: rulesets that cannot be read leave protection unknown instead of reporting it absent", async () => {
+  const facts = await collectGitHub(router({
+    [J]: { status: 200, body: user() },
+    [`${J}/branches/main/protection`]: { status: 404, body: { message: "Branch not protected" } },
+    [`${J}/rules/branches/main`]: { status: 403, body: { message: "Resource not accessible" } },
+    [`${J}/vulnerability-alerts`]: { status: 204, body: null },
+  }), "jane", "repo");
+  assert.equal(facts.branchProtection, null);
+});
+
+test("pack: a control already decided by a known failing condition fails instead of being skipped, and an undecided one stays skipped", async () => {
+  const { decidedFailure } = await import("../src/lib/connectors/pack");
+  const alerts = PACK.find((control) => control.code === "CTL-GH-003")!;
+  assert.deepEqual(missingFacts(alerts, { vulnerabilityAlertsEnabled: false }), ["security.dependabotSecurityUpdates"]);
+  assert.equal(decidedFailure(alerts, { vulnerabilityAlertsEnabled: false }), true, "alerts are off whatever Dependabot updates say");
+  assert.equal(decidedFailure(alerts, { vulnerabilityAlertsEnabled: true }), false, "alerts are on: the other half is still unknown");
+  assert.equal(decidedFailure(alerts, {}), false, "nothing known, nothing decided");
+});
+
+test("pack: an organisation control is not applicable to a personal account", async () => {
+  const twoFactor = PACK.find((control) => control.code === "CTL-GH-005")!;
+  assert.match(twoFactor.notApplicable?.({ org: { isOrganization: false, twoFactorRequired: null } }) ?? "", /personal account/);
+  assert.equal(twoFactor.notApplicable?.({ org: { isOrganization: true, twoFactorRequired: null } }), null);
+  assert.equal(twoFactor.notApplicable?.({}), null, "unknown ownership is not treated as not applicable");
+  const facts = await collectGitHub(router({ [J]: { status: 200, body: user() }, [`${J}/branches/main/protection`]: { status: 404, body: { message: "Branch not protected" } }, [`${J}/rules/branches/main`]: { status: 200, body: [] } }), "jane", "repo");
+  assert.equal((facts.org as { isOrganization: boolean }).isOrganization, false);
+});
+
+test("a live collection closes the sample findings it replaces, and sample findings are labelled", async () => {
+  const { syncGitHub } = await import("../src/lib/connectors");
+  const { getDb } = await import("../src/lib/db");
+  const sample = await syncGitHub(admin, { owner: "jane", repository: "repo", demo: true });
+  const db = (await getDb()).scope(admin.tenantId);
+  const titles = await db.all<{ title: string; status: string }>("SELECT title, status FROM findings WHERE tenant_id = ? AND title LIKE '%jane/repo%'", admin.tenantId);
+  assert.ok(sample.evaluations.some((item) => !item.passed) && titles.length > 0 && titles.every((item) => item.title.startsWith("[Sample data] ")));
+
+  const live = await syncGitHub(admin, { owner: "jane", repository: "repo", demo: false }, router({
+    [J]: { status: 200, body: user() },
+    "/repos/jane/repo/branches/main/protection": { status: 404, body: { message: "Branch not protected" } },
+    "/repos/jane/repo/rules/branches/main": { status: 200, body: [] },
+    "/repos/jane/repo/vulnerability-alerts": { status: 404, body: { message: "Vulnerability alerts are disabled." } },
+  }));
+  assert.equal(live.mode, "live");
+  assert.deepEqual(live.notApplicable?.map((item) => item.controlCode), ["CTL-GH-005"]);
+  assert.ok(live.evaluations.some((item) => item.controlCode === "CTL-GH-003" && !item.passed), "alerts disabled fails even though Dependabot updates are unknown");
+  const open = await db.all<{ title: string }>("SELECT title FROM findings WHERE tenant_id = ? AND status = 'open' AND title LIKE '%jane/repo%'", admin.tenantId);
+  assert.ok(open.length > 0 && open.every((item) => !item.title.startsWith("[Sample data] ")), "the live findings replaced the sample ones");
+  const still = await db.all("SELECT id FROM findings WHERE tenant_id = ? AND status = 'open' AND title LIKE '[Sample data]%jane/repo%'", admin.tenantId);
+  assert.equal(still.length, 0);
 });

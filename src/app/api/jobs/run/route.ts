@@ -3,6 +3,8 @@ import { safeEqual } from "@/lib/core/config";
 import { apiError } from "@/lib/core/api";
 import { runDueWorkflows } from "@/lib/core/workflow-engine";
 import { runAssuranceScan } from "@/lib/core/assurance-engine";
+import { runDueJobs } from "@/lib/core/scheduler";
+import { runMaintenance } from "@/lib/core/alerts";
 
 export const runtime = "nodejs";
 export async function POST(request: Request) {
@@ -13,6 +15,8 @@ export async function POST(request: Request) {
     if (!actor) return Response.json({ error: "Unauthorized" }, { status: 401 });
     const processed = await runDueWorkflows(actor, 25);
     const assurance = await runAssuranceScan(actor);
-    return Response.json({ processed, assurance });
+    const connectors = await runDueJobs();
+    const notifications = await runMaintenance();
+    return Response.json({ processed, assurance, notifications, connectors: connectors.map(({ scheduleId, status, error }) => ({ scheduleId, status, error })) });
   } catch (error) { return apiError(error); }
 }

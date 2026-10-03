@@ -82,9 +82,9 @@ export function evaluatePolicy(policy: Policy, facts: Record<string, unknown>, n
   return { passed, tests, failed: [...allResults.filter((result) => !result.passed), ...anyFailed, ...noneResults.filter((result) => !result.passed)] };
 }
 
-export async function evaluateControl(actor: Actor, input: { controlCode: string; assetId: string; facts: Record<string, unknown>; source: string; periodStart?: string; periodEnd?: string; /** How long the evidence stays current; defaults to one day. */ validForDays?: number }) {
+export async function evaluateControl(actor: Actor, input: { controlCode: string; assetId: string; facts: Record<string, unknown>; source: string; periodStart?: string; periodEnd?: string; /** How long the evidence stays current; defaults to one day. */ validForDays?: number; /** Where the facts came from and what could not be seen. Stored inside the hashed evidence. */ provenance?: { collector: { name: string; version: string }; scope?: Record<string, unknown>; limits?: string[] } }) {
   const db = (await getDb()).scope(actor.tenantId);
-  const control = await db.get<{ id: string; code: string; title: string; objective: string; policy_json: string }>("SELECT * FROM controls WHERE tenant_id = ? AND code = ? AND valid_to IS NULL", actor.tenantId, input.controlCode);
+  const control = await db.get<{ id: string; code: string; title: string; objective: string; policy_json: string; valid_from: string }>("SELECT * FROM controls WHERE tenant_id = ? AND code = ? AND valid_to IS NULL", actor.tenantId, input.controlCode);
   if (!control) throw new Error(`Control ${input.controlCode} not found`);
   const asset = await db.get<{ id: string; name: string }>("SELECT id, name FROM assets WHERE tenant_id = ? AND id = ? AND valid_to IS NULL", actor.tenantId, input.assetId);
   if (!asset) throw new Error(`Asset ${input.assetId} not found`);
@@ -93,25 +93,38 @@ export async function evaluateControl(actor: Actor, input: { controlCode: string
   const evaluatedAt = new Date(nowMs).toISOString();
   const policy = JSON.parse(control.policy_json) as Policy;
   const result = evaluatePolicy(policy, input.facts, nowMs);
+  // Findings from sample data say so in their title, so they cannot be mistaken for facts about a real system.
+  const sample = input.source.endsWith(":demo");
   const opa = await crossCheckWithOpa(policy, input.facts, nowMs, result.passed);
   const evidenceId = `evidence_${randomUUID()}`;
-  const evidencePayload = { control: control.code, asset: asset.id, facts: input.facts, result, opa, evaluatedAt };
+  const expiresAt = new Date(nowMs + Math.max(1, input.validForDays ?? 1) * 86_400_000).toISOString();
+  // Provenance travels inside the hashed content, so it cannot be edited without breaking the evidence hash: who collected what, with
+  // which collector and which rule, over what scope and period, until when it counts, and what the collector could not see.
+  const provenance = {
+    tenantId: actor.tenantId, source: input.source, sample, collectionMethod: "automated policy evaluation", collectedBy: actor.userId,
+    collector: input.provenance?.collector ?? { name: "direct-api", version: "1" },
+    rule: { controlCode: control.code, title: control.title, policySha256: sha256(canonicalJson(policy)), controlVersionFrom: control.valid_from },
+    asset: { id: asset.id, name: asset.name }, scope: input.provenance?.scope ?? {},
+    period: { start: input.periodStart ?? null, end: input.periodEnd ?? evaluatedAt }, collectedAt: evaluatedAt, expiresAt,
+    limits: input.provenance?.limits ?? [],
+  };
+  const evidencePayload = { control: control.code, asset: asset.id, facts: input.facts, result, opa, evaluatedAt, provenance };
   const content = canonicalJson(evidencePayload);
 
   const finding = await db.transaction(async (tx) => {
     await tx.run(`INSERT INTO evidence (id,tenant_id,control_id,asset_id,name,source,collection_method,content_type,content_json,content_hash,period_start,period_end,collected_at,expires_at,status,created_by) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
-      evidenceId, actor.tenantId, control.id, asset.id, `${control.title} evaluation`, input.source, "automated policy evaluation", "application/vnd.kontrol.control-result+json", content, sha256(content), input.periodStart ?? null, input.periodEnd ?? null, evaluatedAt, new Date(nowMs + Math.max(1, input.validForDays ?? 1) * 86_400_000).toISOString(), result.passed ? "healthy" : "failed", actor.userId);
+      evidenceId, actor.tenantId, control.id, asset.id, `${control.title} evaluation`, input.source, "automated policy evaluation", "application/vnd.kontrol.control-result+json", content, sha256(content), input.periodStart ?? null, input.periodEnd ?? null, evaluatedAt, expiresAt, result.passed ? "healthy" : "failed", actor.userId);
 
     let outcome: string | string[];
     if (!result.passed) {
       const existing = await tx.get<{ id: string }>("SELECT id FROM findings WHERE tenant_id = ? AND control_id = ? AND asset_id = ? AND status IN ('open','remediating') LIMIT 1", actor.tenantId, control.id, asset.id);
       if (existing) {
-        await tx.run("UPDATE findings SET evidence_id = ?, reason = ?, opened_at = ? WHERE id = ?", evidenceId, JSON.stringify(result.failed), evaluatedAt, existing.id);
+        await tx.run("UPDATE findings SET evidence_id = ?, reason = ?, opened_at = ?, title = ? WHERE id = ?", evidenceId, JSON.stringify(result.failed), evaluatedAt, `${sample ? "[Sample data] " : ""}${control.title} failed on ${asset.name}`, existing.id);
         outcome = existing.id;
       } else {
         const findingId = `finding_${randomUUID()}`;
         await tx.run(`INSERT INTO findings (id,tenant_id,control_id,asset_id,evidence_id,title,severity,status,reason,remediation,owner_id,due_at,opened_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)`,
-          findingId, actor.tenantId, control.id, asset.id, evidenceId, `${control.title} failed on ${asset.name}`, "high", "open", JSON.stringify(result.failed), `Remediate failed policy conditions for ${control.code}, then trigger a re-test.`, actor.userId, new Date(Date.now() + 14 * 86_400_000).toISOString(), evaluatedAt);
+          findingId, actor.tenantId, control.id, asset.id, evidenceId, `${sample ? "[Sample data] " : ""}${control.title} failed on ${asset.name}`, "high", "open", JSON.stringify(result.failed), `Remediate failed policy conditions for ${control.code}, then trigger a re-test.`, actor.userId, new Date(Date.now() + 14 * 86_400_000).toISOString(), evaluatedAt);
         outcome = findingId;
       }
     } else {

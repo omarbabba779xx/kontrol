@@ -83,15 +83,20 @@ jobs:
           tags: kontrol:ci
           cache-from: type=gha
           cache-to: type=gha,mode=max
-      - name: Container starts and reports health
+      - name: The image has no development packages
+        run: test "$(docker run --rm --entrypoint sh kontrol:ci -c 'test -d node_modules/shadcn && echo present || echo absent')" = absent
+      - name: Container starts in production on an empty database and reports health
         run: |
           docker run -d --name kontrol -p 3000:3000 \
             -e KONTROL_AUTH_SECRET="$(openssl rand -hex 32)" \
             -e KONTROL_SIGNING_SECRET="$(openssl rand -hex 32)" \
-            -e KONTROL_SEED=false kontrol:ci
+            -e KONTROL_SECRETS_KEY="$(openssl rand -hex 32)" \
+            -e KONTROL_BOOTSTRAP_ADMIN_EMAIL=admin@example.org kontrol:ci
           for i in $(seq 1 30); do
-            if curl -fsS http://127.0.0.1:3000/api/health >/dev/null; then echo "healthy"; exit 0; fi
+            if curl -fsS http://127.0.0.1:3000/api/health >/dev/null; then echo "healthy"; break; fi
             sleep 2
           done
+          # No demonstration data, and nothing is reachable without signing in.
+          test "$(curl -s -o /dev/null -w '%{http_code}' http://127.0.0.1:3000/api/compliance)" = 401
           docker logs kontrol
-          exit 1
+          docker rm -f kontrol

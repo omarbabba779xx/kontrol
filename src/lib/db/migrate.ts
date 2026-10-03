@@ -4,7 +4,7 @@ import Database from "better-sqlite3";
 import postgres from "postgres";
 import { verifyAuditChainRows } from "@/lib/core/integrity";
 import { createPostgresDb } from "@/lib/db/postgres";
-import { TABLES } from "@/lib/db/schema";
+import { allTables } from "@/lib/db/migrations";
 
 export type MigrationReport = {
   tables: Array<{ table: string; rows: number }>;
@@ -36,9 +36,9 @@ export async function migrateSqliteToPostgres(options: { sqlitePath: string; pos
     await system.transaction(async (tx) => {
       // Children first so foreign keys never block a forced re-run. The audit log is append-only by trigger,
       // so a forced run requires an empty ledger and is otherwise rejected by the database.
-      if (options.force) for (const table of [...TABLES].reverse()) if (table !== "audit_log") await tx.run(`DELETE FROM ${table}`);
+      if (options.force) for (const table of [...allTables()].reverse()) if (table !== "audit_log") await tx.run(`DELETE FROM ${table}`);
 
-      for (const table of TABLES) {
+      for (const table of allTables()) {
         const columns = columnsOf(sqlite, table);
         const rows = sqlite.prepare(`SELECT * FROM ${table}${table === "audit_log" ? " ORDER BY sequence" : ""}`).all() as SqliteRow[];
         const insert = `INSERT INTO ${table} (${columns.join(",")}) ${table === "audit_log" ? "OVERRIDING SYSTEM VALUE " : ""}VALUES (${columns.map(() => "?").join(",")})`;

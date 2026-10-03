@@ -3,10 +3,10 @@ import "server-only";
 import { createHmac, randomUUID } from "node:crypto";
 import { z } from "zod";
 import { syncPeople } from "@/lib/connectors";
-import type { Actor } from "@/lib/core/auth";
 import { safeEqual } from "@/lib/core/config";
 import { sha256 } from "@/lib/core/integrity";
 import { consumeRateLimit } from "@/lib/core/rate-limit";
+import { serviceActor } from "@/lib/core/service-actors";
 import { getDb } from "@/lib/db";
 
 /**
@@ -26,7 +26,6 @@ export class IngestError extends Error {
 
 export const TOLERANCE_SECONDS = 300;
 export const MAX_BODY_BYTES = 256 * 1024;
-export const SERVICE_USER_ID = "usr_svc_ingest";
 
 export function masterSecret() {
   const value = process.env.KONTROL_INGEST_SECRET;
@@ -63,13 +62,6 @@ const hris = z.object({ asOf, hr: z.object({ overdueDeprovisioning: z.number().i
 export const SOURCES = { lms, hris } as const;
 export type IngestSource = keyof typeof SOURCES;
 
-async function serviceActor(tenantId: string): Promise<Actor> {
-  const db = (await getDb()).system();
-  const existing = await db.get("SELECT id FROM users WHERE id = ? AND tenant_id = ?", SERVICE_USER_ID, tenantId);
-  if (!existing) await db.run("INSERT INTO users (id,tenant_id,email,name,role,created_at) VALUES (?,?,?,?,?,?) ON CONFLICT DO NOTHING", SERVICE_USER_ID, tenantId, "ingest@service.invalid", "Ingest service", "control_owner", new Date().toISOString());
-  return { userId: SERVICE_USER_ID, tenantId, email: "ingest@service.invalid", name: "Ingest service", role: "control_owner" };
-}
-
 export async function ingestReport(input: { source: string; tenantId: string; timestamp: string; signature: string; body: string }) {
   const master = masterSecret();
   if (!master) throw new IngestError("Ingest is not configured: set KONTROL_INGEST_SECRET to at least 32 characters", 503);
@@ -89,6 +81,6 @@ export async function ingestReport(input: { source: string; tenantId: string; ti
   const received = await (await getDb()).scope(input.tenantId).run("INSERT INTO ingest_receipts (id,tenant_id,source,signature_hash,received_at) VALUES (?,?,?,?,?) ON CONFLICT(tenant_id, signature_hash) DO NOTHING", `rcpt_${randomUUID()}`, input.tenantId, input.source, sha256(input.signature), new Date().toISOString());
   if (received.changes === 0) throw new IngestError("This report was already received", 409);
 
-  const result = await syncPeople(await serviceActor(input.tenantId), parsed.data, `${input.source}:ingest`);
+  const result = await syncPeople(await serviceActor(input.tenantId, "ingest"), parsed.data, `${input.source}:ingest`);
   return { evaluations: result.evaluations, skipped: result.skipped };
 }

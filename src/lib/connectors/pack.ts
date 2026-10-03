@@ -1,6 +1,6 @@
-import type { Policy } from "@/lib/core/policy-engine";
+import { evaluatePolicy, type Policy } from "@/lib/core/policy-engine";
 
-export type ConnectorKind = "github" | "aws" | "okta" | "people";
+export type ConnectorKind = "github" | "aws" | "okta" | "people" | "google_workspace" | "entra" | "gitlab";
 
 /** An executable control shipped with Kontrol. It is evaluated against facts collected from a live system. */
 export type PackControl = {
@@ -18,6 +18,8 @@ export type PackControl = {
    * never masquerades as a gap in compliance.
    */
   requires: string[];
+  /** Returns the reason when the control has no object for these facts (for example an organisation-level control on a personal account). */
+  notApplicable?: (facts: Record<string, unknown>) => string | null;
 };
 
 export const PACK: PackControl[] = [
@@ -45,6 +47,7 @@ export const PACK: PackControl[] = [
     code: "CTL-GH-005", title: "Organisation requires two-factor authentication", objective: "Every member of the source-control organisation authenticates with a second factor.", connector: "github", frequency: "daily",
     policy: { all: [{ path: "org.twoFactorRequired", op: "eq", value: true }] },
     requires: ["org.twoFactorRequired"],
+    notApplicable: (facts) => (factAt(facts, "org.isOrganization") === false ? "The repository belongs to a personal account, not an organisation: there is no organisation-wide two-factor setting to check." : null),
   },
   {
     code: "CTL-AWS-001", title: "Root account protected", objective: "The AWS root user has MFA and no access keys.", connector: "aws", frequency: "daily",
@@ -101,21 +104,76 @@ export const PACK: PackControl[] = [
     policy: { all: [{ path: "hr.unscreenedActiveStarters", op: "eq", value: 0 }] },
     requires: ["hr.unscreenedActiveStarters"],
   },
+  {
+    code: "CTL-GWS-001", title: "2-Step Verification enrolled for every active user", objective: "Every active Google Workspace account is enrolled in 2-Step Verification.", connector: "google_workspace", frequency: "daily", validForDays: 2,
+    policy: { all: [{ path: "users.twoStepCoverage", op: "eq", value: 1 }] },
+    requires: ["users.twoStepCoverage"],
+  },
+  {
+    code: "CTL-GWS-002", title: "Super administrators use 2-Step Verification", objective: "No Google Workspace super administrator is without 2-Step Verification.", connector: "google_workspace", frequency: "daily", validForDays: 2,
+    policy: { all: [{ path: "admins.superAdminsWithout2Sv", op: "eq", value: 0 }] },
+    requires: ["admins.superAdminsWithout2Sv"],
+  },
+  {
+    code: "CTL-GWS-003", title: "No dormant Google Workspace accounts", objective: "Active accounts without a sign-in for 90 days are suspended.", connector: "google_workspace", frequency: "daily", validForDays: 2,
+    policy: { all: [{ path: "users.inactiveOver90Days", op: "eq", value: 0 }] },
+    requires: ["users.inactiveOver90Days"],
+  },
+  {
+    code: "CTL-GWS-004", title: "Few super administrators", objective: "Between two and five super administrators: enough for continuity, few enough to control.", connector: "google_workspace", frequency: "daily", validForDays: 2,
+    policy: { all: [{ path: "admins.superAdmins", op: "between", value: [2, 5] }] },
+    requires: ["admins.superAdmins"],
+  },
+  {
+    code: "CTL-ENTRA-001", title: "Entra ID administrators registered for MFA", objective: "Every Entra ID administrator has registered a multi-factor method.", connector: "entra", frequency: "daily", validForDays: 2,
+    policy: { all: [{ path: "mfa.adminsWithoutMfa", op: "eq", value: 0 }] },
+    requires: ["mfa.adminsWithoutMfa"],
+  },
+  {
+    code: "CTL-ENTRA-002", title: "Conditional Access requires MFA for all users", objective: "An enabled Conditional Access policy requires MFA for all users and all applications.", connector: "entra", frequency: "daily", validForDays: 2,
+    policy: { all: [{ path: "conditionalAccess.mfaForAllUsers", op: "eq", value: true }] },
+    requires: ["conditionalAccess.mfaForAllUsers"],
+  },
+  {
+    code: "CTL-ENTRA-003", title: "Legacy authentication blocked", objective: "An enabled Conditional Access policy blocks legacy authentication protocols for all users.", connector: "entra", frequency: "daily", validForDays: 2,
+    policy: { all: [{ path: "conditionalAccess.legacyAuthBlocked", op: "eq", value: true }] },
+    requires: ["conditionalAccess.legacyAuthBlocked"],
+  },
+  {
+    code: "CTL-ENTRA-004", title: "No dormant Entra ID accounts", objective: "Enabled member accounts without a successful sign-in for 90 days are disabled.", connector: "entra", frequency: "daily", validForDays: 2,
+    policy: { all: [{ path: "users.inactiveOver90Days", op: "eq", value: 0 }] },
+    requires: ["users.inactiveOver90Days"],
+  },
+  {
+    code: "CTL-GL-001", title: "GitLab default branch protected", objective: "The default branch accepts no direct pushes and no force pushes.", connector: "gitlab", frequency: "hourly",
+    policy: { all: [{ path: "branchProtection.enabled", op: "eq", value: true }, { path: "branchProtection.developersCanPush", op: "eq", value: false }, { path: "branchProtection.forcePushAllowed", op: "eq", value: false }] },
+    requires: ["branchProtection.enabled"],
+  },
+  {
+    code: "CTL-GL-002", title: "GitLab merge request approvals required", objective: "At least one approval is required before merging to the default branch.", connector: "gitlab", frequency: "daily",
+    policy: { all: [{ path: "branchProtection.requiredReviews", op: "gte", value: 1 }] },
+    requires: ["branchProtection.requiredReviews"],
+  },
+  {
+    code: "CTL-GL-003", title: "GitLab group requires two-factor authentication", objective: "Every member of the GitLab group must use two-factor authentication.", connector: "gitlab", frequency: "daily",
+    policy: { all: [{ path: "group.twoFactorRequired", op: "eq", value: true }] },
+    requires: ["group.twoFactorRequired"],
+  },
 ];
 
 /** Which executable controls provide machine evidence for which unified control. Suggestions, applied on request. */
 export const SUGGESTED_LINKS: Record<string, string[]> = {
-  "UC-SDL-01": ["CTL-SDLC-004", "CTL-GH-002", "CTL-GH-004"],
+  "UC-SDL-01": ["CTL-SDLC-004", "CTL-GH-002", "CTL-GH-004", "CTL-GL-001", "CTL-GL-002"],
   "UC-OPS-02": ["CTL-GH-003"],
   "UC-OPS-01": ["CTL-AWS-004"],
   "UC-OPS-04": ["CTL-AWS-003"],
   "UC-DAT-04": ["CTL-AWS-003"],
   "UC-OPS-05": ["CTL-AWS-005"],
-  "UC-IAM-01": ["CTL-OKTA-002", "CTL-HR-002"],
+  "UC-IAM-01": ["CTL-OKTA-002", "CTL-HR-002", "CTL-GWS-003", "CTL-ENTRA-004"],
   "UC-HR-01": ["CTL-HR-003"],
   "UC-HR-02": ["CTL-HR-001"],
-  "UC-IAM-02": ["CTL-AWS-001", "CTL-AWS-002", "CTL-OKTA-001", "CTL-OKTA-003", "CTL-GH-005"],
-  "UC-IAM-03": ["CTL-AWS-001", "CTL-OKTA-001"],
+  "UC-IAM-02": ["CTL-AWS-001", "CTL-AWS-002", "CTL-OKTA-001", "CTL-OKTA-003", "CTL-GH-005", "CTL-GL-003", "CTL-GWS-001", "CTL-ENTRA-002", "CTL-ENTRA-003"],
+  "UC-IAM-03": ["CTL-AWS-001", "CTL-OKTA-001", "CTL-GWS-002", "CTL-GWS-004", "CTL-ENTRA-001"],
 };
 
 /** Fact path lookup shared by the pack and the policy engine. */
@@ -126,4 +184,28 @@ export function factAt(facts: unknown, path: string): unknown {
 /** Paths a control needs that the collector could not provide. */
 export function missingFacts(control: PackControl, facts: Record<string, unknown>) {
   return control.requires.filter((path) => { const value = factAt(facts, path); return value === undefined || value === null; });
+}
+
+/**
+ * A control that cannot be fully assessed is still decided when the facts that are known already settle it: in an `all` policy a single
+ * known condition that fails fails the whole policy, whatever the unknown ones turn out to be. Only an undecided control is skipped.
+ */
+export function decidedFailure(control: PackControl, facts: Record<string, unknown>) {
+  return (control.policy.all ?? []).some((condition) => {
+    const value = factAt(facts, condition.path);
+    return value !== undefined && value !== null && !evaluatePolicy({ all: [condition] }, facts).passed;
+  });
+}
+
+/**
+ * Version of each collector. Raise it whenever the way facts are read or interpreted changes, so that evidence says which logic produced
+ * it (for example: GitHub rulesets are read since r2). Evidence collected by an older revision stays valid but is attributable.
+ */
+export const COLLECTOR_REVISIONS: Record<string, string> = { github: "github-rest 2022-11-28 r2", gitlab: "gitlab-rest v4 r1", aws: "aws-sdk-v3 r1", okta: "okta-management-api r1", google_workspace: "google-admin-sdk r1", entra: "microsoft-graph r1", people: "signed-report r1" };
+
+/** What a collection could not see: every fact a control of this connector needs that came back unreadable. Recorded with the evidence. */
+export function collectionLimits(connector: string, facts: Record<string, unknown>) {
+  const unreadable = new Set<string>();
+  for (const control of PACK.filter((item) => item.connector === connector)) for (const path of missingFacts(control, facts)) unreadable.add(path);
+  return [...unreadable].sort().map((path) => `could not read ${path}`);
 }

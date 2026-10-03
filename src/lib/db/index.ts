@@ -1,6 +1,7 @@
 import "server-only";
 
 import { join } from "node:path";
+import { bootstrapTenant, shouldSeed } from "@/lib/db/bootstrap";
 import { createPostgresDb } from "@/lib/db/postgres";
 import { seedDatabase } from "@/lib/db/seed";
 import { createSqliteDb } from "@/lib/db/sqlite";
@@ -24,11 +25,12 @@ async function open(): Promise<Db> {
   if (databaseDriver() === "postgres") {
     const url = process.env.POSTGRES_URL;
     if (!url) throw new Error("POSTGRES_URL is required when KONTROL_DB_DRIVER=postgres");
-    db = await createPostgresDb(url, { max: Number(process.env.KONTROL_DB_POOL ?? 10) });
+    db = await createPostgresDb(url, { max: Number(process.env.KONTROL_DB_POOL ?? 10), migrationUrl: process.env.POSTGRES_MIGRATION_URL, production: process.env.NODE_ENV === "production" });
   } else {
     db = createSqliteDb(process.env.KONTROL_DATABASE_PATH ?? join(process.cwd(), ".data", "kontrol.db"));
   }
-  if (process.env.KONTROL_SEED !== "false") await seedDatabase(db);
+  if (shouldSeed()) await seedDatabase(db);
+  else await bootstrapTenant(db, process.env, DEFAULT_TENANT_ID);
   return db;
 }
 

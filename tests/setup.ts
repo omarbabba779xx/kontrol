@@ -44,6 +44,8 @@ export function isolateDatabase() {
     process.env.KONTROL_DB_DRIVER = "postgres";
     process.env.POSTGRES_URL = pg.url;
     process.env.KONTROL_DB_POOL = "2";
+    // The embedded server only has a superuser. The runtime-privilege guard has its own test (db-roles.test.ts).
+    process.env.KONTROL_ALLOW_PRIVILEGED_DB = "true";
     stop = pg.stop;
   });
 

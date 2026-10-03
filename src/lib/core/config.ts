@@ -38,6 +38,21 @@ export function signingSecret() {
   return value;
 }
 
+/** Key that protects connector credentials at rest. Required in production; a development fallback is used otherwise. */
+export function secretsKey() {
+  return readSecret("KONTROL_SECRETS_KEY", "local-secrets-key-change-me-0123456789");
+}
+
+/**
+ * Earlier values of KONTROL_SECRETS_KEY, comma separated. Data sealed under them stays readable until it is re-sealed with the
+ * current key (see key-rotation.ts), so a key can be rotated without losing credentials or documents.
+ */
+export function previousSecretsKeys() {
+  const keys = (process.env.KONTROL_SECRETS_KEY_PREVIOUS ?? "").split(",").map((item) => item.trim()).filter(Boolean);
+  if (isProduction()) for (const key of keys) if (key.length < MIN_SECRET_LENGTH || PLACEHOLDER.test(key)) throw new Error(`KONTROL_SECRETS_KEY_PREVIOUS entries must be unique secrets of at least ${MIN_SECRET_LENGTH} characters`);
+  return keys;
+}
+
 /** Demo authentication is an evaluation convenience and is never honoured in production. */
 export function demoAuthAllowed() {
   return !isProduction() || (isDemoMode() && process.env.KONTROL_ALLOW_DEMO_IN_PRODUCTION === "true");
