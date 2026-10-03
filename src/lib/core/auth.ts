@@ -2,7 +2,7 @@ import "server-only";
 
 import { jwtVerify, SignJWT } from "jose";
 import { authSecret, demoAuthAllowed } from "@/lib/core/config";
-import { consumeRateLimit } from "@/lib/core/rate-limit";
+import { clientKey, consumeRateLimit, consumeSharedRateLimit } from "@/lib/core/rate-limit";
 import { sha256 } from "@/lib/core/integrity";
 import { DEFAULT_TENANT_ID, DEFAULT_USER_ID, getDb } from "@/lib/db";
 
@@ -129,7 +129,11 @@ export async function authenticate(request: Request): Promise<Actor | null> {
 
 export async function requireActor(request: Request, permission: Permission): Promise<Actor> {
   const actor = await authenticate(request);
-  if (!actor) throw new AuthError("Authentication required", 401);
+  if (!actor) {
+    // Failed authentication is limited per client across instances, so a stolen-token or key-guessing run is slowed wherever it lands.
+    if (!(await consumeSharedRateLimit(`authfail:${clientKey(request)}`, 120)).allowed) throw new AuthError("Too many failed attempts", 429);
+    throw new AuthError("Authentication required", 401);
+  }
   if (!consumeRateLimit(`actor:${actor.tenantId}:${actor.userId}`).allowed) throw new AuthError("Rate limit exceeded", 429);
   if (actor.external && !permission.startsWith("audit:")) throw new AuthError("External auditors can only use the audit workspace", 403);
   if (!permissions[actor.role]?.includes(permission)) throw new AuthError(`Role ${actor.role} cannot perform ${permission}`, 403);

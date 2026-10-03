@@ -1,11 +1,14 @@
 import { createHash, randomBytes } from "node:crypto";
 import { assertResolvesPublic, safeFetch } from "@/lib/core/net-guard";
+import { clientKey, consumeSharedRateLimit, tooManyRequests } from "@/lib/core/rate-limit";
 
 export const runtime = "nodejs";
 
 const base64url = (value: Buffer) => value.toString("base64url");
 
 export async function GET(request: Request) {
+  const limit = await consumeSharedRateLimit(`oidc:${clientKey(request)}`, 20);
+  if (!limit.allowed) return tooManyRequests(limit.retryAfterSeconds);
   const issuer = process.env.OIDC_ISSUER?.replace(/\/$/, "");
   const clientId = process.env.OIDC_CLIENT_ID;
   if (!issuer || !clientId) return Response.json({ error: "OIDC is not configured" }, { status: 503 });

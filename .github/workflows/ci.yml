@@ -90,6 +90,7 @@ jobs:
           docker run -d --name kontrol -p 3000:3000 \
             -e KONTROL_AUTH_SECRET="$(openssl rand -hex 32)" \
             -e KONTROL_SIGNING_SECRET="$(openssl rand -hex 32)" \
+            -e KONTROL_SIGNING_KEY="$(openssl genpkey -algorithm ed25519 | base64 -w0)" \
             -e KONTROL_SECRETS_KEY="$(openssl rand -hex 32)" \
             -e KONTROL_BOOTSTRAP_ADMIN_EMAIL=admin@example.org kontrol:ci
           for i in $(seq 1 30); do

@@ -53,8 +53,9 @@ export async function evidenceTrail(tenantId: string, input: { controlCode: stri
     if (!gapsOnly.length) throw userError("Control not found");
   }
   const now = Date.now();
-  const rows = control ? await db.all<EvidenceRow>("SELECT * FROM evidence WHERE tenant_id = ? AND control_id = ? ORDER BY collected_at DESC LIMIT ?", tenantId, control.id, Math.min(200, input.limit ?? 50)) : [];
-  const records = rows.map((row) => describe(row, now));
+  const rows = control ? await db.all<EvidenceRow>("SELECT * FROM evidence WHERE tenant_id = ? AND control_id = ? ORDER BY collected_at DESC LIMIT ?", tenantId, control.id, Math.min(200, input.limit ?? 50) + 1) : [];
+  const cap = Math.min(200, input.limit ?? 50);
+  const records = rows.slice(0, cap).map((row) => describe(row, now));
   const gaps = (await db.all<{ asset_id: string; connector: string; kind: string; detail_json: string; source: string; recorded_at: string }>("SELECT asset_id, connector, kind, detail_json, source, recorded_at FROM evidence_gaps WHERE tenant_id = ? AND control_code = ?", tenantId, input.controlCode)).map((gap) => ({ assetId: gap.asset_id, connector: gap.connector, kind: gap.kind, source: gap.source, recordedAt: gap.recorded_at, detail: JSON.parse(gap.detail_json) as Record<string, unknown> }));
   const failedRuns = connector ? (await db.all<{ target: string; started_at: string; error: string | null }>("SELECT target, started_at, error FROM job_runs WHERE tenant_id = ? AND kind = ? AND status = 'failed' ORDER BY started_at DESC LIMIT 5", tenantId, connector)).map((run) => ({ target: run.target, at: run.started_at, error: run.error })) : [];
 
@@ -71,7 +72,7 @@ export async function evidenceTrail(tenantId: string, input: { controlCode: stri
     }
     return { assetId, outcome: "unknown" as Outcome, since: null, reason: "no evidence has been collected" };
   });
-  return { control: control ? { code: control.code, title: control.title, objective: control.objective, connector } : { code: input.controlCode, title: input.controlCode, objective: "", connector }, current, records, gaps, failedCollections: failedRuns, integrity: { checked: records.length, altered: records.filter((record) => record.integrity === "altered").length } };
+  return { truncated: rows.length > cap, control: control ? { code: control.code, title: control.title, objective: control.objective, connector } : { code: input.controlCode, title: input.controlCode, objective: "", connector }, current, records, gaps, failedCollections: failedRuns, integrity: { checked: records.length, altered: records.filter((record) => record.integrity === "altered").length } };
 }
 
 /** One piece of evidence in full, re-hashed, with the finding it produced and the control it belongs to. */

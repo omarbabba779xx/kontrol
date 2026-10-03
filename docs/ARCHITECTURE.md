@@ -8,7 +8,7 @@ Kontrol is a decision-assurance control plane, not a checklist manager. Its core
 2. The policy engine evaluates the facts against an executable control and opens, updates or closes a finding, in one transaction together with the evidence row and its audit entry.
 3. A durable workflow advances one idempotent step at a time, retries failures with back-off and pauses for human approval. The requester cannot approve their own workflow, and a workflow can only be approved once.
 4. Risk scenarios use a seeded FAIR-inspired Monte Carlo model, so results are reproducible and comparable.
-5. Decisions seal their evidence manifest, rationale and conditions with an HMAC signature.
+5. Decisions seal their evidence manifest, rationale and conditions with an Ed25519 signature (`src/lib/core/signing.ts`); verification needs only the public key.
 6. Every material event is chained to the previous audit hash; the control plane recomputes the chain on demand.
 
 ## Storage

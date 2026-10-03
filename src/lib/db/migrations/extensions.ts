@@ -11,9 +11,10 @@ import { evidenceGaps } from "@/lib/db/migrations/m0011-evidence-gaps";
 import { scoreHistory } from "@/lib/db/migrations/m0012-score-history";
 import { auditAnchors } from "@/lib/db/migrations/m0013-audit-anchors";
 import { oidcBinding } from "@/lib/db/migrations/m0014-oidc-binding";
+import { rateLimits } from "@/lib/db/migrations/m0015-rate-limits";
 import type { Migration } from "@/lib/db/migrations/runner";
 
 /**
  * Migrations after the baseline, in order. Add new ones at the end with the next id; never edit or reorder one that has shipped.
  */
-export const extensions: Migration[] = [identity, scheduling, tasksNotifications, auditWorkspace, thirdParty, riskRegister, aiGovernance, sessionRevocation, workflowExecution, evidenceGaps, scoreHistory, auditAnchors, oidcBinding];
+export const extensions: Migration[] = [identity, scheduling, tasksNotifications, auditWorkspace, thirdParty, riskRegister, aiGovernance, sessionRevocation, workflowExecution, evidenceGaps, scoreHistory, auditAnchors, oidcBinding, rateLimits];

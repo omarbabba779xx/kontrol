@@ -1,5 +1,7 @@
 import "server-only";
 
+import { getDb } from "@/lib/db";
+
 type Bucket = { count: number; resetAt: number };
 
 const WINDOW_MS = 60_000;
@@ -11,8 +13,9 @@ export function rateLimitPerMinute() {
 }
 
 /**
- * Fixed-window limiter keyed per caller. State is per process: behind several instances use a shared
- * limiter at the edge (API gateway, WAF) and treat this one as a last line of defence.
+ * Fixed-window limiter keyed per caller, kept in this process. It is the cheap first line for authenticated traffic: every request of a
+ * signed-in user passes through it without touching the database. It does not span instances; the limits that must hold across
+ * instances (sign-in, unauthenticated endpoints, repeated authentication failures) use `consumeSharedRateLimit`.
  */
 export function consumeRateLimit(key: string, now = Date.now(), limit = rateLimitPerMinute()) {
   const bucket = buckets.get(key);
@@ -28,3 +31,38 @@ export function consumeRateLimit(key: string, now = Date.now(), limit = rateLimi
 export function resetRateLimits() {
   buckets.clear();
 }
+
+/**
+ * Fixed-window limiter shared by every instance through the database: one atomic upsert per call, so two instances cannot both
+ * count the same request as the first. If the database cannot be reached the process-local limiter answers instead; a limiter that
+ * fails open on an outage would be an invitation, one that fails closed would turn an outage into a lockout of everybody.
+ */
+export async function consumeSharedRateLimit(key: string, limit: number, windowMs = WINDOW_MS, now = Date.now()) {
+  const windowStart = Math.floor(now / windowMs) * windowMs;
+  try {
+    const db = (await getDb()).system();
+    const row = await db.get<{ count: number | string }>(
+      "INSERT INTO rate_limits (key, window_start, count) VALUES (?, ?, 1) ON CONFLICT (key) DO UPDATE SET count = CASE WHEN rate_limits.window_start = excluded.window_start THEN rate_limits.count + 1 ELSE 1 END, window_start = excluded.window_start RETURNING count",
+      key, windowStart);
+    const count = Number(row?.count ?? 1);
+    // Old windows are removed now and then rather than on a timer, so there is nothing to schedule.
+    if (Math.random() < 0.01) await db.run("DELETE FROM rate_limits WHERE window_start < ?", now - 3_600_000 - windowMs).catch(() => undefined);
+    return { allowed: count <= limit, remaining: Math.max(0, limit - count), retryAfterSeconds: Math.max(1, Math.ceil((windowStart + windowMs - now) / 1000)) };
+  } catch {
+    return consumeRateLimit(`shared-fallback:${key}`, now, limit);
+  }
+}
+
+/**
+ * Who is calling, for limits on requests that carry no identity. The forwarding header is only believed when the deployment says a
+ * proxy it controls sets it (`KONTROL_TRUSTED_PROXY_HOPS`, the number of proxies in front of the app); the address that proxy appended is
+ * used, not the first one, which the caller can write themselves.
+ */
+export function clientKey(request: Request) {
+  const hops = Number(process.env.KONTROL_TRUSTED_PROXY_HOPS ?? 0);
+  if (!Number.isInteger(hops) || hops < 1) return "direct";
+  const forwarded = (request.headers.get("x-forwarded-for") ?? "").split(",").map((part) => part.trim()).filter(Boolean);
+  return forwarded.length >= hops ? forwarded[forwarded.length - hops].slice(0, 64) : "direct";
+}
+
+export const tooManyRequests = (retryAfterSeconds: number) => Response.json({ error: "Too many requests" }, { status: 429, headers: { "Retry-After": String(retryAfterSeconds) } });

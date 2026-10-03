@@ -30,7 +30,7 @@ flowchart LR
 
 - **Executable controls.** Policies are data: conditions over facts with explained failures (`all` / `any`, typed operators that fail closed). Every evaluation produces SHA-256 hashed evidence and opens, updates or closes a finding atomically.
 - **Tamper-evident ledger.** Every material event joins a per-tenant hash chain. Rows are append-only (triggers on both drivers, privileges on PostgreSQL), chains cannot fork under concurrency, and verification is one call.
-- **Signed decisions.** Decisions seal their evidence manifest, conditions and rationale with an HMAC signature that is verified in constant time.
+- **Signed decisions.** Decisions seal their evidence manifest, conditions and rationale with an Ed25519 signature that anyone can verify with the public key at `/api/signing-key`. The audit chain head can be anchored (`/api/audit/anchor`) and copied outside the database, so removing the newest entries is detectable.
 - **Real multi-tenancy.** On PostgreSQL every tenant table is under *forced* row-level security; a query that forgets its `WHERE` still cannot cross tenants. This is tested against a real PostgreSQL engine.
 - **Human accountability.** Workflows pause for approval; the requester cannot approve their own request and an approval can only happen once. Agents are read-only and advisory.
 - **Standards.** OSCAL 1.1.3 assessment-results export, OIDC with PKCE, FAIR-inspired Monte Carlo risk quantification with reproducible seeds.
@@ -102,7 +102,10 @@ Every setting is documented in [`.env.example`](.env.example). The ones that mat
 
 | Variable | Purpose |
 | --- | --- |
-| `KONTROL_AUTH_SECRET`, `KONTROL_SIGNING_SECRET` | Session and decision signing. **Required in production**, distinct, 32+ characters |
+| `KONTROL_AUTH_SECRET`, `KONTROL_SIGNING_SECRET` | Session signing and the development signing key. **Required in production**, distinct, 32+ characters |
+| `KONTROL_SIGNING_KEY` | Ed25519 private key (PEM, or its base64) that signs decisions, reports and audit anchors. **Required in production**; `npm run keys:signing` makes one |
+| `KONTROL_TRUSTED_PROXY_HOPS` | Proxies in front of the app that append to `X-Forwarded-For`; 0 (default) ignores the header for rate limits |
+| `OIDC_ALLOWED_DOMAINS`, `OIDC_DOMAIN_TENANTS` | Email domains that may create accounts at first SSO sign-in (default organisation, or `domain=tenant_id` pairs). Unset means sign-in by invitation only |
 | `KONTROL_DB_DRIVER`, `POSTGRES_URL` | Storage driver (`sqlite` default, `postgres` for production) |
 | `KONTROL_SEED` | Load the demonstration tenant. **Opt-in in production** (`true` to load it); on by default elsewhere (`false` to skip) |
 | `KONTROL_BOOTSTRAP_ADMIN_EMAIL`, `KONTROL_BOOTSTRAP_TENANT_NAME`, `OIDC_DEFAULT_TENANT_ID` | On an empty database, create the first organisation and its administrator (who then signs in through the identity provider). Without demo data this is how the first person gets in |

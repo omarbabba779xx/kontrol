@@ -5,7 +5,7 @@ import { z } from "zod";
 import { syncPeople } from "@/lib/connectors";
 import { safeEqual } from "@/lib/core/config";
 import { sha256 } from "@/lib/core/integrity";
-import { consumeRateLimit } from "@/lib/core/rate-limit";
+import { consumeSharedRateLimit } from "@/lib/core/rate-limit";
 import { serviceActor } from "@/lib/core/service-actors";
 import { getDb } from "@/lib/db";
 
@@ -68,7 +68,7 @@ export async function ingestReport(input: { source: string; tenantId: string; ti
   if (Buffer.byteLength(input.body) > MAX_BODY_BYTES) throw new IngestError("Payload too large", 413);
   if (!(input.source in SOURCES)) throw new IngestError("Unknown source", 404);
   if (!/^[A-Za-z0-9_-]{3,64}$/.test(input.tenantId)) throw new IngestError("Invalid tenant", 400);
-  if (!consumeRateLimit(`ingest:${input.tenantId}`, Date.now(), 60).allowed) throw new IngestError("Rate limit exceeded", 429);
+  if (!(await consumeSharedRateLimit(`ingest:${input.tenantId}`, 60)).allowed) throw new IngestError("Rate limit exceeded", 429);
 
   // The same response for an unknown tenant and a wrong signature, so tenant ids cannot be probed.
   const valid = verifySignature({ secret: deriveIngestSecret(master, input.tenantId), timestamp: input.timestamp, body: input.body, signature: input.signature });

@@ -80,14 +80,14 @@ A restore is useful only with the original keys: credentials and documents do no
 
 The signing secrets are separate (see below).
 
-## Signatures: what HMAC does and does not give
+## Signatures: what they do and do not give
 
-Decision manifests, evidence-pack manifests, webhook reports and vault records are signed with HMAC-SHA-256 under a server-held secret.
+Decision manifests, evidence-pack manifests, reports and audit anchors are signed with **Ed25519** under `KONTROL_SIGNING_KEY` (required in production; `npm run keys:signing` makes one). The public key is served at `/api/signing-key`, so anyone can verify a signature without trusting this server.
 
-- It proves that **someone holding the secret** produced or approved the content, and that it has not changed since. An auditor cannot verify it alone: they need the organisation to confirm it or recompute it with the key.
-- It is **not a non-repudiable signature**: anyone with the secret can forge one, including the operator. The tamper evidence that does not depend on the secret is the hash-chained audit log and the SHA-256 of each document, which anyone can recompute.
-- Rotating `KONTROL_SIGNING_SECRET` makes earlier signatures unverifiable by the application; keep the old secret to verify history, or record the manifest fingerprints in an external system.
-- For non-repudiation use asymmetric signatures (a KMS or HSM key) in front of the manifest fingerprint; that is not built in.
+- A signature proves that **the holder of the private key** produced or approved the content and that it has not changed since. A third party needs only the public key. Signatures made before this change are hex HMACs under `KONTROL_SIGNING_SECRET`; they stay verifiable by the application but not by third parties.
+- Keep the private key out of the database host and out of reach of the people who administer the database; an operator who holds it can still sign. For stronger separation, generate the key in a KMS or HSM and export only what the process needs. The tamper evidence that does not depend on any key is the hash-chained audit log and the SHA-256 of each document.
+- Rotating the key leaves earlier signatures verifiable with the earlier public key: keep every public key you have published, and the `keyFingerprint` carried by anchors tells which one signed.
+- **Audit anchors** close the gap the hash chain leaves: a chain that has had its newest entries (or all of them) removed still verifies. `POST /api/audit/anchor` signs the chain head (entry count and head hash); copy the result to storage the database owner cannot rewrite (object storage with a retention lock, a transparency log, your auditor). `POST /api/audit/anchor` with `{ "anchors": [...], "publicKeyPem": "..." }` checks the live chain against the copies you hold. Take an anchor on a schedule that matches how much history you could not afford to lose silently.
 
 ## Logs, metrics and alerts
 

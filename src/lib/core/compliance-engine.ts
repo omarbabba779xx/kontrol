@@ -170,8 +170,8 @@ export async function complianceSnapshot(tenantId: string) {
   const context = await readinessContext(tenantId, documents, scopes);
   const assessments = scores.map((item) => assess(item, states, context, overrides));
 
-  const exceptions = await db.all<ExceptionRow>("SELECT * FROM compliance_exceptions WHERE tenant_id = ? ORDER BY created_at DESC LIMIT 200", tenantId);
-  const policies = await db.all<PolicyRow>("SELECT * FROM policy_register WHERE tenant_id = ? ORDER BY updated_at DESC LIMIT 200", tenantId);
+  const exceptions = await db.all<ExceptionRow>("SELECT * FROM compliance_exceptions WHERE tenant_id = ? ORDER BY created_at DESC LIMIT 201", tenantId);
+  const policies = await db.all<PolicyRow>("SELECT * FROM policy_register WHERE tenant_id = ? ORDER BY updated_at DESC LIMIT 201", tenantId);
   const trendRows = await db.all<{ framework_id: string; score: number; calculated_at: string; readiness: string | null; changes_json: string | null }>("SELECT framework_id, score, calculated_at, readiness, changes_json FROM compliance_snapshots WHERE tenant_id = ? ORDER BY calculated_at DESC LIMIT 400", tenantId);
   const trend = trendRows.map((row) => ({ framework_id: row.framework_id, score: row.score, calculated_at: row.calculated_at, readiness: row.readiness, changes: row.changes_json ? (JSON.parse(row.changes_json) as { scoreFrom: number | null; scoreTo: number; levelFrom: string | null; levelTo: string; blockers: string[]; controls: Array<{ code: string; title: string; from: string; to: string }> }) : null }));
   const now = new Date().toISOString();
@@ -219,8 +219,10 @@ export async function complianceSnapshot(tenantId: string) {
     roadmap: buildRoadmap(adopted, states, scopes, overrides).slice(0, 25),
     mapping: FRAMEWORKS.map((framework) => ({ frameworkId: framework.id, ...mappingStats(framework.id, reviews) })),
     overlap: overlapMatrix(),
-    exceptions: exceptions.map((row) => ({ ...row, expired: row.status === "approved" && row.expires_at <= now })),
-    policies: policies.map((row) => ({ ...row, ucCodes: JSON.parse(row.uc_codes_json) as string[], overdue: row.status === "approved" && row.next_review !== null && row.next_review < now })),
+    // One more row than shown is read, so a list that was cut says so instead of looking complete.
+    truncated: { exceptions: exceptions.length > 200, policies: policies.length > 200 },
+    exceptions: exceptions.slice(0, 200).map((row) => ({ ...row, expired: row.status === "approved" && row.expires_at <= now })),
+    policies: policies.slice(0, 200).map((row) => ({ ...row, ucCodes: JSON.parse(row.uc_codes_json) as string[], overdue: row.status === "approved" && row.next_review !== null && row.next_review < now })),
     trend: trend.reverse(),
     evidence: [...documents].sort((a, b) => b.uploaded_at.localeCompare(a.uploaded_at)).slice(0, 300),
     policy: { requireCountersignature: requireCountersignature() },

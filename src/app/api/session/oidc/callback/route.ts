@@ -2,6 +2,7 @@ import { createRemoteJWKSet, customFetch, jwtVerify } from "jose";
 import { issueSessionToken } from "@/lib/core/auth";
 import { assertResolvesPublic, safeFetch } from "@/lib/core/net-guard";
 import { signInWithClaims } from "@/lib/core/oidc";
+import { clientKey, consumeSharedRateLimit } from "@/lib/core/rate-limit";
 
 export const runtime = "nodejs";
 
@@ -11,6 +12,8 @@ const fail = (error: string, status: number) => Response.json({ error }, { statu
 
 export async function GET(request: Request) {
   try {
+    const limit = await consumeSharedRateLimit(`oidc:${clientKey(request)}`, 20);
+    if (!limit.allowed) return fail("Too many requests", 429);
     const url = new URL(request.url);
     const code = url.searchParams.get("code");
     const state = url.searchParams.get("state");
