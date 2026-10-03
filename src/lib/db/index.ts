@@ -25,7 +25,7 @@ async function open(): Promise<Db> {
   if (databaseDriver() === "postgres") {
     const url = process.env.POSTGRES_URL;
     if (!url) throw new Error("POSTGRES_URL is required when KONTROL_DB_DRIVER=postgres");
-    db = await createPostgresDb(url, { max: Number(process.env.KONTROL_DB_POOL ?? 10) });
+    db = await createPostgresDb(url, { max: Number(process.env.KONTROL_DB_POOL ?? 10), migrationUrl: process.env.POSTGRES_MIGRATION_URL, production: process.env.NODE_ENV === "production" });
   } else {
     db = createSqliteDb(process.env.KONTROL_DATABASE_PATH ?? join(process.cwd(), ".data", "kontrol.db"));
   }
