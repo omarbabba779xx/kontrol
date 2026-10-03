@@ -157,7 +157,8 @@ function Connections({ snapshot, act, pending }: { snapshot: Snapshot; act: Act;
   });
 
   function saveSchedule(kind: string, minutes: number) {
-    const existing = schedules.find((item) => item.kind === kind && (!TARGETED[kind] || item.target === targets[kind] || !targets[kind]));
+    const typedTarget = normalizeTarget(targets[kind] ?? "");
+    const existing = schedules.find((item) => item.kind === kind && (!TARGETED[kind] || item.target === typedTarget || !typedTarget));
     if (minutes === 0) { if (existing) post("/api/schedules", { action: "save", kind, params: paramsFor(kind, existing.target), intervalMinutes: existing.intervalMinutes, enabled: false }, "Schedule turned off"); return; }
     const target = normalizeTarget(targets[kind] ?? existing?.target ?? "");
     if (TARGETED[kind] && !target.includes("/")) { setMessage(`Enter the target as ${TARGETED[kind]} first`); return; }
@@ -173,7 +174,10 @@ function Connections({ snapshot, act, pending }: { snapshot: Snapshot; act: Act;
           const spec = CONNECTORS[item.kind];
           if (!spec) return null;
           const mine = schedules.filter((entry) => entry.kind === item.kind);
-          const current = mine[0];
+          // For connectors with a target, the schedule shown is the one for the target typed in the field; a new target has none yet.
+          const typed = TARGETED[item.kind] ? normalizeTarget(targets[item.kind] ?? "") : "";
+          const current = typed ? mine.find((entry) => entry.target === typed) : mine[0];
+          const newTarget = TARGETED[item.kind] && typed !== "" && !current;
           const test = tests[item.kind];
           return (
             <div key={item.kind} className="border border-[#cbc7bd] bg-[#f8f6f0] p-4">
@@ -198,6 +202,7 @@ function Connections({ snapshot, act, pending }: { snapshot: Snapshot; act: Act;
                   <select aria-label={`${spec.title} schedule`} value={current?.enabled ? current.intervalMinutes : 0} disabled={busy} onChange={(event) => saveSchedule(item.kind, Number(event.target.value))} className={select}>{INTERVALS.map(([minutes, label]) => <option key={minutes} value={minutes}>{label}</option>)}</select>
                   {current ? <Button type="button" variant="outline" disabled={busy} onClick={() => post("/api/schedules", { action: "run_now", id: current.id }, "Collection finished")} className="h-8 rounded-none border-[#171713] bg-transparent text-[9px]">Run now</Button> : null}
                 </div>
+                {newTarget ? <p className="mt-2 text-[9px] text-[#55534b]">New target: choose an interval above to save it, then use Run now.</p> : null}
                 {current ? <p className={cn("mt-2 font-mono text-[8px]", current.failing ? "font-bold text-[#b8322a]" : "text-[#5f5d56]")}>{current.failing ? `FAILING (${current.consecutiveFailures} in a row): ${current.lastError}` : `${current.lastStatus ?? "pending"} · last ${day(current.lastRunAt)} · next ${current.enabled ? current.nextRunAt.slice(0, 16).replace("T", " ") : "off"}`}</p> : null}
               </div>
             </div>);
