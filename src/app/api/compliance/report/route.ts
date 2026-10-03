@@ -11,8 +11,18 @@ export async function GET(request: Request) {
   try {
     const actor = await requireActor(request, "oscal:export");
     const framework = new URL(request.url).searchParams.get("framework");
-    if (framework && !FRAMEWORK_BY_ID.has(framework as FrameworkId)) return Response.json({ error: `Framework ${framework} not found` }, { status: 404 });
+    if (framework && !FRAMEWORK_BY_ID.has(framework as FrameworkId))
+      return Response.json({ error: `Framework ${framework} not found` }, { status: 404 });
     const { bytes, meta } = await buildReadinessReport(actor, { frameworkId: (framework as FrameworkId | null) ?? undefined });
-    return new Response(Buffer.from(bytes), { headers: { "Content-Type": "application/pdf", "Content-Disposition": `attachment; filename="audit-readiness${framework ? `-${framework}` : ""}.pdf"`, "X-Report-Fingerprint": meta.fingerprint, "Cache-Control": "no-store" } });
-  } catch (error) { return apiError(error); }
+    return new Response(Buffer.from(bytes), {
+      headers: {
+        "Content-Type": "application/pdf",
+        "Content-Disposition": `attachment; filename="audit-readiness${framework ? `-${framework}` : ""}.pdf"`,
+        "X-Report-Fingerprint": meta.fingerprint,
+        "Cache-Control": "no-store",
+      },
+    });
+  } catch (error) {
+    return apiError(error);
+  }
 }

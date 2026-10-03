@@ -25,7 +25,11 @@ export function consumeRateLimit(key: string, now = Date.now(), limit = rateLimi
     return { allowed: true, remaining: limit - 1, retryAfterSeconds: 0 };
   }
   bucket.count += 1;
-  return { allowed: bucket.count <= limit, remaining: Math.max(0, limit - bucket.count), retryAfterSeconds: Math.ceil((bucket.resetAt - now) / 1000) };
+  return {
+    allowed: bucket.count <= limit,
+    remaining: Math.max(0, limit - bucket.count),
+    retryAfterSeconds: Math.ceil((bucket.resetAt - now) / 1000),
+  };
 }
 
 export function resetRateLimits() {
@@ -43,11 +47,18 @@ export async function consumeSharedRateLimit(key: string, limit: number, windowM
     const db = (await getDb()).system();
     const row = await db.get<{ count: number | string }>(
       "INSERT INTO rate_limits (key, window_start, count) VALUES (?, ?, 1) ON CONFLICT (key) DO UPDATE SET count = CASE WHEN rate_limits.window_start = excluded.window_start THEN rate_limits.count + 1 ELSE 1 END, window_start = excluded.window_start RETURNING count",
-      key, windowStart);
+      key,
+      windowStart,
+    );
     const count = Number(row?.count ?? 1);
     // Old windows are removed now and then rather than on a timer, so there is nothing to schedule.
-    if (Math.random() < 0.01) await db.run("DELETE FROM rate_limits WHERE window_start < ?", now - 3_600_000 - windowMs).catch(() => undefined);
-    return { allowed: count <= limit, remaining: Math.max(0, limit - count), retryAfterSeconds: Math.max(1, Math.ceil((windowStart + windowMs - now) / 1000)) };
+    if (Math.random() < 0.01)
+      await db.run("DELETE FROM rate_limits WHERE window_start < ?", now - 3_600_000 - windowMs).catch(() => undefined);
+    return {
+      allowed: count <= limit,
+      remaining: Math.max(0, limit - count),
+      retryAfterSeconds: Math.max(1, Math.ceil((windowStart + windowMs - now) / 1000)),
+    };
   } catch {
     return consumeRateLimit(`shared-fallback:${key}`, now, limit);
   }
@@ -61,8 +72,12 @@ export async function consumeSharedRateLimit(key: string, limit: number, windowM
 export function clientKey(request: Request) {
   const hops = Number(process.env.KONTROL_TRUSTED_PROXY_HOPS ?? 0);
   if (!Number.isInteger(hops) || hops < 1) return "direct";
-  const forwarded = (request.headers.get("x-forwarded-for") ?? "").split(",").map((part) => part.trim()).filter(Boolean);
+  const forwarded = (request.headers.get("x-forwarded-for") ?? "")
+    .split(",")
+    .map((part) => part.trim())
+    .filter(Boolean);
   return forwarded.length >= hops ? forwarded[forwarded.length - hops].slice(0, 64) : "direct";
 }
 
-export const tooManyRequests = (retryAfterSeconds: number) => Response.json({ error: "Too many requests" }, { status: 429, headers: { "Retry-After": String(retryAfterSeconds) } });
+export const tooManyRequests = (retryAfterSeconds: number) =>
+  Response.json({ error: "Too many requests" }, { status: 429, headers: { "Retry-After": String(retryAfterSeconds) } });

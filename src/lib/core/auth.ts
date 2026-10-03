@@ -28,9 +28,55 @@ export type Permission =
   | "ai:manage";
 
 const permissions: Record<Role, Permission[]> = {
-  admin: ["graph:read", "evidence:read", "evidence:write", "controls:evaluate", "risks:simulate", "decisions:approve", "connectors:sync", "regulations:ingest", "oscal:export", "agents:run", "users:manage", "credentials:manage", "audit:read", "audit:comment", "audit:manage", "vendors:manage", "risks:manage", "ai:manage"],
-  risk_owner: ["graph:read", "evidence:read", "risks:simulate", "decisions:approve", "oscal:export", "agents:run", "audit:read", "audit:comment", "audit:manage", "vendors:manage", "risks:manage", "ai:manage"],
-  control_owner: ["graph:read", "evidence:read", "evidence:write", "controls:evaluate", "connectors:sync", "oscal:export", "agents:run", "audit:read", "audit:comment", "audit:manage", "vendors:manage", "risks:manage", "ai:manage"],
+  admin: [
+    "graph:read",
+    "evidence:read",
+    "evidence:write",
+    "controls:evaluate",
+    "risks:simulate",
+    "decisions:approve",
+    "connectors:sync",
+    "regulations:ingest",
+    "oscal:export",
+    "agents:run",
+    "users:manage",
+    "credentials:manage",
+    "audit:read",
+    "audit:comment",
+    "audit:manage",
+    "vendors:manage",
+    "risks:manage",
+    "ai:manage",
+  ],
+  risk_owner: [
+    "graph:read",
+    "evidence:read",
+    "risks:simulate",
+    "decisions:approve",
+    "oscal:export",
+    "agents:run",
+    "audit:read",
+    "audit:comment",
+    "audit:manage",
+    "vendors:manage",
+    "risks:manage",
+    "ai:manage",
+  ],
+  control_owner: [
+    "graph:read",
+    "evidence:read",
+    "evidence:write",
+    "controls:evaluate",
+    "connectors:sync",
+    "oscal:export",
+    "agents:run",
+    "audit:read",
+    "audit:comment",
+    "audit:manage",
+    "vendors:manage",
+    "risks:manage",
+    "ai:manage",
+  ],
   auditor: ["graph:read", "evidence:read", "oscal:export", "agents:run", "audit:read", "audit:comment"],
   viewer: ["graph:read", "evidence:read", "audit:read"],
 };
@@ -59,7 +105,11 @@ export function isSameOrigin(request: Request) {
   const origin = request.headers.get("origin");
   if (!origin) return true;
   const host = request.headers.get("x-forwarded-host") ?? request.headers.get("host");
-  try { return new URL(origin).host === host; } catch { return false; }
+  try {
+    return new URL(origin).host === host;
+  } catch {
+    return false;
+  }
 }
 
 export async function issueSessionToken(actor: Actor) {
@@ -74,7 +124,14 @@ export async function issueSessionToken(actor: Actor) {
 }
 
 async function demoActor(): Promise<Actor> {
-  const row = (await (await getDb()).system().get<{ id: string; tenant_id: string; email: string; name: string; role: Role }>("SELECT id, tenant_id, email, name, role FROM users WHERE id = ?", DEFAULT_USER_ID))!;
+  const row = (await (
+    await getDb()
+  )
+    .system()
+    .get<{ id: string; tenant_id: string; email: string; name: string; role: Role }>(
+      "SELECT id, tenant_id, email, name, role FROM users WHERE id = ?",
+      DEFAULT_USER_ID,
+    ))!;
   return { userId: row.id, tenantId: row.tenant_id, email: row.email, name: row.name, role: row.role };
 }
 
@@ -84,12 +141,36 @@ const KEY_TOUCH_MS = 60_000;
 /** API keys act as their owner with the key's role, which is never above the owner's and never administrator. */
 async function actorFromApiKey(token: string): Promise<Actor | null> {
   const db = (await getDb()).system();
-  const row = await db.get<{ id: string; tenant_id: string; user_id: string; role: Role; expires_at: string | null; revoked_at: string | null; last_used_at: string | null; email: string; name: string; status: string; external: number }>(
-    "SELECT k.id, k.tenant_id, k.user_id, k.role, k.expires_at, k.revoked_at, k.last_used_at, u.email, u.name, u.status, u.external FROM api_keys k JOIN users u ON u.id = k.user_id AND u.tenant_id = k.tenant_id WHERE k.key_hash = ?", sha256(token));
+  const row = await db.get<{
+    id: string;
+    tenant_id: string;
+    user_id: string;
+    role: Role;
+    expires_at: string | null;
+    revoked_at: string | null;
+    last_used_at: string | null;
+    email: string;
+    name: string;
+    status: string;
+    external: number;
+  }>(
+    "SELECT k.id, k.tenant_id, k.user_id, k.role, k.expires_at, k.revoked_at, k.last_used_at, u.email, u.name, u.status, u.external FROM api_keys k JOIN users u ON u.id = k.user_id AND u.tenant_id = k.tenant_id WHERE k.key_hash = ?",
+    sha256(token),
+  );
   const now = new Date().toISOString();
-  if (!row || row.revoked_at || row.status !== "active" || (row.expires_at && row.expires_at <= now) || !roles.includes(row.role)) return null;
-  if (!row.last_used_at || Date.parse(row.last_used_at) < Date.now() - KEY_TOUCH_MS) await db.run("UPDATE api_keys SET last_used_at = ? WHERE id = ?", now, row.id);
-  return { apiKeyId: row.id, userId: row.user_id, tenantId: row.tenant_id, email: row.email, name: row.name, role: row.role, external: Number(row.external) === 1 };
+  if (!row || row.revoked_at || row.status !== "active" || (row.expires_at && row.expires_at <= now) || !roles.includes(row.role))
+    return null;
+  if (!row.last_used_at || Date.parse(row.last_used_at) < Date.now() - KEY_TOUCH_MS)
+    await db.run("UPDATE api_keys SET last_used_at = ? WHERE id = ?", now, row.id);
+  return {
+    apiKeyId: row.id,
+    userId: row.user_id,
+    tenantId: row.tenant_id,
+    email: row.email,
+    name: row.name,
+    role: row.role,
+    external: Number(row.external) === 1,
+  };
 }
 
 /**
@@ -114,10 +195,25 @@ export async function authenticate(request: Request): Promise<Actor | null> {
       if (!payload.sub || !payload.tenantId || !roles.includes(payload.role as Role)) return null;
       // The account in the database is authoritative: a disabled user, a revoked session or a changed role takes effect on the next
       // request, not when the token expires. The role claim in the token is informational only.
-      const account = await (await getDb()).system().get<{ status: string; external: number; role: string; sessions_valid_after: string | null }>("SELECT status, external, role, sessions_valid_after FROM users WHERE id = ? AND tenant_id = ?", payload.sub, String(payload.tenantId));
+      const account = await (
+        await getDb()
+      )
+        .system()
+        .get<{ status: string; external: number; role: string; sessions_valid_after: string | null }>(
+          "SELECT status, external, role, sessions_valid_after FROM users WHERE id = ? AND tenant_id = ?",
+          payload.sub,
+          String(payload.tenantId),
+        );
       if (!account || account.status !== "active" || !roles.includes(account.role as Role)) return null;
       if (account.sessions_valid_after && (payload.iat ?? 0) <= Math.floor(Date.parse(account.sessions_valid_after) / 1000)) return null;
-      return { userId: payload.sub, tenantId: String(payload.tenantId), email: String(payload.email ?? ""), name: String(payload.name ?? ""), role: effectiveRole(payload.role as Role, account.role as Role), external: Number(account.external) === 1 };
+      return {
+        userId: payload.sub,
+        tenantId: String(payload.tenantId),
+        email: String(payload.email ?? ""),
+        name: String(payload.name ?? ""),
+        role: effectiveRole(payload.role as Role, account.role as Role),
+        external: Number(account.external) === 1,
+      };
     } catch {
       return null;
     }
@@ -131,7 +227,8 @@ export async function requireActor(request: Request, permission: Permission): Pr
   const actor = await authenticate(request);
   if (!actor) {
     // Failed authentication is limited per client across instances, so a stolen-token or key-guessing run is slowed wherever it lands.
-    if (!(await consumeSharedRateLimit(`authfail:${clientKey(request)}`, 120)).allowed) throw new AuthError("Too many failed attempts", 429);
+    if (!(await consumeSharedRateLimit(`authfail:${clientKey(request)}`, 120)).allowed)
+      throw new AuthError("Too many failed attempts", 429);
     throw new AuthError("Authentication required", 401);
   }
   if (!consumeRateLimit(`actor:${actor.tenantId}:${actor.userId}`).allowed) throw new AuthError("Rate limit exceeded", 429);
@@ -145,7 +242,12 @@ export function assertTenant(actor: Actor, tenantId: string) {
 }
 
 export class AuthError extends Error {
-  constructor(message: string, public status: number) { super(message); }
+  constructor(
+    message: string,
+    public status: number,
+  ) {
+    super(message);
+  }
 }
 
 export function authErrorResponse(error: unknown) {

@@ -27,7 +27,11 @@ export function sealBytes(plain: Buffer, aad: string) {
   return Buffer.concat([MAGIC, Buffer.from(fingerprint(material)), iv, cipher.getAuthTag(), body]);
 }
 
-export type Opened = { bytes: Buffer; /** Written before encryption existed. */ legacy: boolean; /** Sealed with a key other than the current one. */ needsRekey: boolean };
+export type Opened = {
+  bytes: Buffer;
+  /** Written before encryption existed. */ legacy: boolean;
+  /** Sealed with a key other than the current one. */ needsRekey: boolean;
+};
 
 export function openBytes(file: Buffer, aad: string): Opened {
   if (file.length < MAGIC.length || !file.subarray(0, MAGIC.length).equals(MAGIC)) return { bytes: file, legacy: true, needsRekey: true };
@@ -36,10 +40,18 @@ export function openBytes(file: Buffer, aad: string): Opened {
   const iv = file.subarray(MAGIC.length + ID_LENGTH, MAGIC.length + ID_LENGTH + 12);
   const tag = file.subarray(MAGIC.length + ID_LENGTH + 12, HEADER);
   const candidates = [secretsKey(), ...previousSecretsKeys()].filter((material) => fingerprint(material) === id);
-  if (!candidates.length) throw new Error(`Vault file was sealed with a key (${id}) that is not configured: add it to KONTROL_SECRETS_KEY_PREVIOUS`);
+  if (!candidates.length)
+    throw new Error(`Vault file was sealed with a key (${id}) that is not configured: add it to KONTROL_SECRETS_KEY_PREVIOUS`);
   const decipher = createDecipheriv("aes-256-gcm", derive(candidates[0]), iv);
   decipher.setAAD(Buffer.from(aad));
   decipher.setAuthTag(tag);
-  try { return { bytes: Buffer.concat([decipher.update(file.subarray(HEADER)), decipher.final()]), legacy: false, needsRekey: id !== fingerprint(secretsKey()) }; }
-  catch { throw new Error("Vault file failed authentication: it was altered, or moved to another tenant or document"); }
+  try {
+    return {
+      bytes: Buffer.concat([decipher.update(file.subarray(HEADER)), decipher.final()]),
+      legacy: false,
+      needsRekey: id !== fingerprint(secretsKey()),
+    };
+  } catch {
+    throw new Error("Vault file failed authentication: it was altered, or moved to another tenant or document");
+  }
 }

@@ -12,5 +12,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ con
     const { connector } = await params;
     if (!(CREDENTIAL_KINDS as string[]).includes(connector)) return Response.json({ error: "Unsupported connector" }, { status: 404 });
     return Response.json(await testConnection(actor, connector as CredentialKind));
-  } catch (error) { return apiError(error); }
+  } catch (error) {
+    return apiError(error);
+  }
 }

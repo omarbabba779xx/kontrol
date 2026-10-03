@@ -1,0 +1,4 @@
+src/lib/db/ddl.generated.ts
+src/lib/frameworks/
+.next/
+node_modules/

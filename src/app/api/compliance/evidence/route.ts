@@ -20,7 +20,15 @@ export async function POST(request: Request) {
     const form = await request.formData();
     const file = form.get("file");
     if (!(file instanceof File) || file.size === 0) return Response.json({ error: "A non-empty file is required" }, { status: 400 });
-    const fields = fieldsSchema.parse({ ucCode: form.get("ucCode"), title: form.get("title"), kind: form.get("kind"), validUntil: form.get("validUntil"), note: form.get("note") ?? "" });
+    const fields = fieldsSchema.parse({
+      ucCode: form.get("ucCode"),
+      title: form.get("title"),
+      kind: form.get("kind"),
+      validUntil: form.get("validUntil"),
+      note: form.get("note") ?? "",
+    });
     return Response.json(await attachEvidence(actor, { ...fields, file }), { status: 201 });
-  } catch (error) { return apiError(error); }
+  } catch (error) {
+    return apiError(error);
+  }
 }

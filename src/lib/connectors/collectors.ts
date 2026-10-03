@@ -65,7 +65,15 @@ export async function collectGitHub(api: GitHubApi, owner: string, repository: s
           requireSignedCommits: list.some((rule) => rule.type === "required_signatures"),
         };
       } else {
-        protection = { enabled: false, source: "none", requiredReviews: 0, enforceAdmins: false, dismissStaleReviews: false, requireCodeOwnerReviews: false, requireSignedCommits: false };
+        protection = {
+          enabled: false,
+          source: "none",
+          requiredReviews: 0,
+          enforceAdmins: false,
+          dismissStaleReviews: false,
+          requireCodeOwnerReviews: false,
+          requireSignedCommits: false,
+        };
       }
     }
     // Rulesets unreadable: protection stays unknown (null) rather than being reported as absent.
@@ -74,7 +82,12 @@ export async function collectGitHub(api: GitHubApi, owner: string, repository: s
   // 204 = enabled. GitHub also answers 404 when the caller may not see the setting, so 404 only means
   // "disabled" when the message says so; every other answer (401, 403, plain 404) is unknown.
   const alerts = await api(`${base}/vulnerability-alerts`);
-  const vulnerabilityAlertsEnabled = alerts.status === 204 ? true : alerts.status === 404 && /alerts are disabled/i.test(text(record(alerts.body).message) ?? "") ? false : null;
+  const vulnerabilityAlertsEnabled =
+    alerts.status === 204
+      ? true
+      : alerts.status === 404 && /alerts are disabled/i.test(text(record(alerts.body).message) ?? "")
+        ? false
+        : null;
 
   let twoFactorRequired: boolean | null = null;
   const isOrganization = record(data.owner).type === "Organization";
@@ -91,7 +104,11 @@ export async function collectGitHub(api: GitHubApi, owner: string, repository: s
     visibility: text(data.visibility),
     archived: data.archived === true,
     branchProtection: protection,
-    security: { secretScanning: status("secret_scanning"), pushProtection: status("secret_scanning_push_protection"), dependabotSecurityUpdates: status("dependabot_security_updates") },
+    security: {
+      secretScanning: status("secret_scanning"),
+      pushProtection: status("secret_scanning_push_protection"),
+      dependabotSecurityUpdates: status("dependabot_security_updates"),
+    },
     vulnerabilityAlertsEnabled,
     org: { isOrganization, twoFactorRequired },
   };
@@ -102,7 +119,8 @@ export async function collectGitHub(api: GitHubApi, owner: string, repository: s
 type Sender = { send(command: never): Promise<unknown> };
 export type AwsClients = { iam: Sender; s3: Sender; config: Sender; cloudtrail: Sender };
 
-const errorName = (error: unknown) => (error && typeof error === "object" && "name" in error ? String((error as { name: unknown }).name) : "");
+const errorName = (error: unknown) =>
+  error && typeof error === "object" && "name" in error ? String((error as { name: unknown }).name) : "";
 const call = <T>(client: Sender, command: unknown) => client.send(command as never) as Promise<T>;
 const MAX_BUCKETS = 300;
 
@@ -112,22 +130,56 @@ export async function collectAws(clients: AwsClients, region: string): Promise<F
   try {
     const summary = await call<{ SummaryMap?: Record<string, number> }>(clients.iam, new GetAccountSummaryCommand({}));
     const map = summary.SummaryMap ?? {};
-    if (typeof map.AccountMFAEnabled === "number") facts.root = { mfaEnabled: map.AccountMFAEnabled === 1, accessKeysPresent: map.AccountAccessKeysPresent ?? 0, users: map.Users ?? null, mfaDevices: map.MFADevices ?? null };
-  } catch { /* leave null */ }
-
-  try {
-    const policy = (await call<{ PasswordPolicy?: Record<string, unknown> }>(clients.iam, new GetAccountPasswordPolicyCommand({}))).PasswordPolicy ?? {};
-    facts.passwordPolicy = { exists: true, minimumLength: Number(policy.MinimumPasswordLength ?? 0), reusePrevention: Number(policy.PasswordReusePrevention ?? 0), maxPasswordAge: Number(policy.MaxPasswordAge ?? 0), requireSymbols: policy.RequireSymbols === true, requireNumbers: policy.RequireNumbers === true };
-  } catch (error) {
-    if (errorName(error) === "NoSuchEntityException") facts.passwordPolicy = { exists: false, minimumLength: 0, reusePrevention: 0, maxPasswordAge: 0, requireSymbols: false, requireNumbers: false };
+    if (typeof map.AccountMFAEnabled === "number")
+      facts.root = {
+        mfaEnabled: map.AccountMFAEnabled === 1,
+        accessKeysPresent: map.AccountAccessKeysPresent ?? 0,
+        users: map.Users ?? null,
+        mfaDevices: map.MFADevices ?? null,
+      };
+  } catch {
+    /* leave null */
   }
 
   try {
-    const buckets = ((await call<{ Buckets?: Array<{ Name?: string }> }>(clients.s3, new ListBucketsCommand({}))).Buckets ?? []).slice(0, MAX_BUCKETS);
-    let without = 0, unchecked = 0;
+    const policy =
+      (await call<{ PasswordPolicy?: Record<string, unknown> }>(clients.iam, new GetAccountPasswordPolicyCommand({}))).PasswordPolicy ?? {};
+    facts.passwordPolicy = {
+      exists: true,
+      minimumLength: Number(policy.MinimumPasswordLength ?? 0),
+      reusePrevention: Number(policy.PasswordReusePrevention ?? 0),
+      maxPasswordAge: Number(policy.MaxPasswordAge ?? 0),
+      requireSymbols: policy.RequireSymbols === true,
+      requireNumbers: policy.RequireNumbers === true,
+    };
+  } catch (error) {
+    if (errorName(error) === "NoSuchEntityException")
+      facts.passwordPolicy = {
+        exists: false,
+        minimumLength: 0,
+        reusePrevention: 0,
+        maxPasswordAge: 0,
+        requireSymbols: false,
+        requireNumbers: false,
+      };
+  }
+
+  try {
+    const buckets = ((await call<{ Buckets?: Array<{ Name?: string }> }>(clients.s3, new ListBucketsCommand({}))).Buckets ?? []).slice(
+      0,
+      MAX_BUCKETS,
+    );
+    let without = 0,
+      unchecked = 0;
     for (const bucket of buckets) {
       try {
-        const block = (await call<{ PublicAccessBlockConfiguration?: Record<string, boolean> }>(clients.s3, new GetPublicAccessBlockCommand({ Bucket: bucket.Name }))).PublicAccessBlockConfiguration ?? {};
+        const block =
+          (
+            await call<{ PublicAccessBlockConfiguration?: Record<string, boolean> }>(
+              clients.s3,
+              new GetPublicAccessBlockCommand({ Bucket: bucket.Name }),
+            )
+          ).PublicAccessBlockConfiguration ?? {};
         if (!(block.BlockPublicAcls && block.IgnorePublicAcls && block.BlockPublicPolicy && block.RestrictPublicBuckets)) without += 1;
       } catch (error) {
         if (errorName(error) === "NoSuchPublicAccessBlockConfiguration") without += 1;
@@ -135,22 +187,54 @@ export async function collectAws(clients: AwsClients, region: string): Promise<F
       }
     }
     facts.s3 = { buckets: buckets.length, withoutPublicAccessBlock: unchecked === 0 ? without : null, unchecked };
-  } catch { /* leave null */ }
+  } catch {
+    /* leave null */
+  }
 
   try {
-    const summary = (await call<{ ComplianceSummary?: { CompliantResourceCount?: { CappedCount?: number }; NonCompliantResourceCount?: { CappedCount?: number } } }>(clients.config, new GetComplianceSummaryByConfigRuleCommand({}))).ComplianceSummary;
-    if (summary) facts.config = { compliantResources: summary.CompliantResourceCount?.CappedCount ?? 0, nonCompliantResources: summary.NonCompliantResourceCount?.CappedCount ?? 0 };
-  } catch { /* AWS Config not enabled or not permitted */ }
+    const summary = (
+      await call<{
+        ComplianceSummary?: { CompliantResourceCount?: { CappedCount?: number }; NonCompliantResourceCount?: { CappedCount?: number } };
+      }>(clients.config, new GetComplianceSummaryByConfigRuleCommand({}))
+    ).ComplianceSummary;
+    if (summary)
+      facts.config = {
+        compliantResources: summary.CompliantResourceCount?.CappedCount ?? 0,
+        nonCompliantResources: summary.NonCompliantResourceCount?.CappedCount ?? 0,
+      };
+  } catch {
+    /* AWS Config not enabled or not permitted */
+  }
 
   try {
-    const trails = (await call<{ trailList?: Array<{ Name?: string; TrailARN?: string; IsMultiRegionTrail?: boolean; LogFileValidationEnabled?: boolean }> }>(clients.cloudtrail, new DescribeTrailsCommand({}))).trailList ?? [];
+    const trails =
+      (
+        await call<{
+          trailList?: Array<{ Name?: string; TrailARN?: string; IsMultiRegionTrail?: boolean; LogFileValidationEnabled?: boolean }>;
+        }>(clients.cloudtrail, new DescribeTrailsCommand({}))
+      ).trailList ?? [];
     const multi = trails.filter((trail) => trail.IsMultiRegionTrail);
     let logging = false;
     for (const trail of multi) {
-      try { if ((await call<{ IsLogging?: boolean }>(clients.cloudtrail, new GetTrailStatusCommand({ Name: trail.TrailARN ?? trail.Name }))).IsLogging) logging = true; } catch { /* status unreadable */ }
+      try {
+        if (
+          (await call<{ IsLogging?: boolean }>(clients.cloudtrail, new GetTrailStatusCommand({ Name: trail.TrailARN ?? trail.Name })))
+            .IsLogging
+        )
+          logging = true;
+      } catch {
+        /* status unreadable */
+      }
     }
-    facts.cloudTrail = { trails: trails.length, multiRegionTrails: multi.length, logging, logValidation: multi.length > 0 && multi.every((trail) => trail.LogFileValidationEnabled === true) };
-  } catch { /* leave null */ }
+    facts.cloudTrail = {
+      trails: trails.length,
+      multiRegionTrails: multi.length,
+      logging,
+      logValidation: multi.length > 0 && multi.every((trail) => trail.LogFileValidationEnabled === true),
+    };
+  } catch {
+    /* leave null */
+  }
 
   return facts;
 }
@@ -174,7 +258,10 @@ async function pages(api: OktaApi, first: string) {
   let next: string | null = first;
   let truncated = false;
   for (let page = 0; next; page++) {
-    if (page >= MAX_PAGES) { truncated = true; break; }
+    if (page >= MAX_PAGES) {
+      truncated = true;
+      break;
+    }
     const response: JsonResponse = await api(next);
     if (response.status !== 200) throw new Error(`Okta API ${response.status}`);
     const body = record(response.body);
@@ -195,11 +282,16 @@ export async function collectOkta(api: OktaApi, organization: string, now = Date
       return Number.isNaN(reference) ? false : now - reference > 90 * DAY;
     }).length;
     facts.users = { active: items.length, inactiveOver90Days: truncated ? null : inactive, truncated };
-  } catch { /* leave null */ }
+  } catch {
+    /* leave null */
+  }
 
   try {
     const { items } = await pages(api, "/api/v1/iam/assignees/users?limit=200");
-    const admins = items.map((item) => text(record(item).id)).filter((id): id is string => id !== null).slice(0, MAX_ADMINS);
+    const admins = items
+      .map((item) => text(record(item).id))
+      .filter((id): id is string => id !== null)
+      .slice(0, MAX_ADMINS);
     let enrolled = 0;
     for (const id of admins) {
       const factors = await api(`/api/v1/users/${encodeURIComponent(id)}/factors`);
@@ -207,7 +299,9 @@ export async function collectOkta(api: OktaApi, organization: string, now = Date
       if ((Array.isArray(factors.body) ? factors.body : []).some((factor) => record(factor).status === "ACTIVE")) enrolled += 1;
     }
     if (admins.length > 0) facts.privileged = { total: admins.length, mfaEnrolled: enrolled, mfaCoverage: enrolled / admins.length };
-  } catch { /* leave null */ }
+  } catch {
+    /* leave null */
+  }
 
   try {
     const response = await api("/api/v1/policies?type=PASSWORD");
@@ -218,7 +312,9 @@ export async function collectOkta(api: OktaApi, organization: string, now = Date
         .filter((length) => Number.isFinite(length));
       if (lengths.length) facts.passwordPolicy = { minLength: Math.min(...lengths), policies: lengths.length };
     }
-  } catch { /* leave null */ }
+  } catch {
+    /* leave null */
+  }
 
   return facts;
 }

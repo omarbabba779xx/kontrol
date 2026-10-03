@@ -8,5 +8,7 @@ export async function GET(request: Request, context: { params: Promise<{ id: str
   try {
     const actor = await requireActor(request, "graph:read");
     return Response.json(await questionnaireDetail(actor, (await context.params).id));
-  } catch (error) { return apiError(error); }
+  } catch (error) {
+    return apiError(error);
+  }
 }

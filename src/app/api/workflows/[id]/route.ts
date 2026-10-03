@@ -9,5 +9,7 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
   try {
     const actor = await requireActor(request, "graph:read");
     return Response.json(await workflowDetail(actor.tenantId, (await params).id));
-  } catch (error) { return apiError(error); }
+  } catch (error) {
+    return apiError(error);
+  }
 }

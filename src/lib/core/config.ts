@@ -48,8 +48,14 @@ export function secretsKey() {
  * current key (see key-rotation.ts), so a key can be rotated without losing credentials or documents.
  */
 export function previousSecretsKeys() {
-  const keys = (process.env.KONTROL_SECRETS_KEY_PREVIOUS ?? "").split(",").map((item) => item.trim()).filter(Boolean);
-  if (isProduction()) for (const key of keys) if (key.length < MIN_SECRET_LENGTH || PLACEHOLDER.test(key)) throw new Error(`KONTROL_SECRETS_KEY_PREVIOUS entries must be unique secrets of at least ${MIN_SECRET_LENGTH} characters`);
+  const keys = (process.env.KONTROL_SECRETS_KEY_PREVIOUS ?? "")
+    .split(",")
+    .map((item) => item.trim())
+    .filter(Boolean);
+  if (isProduction())
+    for (const key of keys)
+      if (key.length < MIN_SECRET_LENGTH || PLACEHOLDER.test(key))
+        throw new Error(`KONTROL_SECRETS_KEY_PREVIOUS entries must be unique secrets of at least ${MIN_SECRET_LENGTH} characters`);
   return keys;
 }
 

@@ -10,6 +10,15 @@ export function apiError(error: unknown) {
   // Anything else is a server fault. Its message can carry SQL, paths or library internals, so the caller gets a reference to quote and the
   // detail stays in the log. A failure the caller can act on is raised as a UserError, which carries its own status and message.
   const reference = randomUUID();
-  console.error(JSON.stringify({ level: "error", event: "request.failed", reference, name: error instanceof Error ? error.name : typeof error, message: error instanceof Error ? error.message : String(error), stack: error instanceof Error ? error.stack : undefined }));
+  console.error(
+    JSON.stringify({
+      level: "error",
+      event: "request.failed",
+      reference,
+      name: error instanceof Error ? error.name : typeof error,
+      message: error instanceof Error ? error.message : String(error),
+      stack: error instanceof Error ? error.stack : undefined,
+    }),
+  );
   return Response.json({ error: "Internal server error", reference }, { status: 500 });
 }

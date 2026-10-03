@@ -12,7 +12,16 @@ import { getDb } from "@/lib/db";
 import { appendAudit, canonicalJson, sha256 } from "@/lib/core/integrity";
 import { assertPublicHttpsUrl, safeFetch } from "@/lib/core/net-guard";
 import { evaluateControl } from "@/lib/core/policy-engine";
-import { collectAws, collectGitHub, collectOkta, type AwsClients, type Facts, type GitHubApi, type JsonResponse, type OktaApi } from "@/lib/connectors/collectors";
+import {
+  collectAws,
+  collectGitHub,
+  collectOkta,
+  type AwsClients,
+  type Facts,
+  type GitHubApi,
+  type JsonResponse,
+  type OktaApi,
+} from "@/lib/connectors/collectors";
 import { collectEntra, collectGitLab, collectGoogleWorkspace, type Api } from "@/lib/connectors/collectors-identity";
 import { entraAccessToken, googleAccessToken } from "@/lib/connectors/oauth";
 import { COLLECTOR_REVISIONS, PACK, collectionLimits, decidedFailure, missingFacts, type ConnectorKind } from "@/lib/connectors/pack";
@@ -43,7 +52,12 @@ const ASSETS: Record<Exclude<ConnectorKind, "github" | "gitlab">, Asset> = {
   entra: { id: "asset_entra_tenant", type: "identity_provider", name: "Microsoft Entra ID tenant" },
 };
 
-const slug = (value: string) => value.toLowerCase().replace(/[^a-z0-9]+/g, "_").replace(/^_|_$/g, "").slice(0, 60);
+const slug = (value: string) =>
+  value
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "_")
+    .replace(/^_|_$/g, "")
+    .slice(0, 60);
 
 /** Inserts the executable controls of the pack that this tenant does not have yet. Idempotent. */
 export async function installControlPack(actor: Actor, connector?: ConnectorKind) {
@@ -54,11 +68,35 @@ export async function installControlPack(actor: Actor, connector?: ConnectorKind
     for (const control of PACK.filter((item) => !connector || item.connector === connector)) {
       const existing = await tx.get("SELECT id FROM controls WHERE tenant_id = ? AND code = ?", actor.tenantId, control.code);
       if (existing) continue;
-      await tx.run(`INSERT INTO controls (id,tenant_id,code,title,objective,owner_id,automation,frequency,policy_json,status,valid_from,recorded_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?)`,
-        `control_${control.code.toLowerCase().replace(/[^a-z0-9]+/g, "_")}`, actor.tenantId, control.code, control.title, control.objective, null, "automated", control.frequency, JSON.stringify(control.policy), "unverified", now, now);
+      await tx.run(
+        `INSERT INTO controls (id,tenant_id,code,title,objective,owner_id,automation,frequency,policy_json,status,valid_from,recorded_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?)`,
+        `control_${control.code.toLowerCase().replace(/[^a-z0-9]+/g, "_")}`,
+        actor.tenantId,
+        control.code,
+        control.title,
+        control.objective,
+        null,
+        "automated",
+        control.frequency,
+        JSON.stringify(control.policy),
+        "unverified",
+        now,
+        now,
+      );
       installed.push(control.code);
     }
-    if (installed.length) await appendAudit({ tenantId: actor.tenantId, actorId: actor.userId, action: "controls.pack_installed", objectType: "tenant", objectId: actor.tenantId, payload: { controls: installed } }, tx);
+    if (installed.length)
+      await appendAudit(
+        {
+          tenantId: actor.tenantId,
+          actorId: actor.userId,
+          action: "controls.pack_installed",
+          objectType: "tenant",
+          objectId: actor.tenantId,
+          payload: { controls: installed },
+        },
+        tx,
+      );
   });
   return { installed };
 }
@@ -67,7 +105,18 @@ async function ensureAsset(actor: Actor, asset: Asset) {
   const db = (await getDb()).scope(actor.tenantId);
   if (await db.get("SELECT id FROM assets WHERE tenant_id = ? AND id = ?", actor.tenantId, asset.id)) return;
   const now = new Date().toISOString();
-  await db.run(`INSERT INTO assets (id,tenant_id,type,name,criticality,owner_id,attributes_json,valid_from,recorded_at) VALUES (?,?,?,?,?,?,?,?,?)`, asset.id, actor.tenantId, asset.type, asset.name, "high", null, JSON.stringify({ managedBy: "kontrol-connector" }), now, now);
+  await db.run(
+    `INSERT INTO assets (id,tenant_id,type,name,criticality,owner_id,attributes_json,valid_from,recorded_at) VALUES (?,?,?,?,?,?,?,?,?)`,
+    asset.id,
+    actor.tenantId,
+    asset.type,
+    asset.name,
+    "high",
+    null,
+    JSON.stringify({ managedBy: "kontrol-connector" }),
+    now,
+    now,
+  );
 }
 
 async function runPack(actor: Actor, connector: ConnectorKind, facts: Facts, assetId: string, source: string) {
@@ -78,20 +127,45 @@ async function runPack(actor: Actor, connector: ConnectorKind, facts: Facts, ass
   let first: Evaluation | undefined;
   const provenance = {
     collector: { name: connector, version: COLLECTOR_REVISIONS[connector] ?? "unversioned" },
-    scope: { target: assetId, repository: typeof facts.repository === "string" ? facts.repository : undefined, visibility: typeof facts.visibility === "string" ? facts.visibility : undefined },
+    scope: {
+      target: assetId,
+      repository: typeof facts.repository === "string" ? facts.repository : undefined,
+      visibility: typeof facts.visibility === "string" ? facts.visibility : undefined,
+    },
     limits: collectionLimits(connector, facts),
   };
   for (const control of PACK.filter((item) => item.connector === connector)) {
     const reason = control.notApplicable?.(facts) ?? null;
-    if (reason) { notApplicable.push({ controlCode: control.code, reason }); continue; }
+    if (reason) {
+      notApplicable.push({ controlCode: control.code, reason });
+      continue;
+    }
     const missing = missingFacts(control, facts);
     // Unreadable is not failed, but a known failing condition already settles an `all` policy.
-    if (missing.length && !decidedFailure(control, facts)) { skipped.push({ controlCode: control.code, missing }); continue; }
-    const result = await evaluateControl(actor, { controlCode: control.code, assetId, facts, source, validForDays: control.validForDays, provenance });
+    if (missing.length && !decidedFailure(control, facts)) {
+      skipped.push({ controlCode: control.code, missing });
+      continue;
+    }
+    const result = await evaluateControl(actor, {
+      controlCode: control.code,
+      assetId,
+      facts,
+      source,
+      validForDays: control.validForDays,
+      provenance,
+    });
     first ??= result;
     evaluations.push({ controlCode: control.code, passed: result.passed, finding: result.finding });
   }
-  await recordGaps(actor, connector, assetId, source, skipped, notApplicable, evaluations.map((item) => item.controlCode));
+  await recordGaps(
+    actor,
+    connector,
+    assetId,
+    source,
+    skipped,
+    notApplicable,
+    evaluations.map((item) => item.controlCode),
+  );
   if (!source.endsWith(":demo")) await supersedeSampleFindings(actor, connector, assetId);
   return { evaluations, skipped, notApplicable, first };
 }
@@ -100,7 +174,15 @@ async function runPack(actor: Actor, connector: ConnectorKind, facts: Facts, ass
  * Keeps what a collection could not do visible: a control skipped for lack of access is neither compliant nor failing, it is unknown,
  * and the reason has to be somewhere an auditor can find it. A control that is evaluated later clears its gap.
  */
-async function recordGaps(actor: Actor, connector: ConnectorKind, assetId: string, source: string, skipped: ConnectorSyncResult["skipped"], notApplicable: NonNullable<ConnectorSyncResult["notApplicable"]>, evaluated: string[]) {
+async function recordGaps(
+  actor: Actor,
+  connector: ConnectorKind,
+  assetId: string,
+  source: string,
+  skipped: ConnectorSyncResult["skipped"],
+  notApplicable: NonNullable<ConnectorSyncResult["notApplicable"]>,
+  evaluated: string[],
+) {
   const db = (await getDb()).scope(actor.tenantId);
   const at = new Date().toISOString();
   const gaps = [
@@ -108,20 +190,50 @@ async function recordGaps(actor: Actor, connector: ConnectorKind, assetId: strin
     ...notApplicable.map((item) => ({ code: item.controlCode, kind: "not_applicable", detail: { reason: item.reason } })),
   ];
   await db.transaction(async (tx) => {
-    for (const code of [...evaluated, ...gaps.map((gap) => gap.code)]) await tx.run("DELETE FROM evidence_gaps WHERE tenant_id = ? AND asset_id = ? AND control_code = ?", actor.tenantId, assetId, code);
-    for (const gap of gaps) await tx.run("INSERT INTO evidence_gaps (id,tenant_id,connector,asset_id,control_code,kind,detail_json,source,recorded_at) VALUES (?,?,?,?,?,?,?,?,?)", `gap_${randomUUID()}`, actor.tenantId, connector, assetId, gap.code, gap.kind, JSON.stringify(gap.detail), source, at);
+    for (const code of [...evaluated, ...gaps.map((gap) => gap.code)])
+      await tx.run("DELETE FROM evidence_gaps WHERE tenant_id = ? AND asset_id = ? AND control_code = ?", actor.tenantId, assetId, code);
+    for (const gap of gaps)
+      await tx.run(
+        "INSERT INTO evidence_gaps (id,tenant_id,connector,asset_id,control_code,kind,detail_json,source,recorded_at) VALUES (?,?,?,?,?,?,?,?,?)",
+        `gap_${randomUUID()}`,
+        actor.tenantId,
+        connector,
+        assetId,
+        gap.code,
+        gap.kind,
+        JSON.stringify(gap.detail),
+        source,
+        at,
+      );
   });
 }
 
 /** A live collection replaces sample findings for the same asset: they described invented facts and must not stay open beside real ones. */
 async function supersedeSampleFindings(actor: Actor, connector: ConnectorKind, assetId: string) {
   const db = (await getDb()).scope(actor.tenantId);
-  const stale = await db.all<{ id: string }>("SELECT id FROM findings WHERE tenant_id = ? AND asset_id = ? AND status IN ('open','remediating') AND evidence_id IN (SELECT id FROM evidence WHERE tenant_id = ? AND source = ?)", actor.tenantId, assetId, actor.tenantId, `${connector}:demo`);
+  const stale = await db.all<{ id: string }>(
+    "SELECT id FROM findings WHERE tenant_id = ? AND asset_id = ? AND status IN ('open','remediating') AND evidence_id IN (SELECT id FROM evidence WHERE tenant_id = ? AND source = ?)",
+    actor.tenantId,
+    assetId,
+    actor.tenantId,
+    `${connector}:demo`,
+  );
   if (!stale.length) return;
   await db.transaction(async (tx) => {
     const at = new Date().toISOString();
-    for (const item of stale) await tx.run("UPDATE findings SET status = 'closed', closed_at = ? WHERE tenant_id = ? AND id = ?", at, actor.tenantId, item.id);
-    await appendAudit({ tenantId: actor.tenantId, actorId: actor.userId, action: "findings.sample_superseded", objectType: "asset", objectId: assetId, payload: { connector, closed: stale.length } }, tx);
+    for (const item of stale)
+      await tx.run("UPDATE findings SET status = 'closed', closed_at = ? WHERE tenant_id = ? AND id = ?", at, actor.tenantId, item.id);
+    await appendAudit(
+      {
+        tenantId: actor.tenantId,
+        actorId: actor.userId,
+        action: "findings.sample_superseded",
+        objectType: "asset",
+        objectId: assetId,
+        payload: { connector, closed: stale.length },
+      },
+      tx,
+    );
   });
 }
 
@@ -129,25 +241,67 @@ async function supersedeSampleFindings(actor: Actor, connector: ConnectorKind, a
 
 function githubApi(token: string): GitHubApi {
   return async (path) => {
-    const response = await fetch(`https://api.github.com${path}`, { headers: { Authorization: `Bearer ${token}`, Accept: "application/vnd.github+json", "X-GitHub-Api-Version": "2022-11-28" }, cache: "no-store", signal: AbortSignal.timeout(15_000) });
+    const response = await fetch(`https://api.github.com${path}`, {
+      headers: { Authorization: `Bearer ${token}`, Accept: "application/vnd.github+json", "X-GitHub-Api-Version": "2022-11-28" },
+      cache: "no-store",
+      signal: AbortSignal.timeout(15_000),
+    });
     const body = response.status === 204 ? null : await response.json().catch(() => null);
     return { status: response.status, body };
   };
 }
 
 function demoGitHubFacts(owner: string, repository: string): Facts {
-  return { production: true, repository: `${owner}/${repository}`, defaultBranch: "main", visibility: "private", archived: false, branchProtection: { enabled: false, requiredReviews: 0, enforceAdmins: false, dismissStaleReviews: false, requireCodeOwnerReviews: false, requireSignedCommits: false }, security: { secretScanning: "enabled", pushProtection: "disabled", dependabotSecurityUpdates: "enabled" }, vulnerabilityAlertsEnabled: true, org: { twoFactorRequired: true } };
+  return {
+    production: true,
+    repository: `${owner}/${repository}`,
+    defaultBranch: "main",
+    visibility: "private",
+    archived: false,
+    branchProtection: {
+      enabled: false,
+      requiredReviews: 0,
+      enforceAdmins: false,
+      dismissStaleReviews: false,
+      requireCodeOwnerReviews: false,
+      requireSignedCommits: false,
+    },
+    security: { secretScanning: "enabled", pushProtection: "disabled", dependabotSecurityUpdates: "enabled" },
+    vulnerabilityAlertsEnabled: true,
+    org: { twoFactorRequired: true },
+  };
 }
 
-export async function syncGitHub(actor: Actor, input: { owner: string; repository: string; assetId?: string; demo: boolean }, api?: GitHubApi): Promise<ConnectorSyncResult> {
+export async function syncGitHub(
+  actor: Actor,
+  input: { owner: string; repository: string; assetId?: string; demo: boolean },
+  api?: GitHubApi,
+): Promise<ConnectorSyncResult> {
   const token = (await loadCredentials(actor.tenantId, "github"))?.token ?? process.env.GITHUB_TOKEN;
   const useDemo = !api && (input.demo || !token);
   const assetId = input.assetId ?? `asset_repo_${slug(`${input.owner}_${input.repository}`)}`;
   await ensureAsset(actor, { id: assetId, type: "repository", name: `${input.owner}/${input.repository}` });
-  const facts = useDemo ? demoGitHubFacts(input.owner, input.repository) : await collectGitHub(api ?? githubApi(token!), input.owner, input.repository);
-  const { evaluations, skipped, notApplicable, first } = await runPack(actor, "github", facts, assetId, useDemo ? "github:demo" : "github:api");
+  const facts = useDemo
+    ? demoGitHubFacts(input.owner, input.repository)
+    : await collectGitHub(api ?? githubApi(token!), input.owner, input.repository);
+  const { evaluations, skipped, notApplicable, first } = await runPack(
+    actor,
+    "github",
+    facts,
+    assetId,
+    useDemo ? "github:demo" : "github:api",
+  );
   await updateConnector(actor, "github", useDemo ? "demo" : "healthy", facts);
-  return { connector: "github", mode: useDemo ? "demo" : "live", collectedAt: new Date().toISOString(), facts, evaluation: first, evaluations, skipped, notApplicable };
+  return {
+    connector: "github",
+    mode: useDemo ? "demo" : "live",
+    collectedAt: new Date().toISOString(),
+    facts,
+    evaluation: first,
+    evaluations,
+    skipped,
+    notApplicable,
+  };
 }
 
 // ---------------------------------------------------------------- GitLab ------------------------------------------------
@@ -155,25 +309,56 @@ export async function syncGitHub(actor: Actor, input: { owner: string; repositor
 function gitlabApi(baseUrl: string, token: string): Api {
   const origin = assertPublicHttpsUrl(baseUrl).origin;
   return async (path) => {
-    const response = await safeFetch(`${origin}/api/v4${path}`, { headers: { "PRIVATE-TOKEN": token, Accept: "application/json" }, signal: AbortSignal.timeout(15_000) });
+    const response = await safeFetch(`${origin}/api/v4${path}`, {
+      headers: { "PRIVATE-TOKEN": token, Accept: "application/json" },
+      signal: AbortSignal.timeout(15_000),
+    });
     return { status: response.status, body: await response.json().catch(() => null) };
   };
 }
 
 function demoGitLabFacts(project: string): Facts {
-  return { production: true, repository: project, defaultBranch: "main", visibility: "private", archived: false, branchProtection: { enabled: true, developersCanPush: false, forcePushAllowed: false, codeOwnerApprovalRequired: false, requiredReviews: 0 }, group: { twoFactorRequired: true } };
+  return {
+    production: true,
+    repository: project,
+    defaultBranch: "main",
+    visibility: "private",
+    archived: false,
+    branchProtection: {
+      enabled: true,
+      developersCanPush: false,
+      forcePushAllowed: false,
+      codeOwnerApprovalRequired: false,
+      requiredReviews: 0,
+    },
+    group: { twoFactorRequired: true },
+  };
 }
 
-export async function syncGitLab(actor: Actor, input: { project: string; assetId?: string; demo: boolean }, api?: Api): Promise<ConnectorSyncResult> {
+export async function syncGitLab(
+  actor: Actor,
+  input: { project: string; assetId?: string; demo: boolean },
+  api?: Api,
+): Promise<ConnectorSyncResult> {
   const stored = await loadCredentials(actor.tenantId, "gitlab");
   const useDemo = !api && (input.demo || !stored);
   const assetId = input.assetId ?? `asset_repo_${slug(input.project)}`;
   await ensureAsset(actor, { id: assetId, type: "repository", name: input.project });
-  const facts = useDemo ? demoGitLabFacts(input.project) : await collectGitLab(api ?? gitlabApi(stored!.baseUrl, stored!.token), input.project, stored?.group);
+  const facts = useDemo
+    ? demoGitLabFacts(input.project)
+    : await collectGitLab(api ?? gitlabApi(stored!.baseUrl, stored!.token), input.project, stored?.group);
   const { evaluations, skipped, notApplicable } = await runPack(actor, "gitlab", facts, assetId, useDemo ? "gitlab:demo" : "gitlab:api");
   await persistConnectorEvidence(actor, "gitlab", `GitLab project posture (${input.project})`, facts, useDemo);
   await updateConnector(actor, "gitlab", useDemo ? "demo" : "healthy", facts);
-  return { connector: "gitlab", mode: useDemo ? "demo" : "live", collectedAt: new Date().toISOString(), facts, evaluations, skipped, notApplicable };
+  return {
+    connector: "gitlab",
+    mode: useDemo ? "demo" : "live",
+    collectedAt: new Date().toISOString(),
+    facts,
+    evaluations,
+    skipped,
+    notApplicable,
+  };
 }
 
 // ---------------------------------------------------------------- AWS ---------------------------------------------------
@@ -193,14 +378,25 @@ type AwsCredentials = { accessKeyId: string; secretAccessKey: string; sessionTok
 
 function awsClients(region: string, credentials?: AwsCredentials): AwsClients {
   const common = credentials ? { region, credentials } : { region };
-  return { iam: new IAMClient(common), s3: new S3Client(common), config: new ConfigServiceClient(common), cloudtrail: new CloudTrailClient(common) } as unknown as AwsClients;
+  return {
+    iam: new IAMClient(common),
+    s3: new S3Client(common),
+    config: new ConfigServiceClient(common),
+    cloudtrail: new CloudTrailClient(common),
+  } as unknown as AwsClients;
 }
 
-export async function syncAws(actor: Actor, region = process.env.AWS_REGION ?? "eu-west-1", clients?: AwsClients): Promise<ConnectorSyncResult> {
+export async function syncAws(
+  actor: Actor,
+  region = process.env.AWS_REGION ?? "eu-west-1",
+  clients?: AwsClients,
+): Promise<ConnectorSyncResult> {
   const stored = await loadCredentials(actor.tenantId, "aws");
   const demo = !clients && !stored && !process.env.AWS_ACCESS_KEY_ID && !process.env.AWS_PROFILE;
   const effectiveRegion = stored?.region ?? region;
-  const facts = demo ? demoAwsFacts(effectiveRegion) : await collectAws(clients ?? awsClients(effectiveRegion, stored ?? undefined), effectiveRegion);
+  const facts = demo
+    ? demoAwsFacts(effectiveRegion)
+    : await collectAws(clients ?? awsClients(effectiveRegion, stored ?? undefined), effectiveRegion);
   await ensureAsset(actor, ASSETS.aws);
   const { evaluations, skipped } = await runPack(actor, "aws", facts, ASSETS.aws.id, demo ? "aws:demo" : "aws:api");
   await persistConnectorEvidence(actor, "aws", "AWS configuration and IAM posture", facts, demo);
@@ -216,13 +412,21 @@ function oktaApi(baseUrl: string, token: string): OktaApi {
     // Pagination links come from the API response; they must stay on the same origin as the configured base URL.
     const url = path.startsWith("http") ? new URL(path) : new URL(path, origin);
     if (url.origin !== origin) throw new Error("Okta pagination link points to a different origin");
-    const response = await safeFetch(url, { headers: { Authorization: `SSWS ${token}`, Accept: "application/json" }, signal: AbortSignal.timeout(15_000) });
+    const response = await safeFetch(url, {
+      headers: { Authorization: `SSWS ${token}`, Accept: "application/json" },
+      signal: AbortSignal.timeout(15_000),
+    });
     return { status: response.status, body: await response.json().catch(() => null), link: response.headers.get("link") };
   };
 }
 
 function demoOktaFacts(): Facts {
-  return { organization: "demo", users: { active: 126, inactiveOver90Days: 2, truncated: false }, privileged: { total: 9, mfaEnrolled: 8, mfaCoverage: 8 / 9 }, passwordPolicy: { minLength: 12, policies: 1 } };
+  return {
+    organization: "demo",
+    users: { active: 126, inactiveOver90Days: 2, truncated: false },
+    privileged: { total: 9, mfaEnrolled: 8, mfaCoverage: 8 / 9 },
+    passwordPolicy: { minLength: 12, policies: 1 },
+  };
 }
 
 async function oktaTarget(tenantId: string) {
@@ -235,7 +439,9 @@ async function oktaTarget(tenantId: string) {
 export async function syncOkta(actor: Actor, api?: OktaApi): Promise<ConnectorSyncResult> {
   const target = await oktaTarget(actor.tenantId);
   const demo = !api && !target;
-  const facts = demo ? demoOktaFacts() : await collectOkta(api ?? oktaApi(target!.baseUrl, target!.token), target ? new URL(target.baseUrl).hostname : "okta");
+  const facts = demo
+    ? demoOktaFacts()
+    : await collectOkta(api ?? oktaApi(target!.baseUrl, target!.token), target ? new URL(target.baseUrl).hostname : "okta");
   await ensureAsset(actor, ASSETS.okta);
   const { evaluations, skipped } = await runPack(actor, "okta", facts, ASSETS.okta.id, demo ? "okta:demo" : "okta:api");
   await persistConnectorEvidence(actor, "okta", "Okta identity posture", facts, demo);
@@ -247,24 +453,50 @@ export async function syncOkta(actor: Actor, api?: OktaApi): Promise<ConnectorSy
 
 function googleApi(accessToken: string): Api {
   return async (path) => {
-    const response = await fetch(`https://admin.googleapis.com/admin/directory/v1${path}`, { headers: { Authorization: `Bearer ${accessToken}`, Accept: "application/json" }, cache: "no-store", signal: AbortSignal.timeout(20_000) });
+    const response = await fetch(`https://admin.googleapis.com/admin/directory/v1${path}`, {
+      headers: { Authorization: `Bearer ${accessToken}`, Accept: "application/json" },
+      cache: "no-store",
+      signal: AbortSignal.timeout(20_000),
+    });
     return { status: response.status, body: await response.json().catch(() => null) };
   };
 }
 
 function demoGoogleFacts(): Facts {
-  return { domain: "demo.example", users: { total: 84, active: 80, enrolledIn2Sv: 77, twoStepCoverage: 77 / 80, inactiveOver90Days: 3, truncated: false }, admins: { superAdmins: 3, superAdminsWithout2Sv: 0, delegatedAdmins: 4 } };
+  return {
+    domain: "demo.example",
+    users: { total: 84, active: 80, enrolledIn2Sv: 77, twoStepCoverage: 77 / 80, inactiveOver90Days: 3, truncated: false },
+    admins: { superAdmins: 3, superAdminsWithout2Sv: 0, delegatedAdmins: 4 },
+  };
 }
 
 export async function syncGoogleWorkspace(actor: Actor, api?: Api): Promise<ConnectorSyncResult> {
   const stored = await loadCredentials(actor.tenantId, "google_workspace");
   const demo = !api && !stored;
-  const facts = demo ? demoGoogleFacts() : await collectGoogleWorkspace(api ?? googleApi(await googleAccessToken(stored!)), stored ? stored.adminEmail.split("@")[1] : "workspace");
+  const facts = demo
+    ? demoGoogleFacts()
+    : await collectGoogleWorkspace(
+        api ?? googleApi(await googleAccessToken(stored!)),
+        stored ? stored.adminEmail.split("@")[1] : "workspace",
+      );
   await ensureAsset(actor, ASSETS.google_workspace);
-  const { evaluations, skipped } = await runPack(actor, "google_workspace", facts, ASSETS.google_workspace.id, demo ? "google_workspace:demo" : "google_workspace:api");
+  const { evaluations, skipped } = await runPack(
+    actor,
+    "google_workspace",
+    facts,
+    ASSETS.google_workspace.id,
+    demo ? "google_workspace:demo" : "google_workspace:api",
+  );
   await persistConnectorEvidence(actor, "google_workspace", "Google Workspace identity posture", facts, demo);
   await updateConnector(actor, "google_workspace", demo ? "demo" : "healthy", facts);
-  return { connector: "google_workspace", mode: demo ? "demo" : "live", collectedAt: new Date().toISOString(), facts, evaluations, skipped };
+  return {
+    connector: "google_workspace",
+    mode: demo ? "demo" : "live",
+    collectedAt: new Date().toISOString(),
+    facts,
+    evaluations,
+    skipped,
+  };
 }
 
 // ---------------------------------------------------------------- Microsoft Entra ID ------------------------------------
@@ -272,13 +504,22 @@ export async function syncGoogleWorkspace(actor: Actor, api?: Api): Promise<Conn
 function graphApi(accessToken: string): Api {
   return async (path) => {
     const url = path.startsWith("https://graph.microsoft.com/") ? path : `https://graph.microsoft.com/v1.0${path}`;
-    const response = await fetch(url, { headers: { Authorization: `Bearer ${accessToken}`, Accept: "application/json" }, cache: "no-store", signal: AbortSignal.timeout(20_000) });
+    const response = await fetch(url, {
+      headers: { Authorization: `Bearer ${accessToken}`, Accept: "application/json" },
+      cache: "no-store",
+      signal: AbortSignal.timeout(20_000),
+    });
     return { status: response.status, body: await response.json().catch(() => null) };
   };
 }
 
 function demoEntraFacts(): Facts {
-  return { tenant: "demo", mfa: { members: 210, mfaRegistered: 198, mfaCoverage: 198 / 210, admins: 8, adminsWithoutMfa: 0 }, conditionalAccess: { policies: 6, enabledPolicies: 5, mfaForAllUsers: true, legacyAuthBlocked: false }, users: { enabled: 205, inactiveOver90Days: 6, truncated: false } };
+  return {
+    tenant: "demo",
+    mfa: { members: 210, mfaRegistered: 198, mfaCoverage: 198 / 210, admins: 8, adminsWithoutMfa: 0 },
+    conditionalAccess: { policies: 6, enabledPolicies: 5, mfaForAllUsers: true, legacyAuthBlocked: false },
+    users: { enabled: 205, inactiveOver90Days: 6, truncated: false },
+  };
 }
 
 export async function syncEntra(actor: Actor, api?: Api): Promise<ConnectorSyncResult> {
@@ -320,11 +561,18 @@ export async function assertLiveCredentials(actor: Actor, kind: PolledConnector,
   if (process.env.KONTROL_ALLOW_SAMPLE_COLLECTION === "true") return;
   if (params.demo) throw userError("A scheduled collection cannot run in sample mode");
   const stored = await loadCredentials(actor.tenantId, kind as never);
-  const available = kind === "github" ? !!(stored as { token?: string } | null)?.token || !!process.env.GITHUB_TOKEN
-    : kind === "okta" ? !!(await oktaTarget(actor.tenantId))
-    : kind === "aws" ? !!stored || !!process.env.AWS_ACCESS_KEY_ID || !!process.env.AWS_PROFILE
-    : !!stored;
-  if (!available) throw userError(`No ${kind.replace("_", " ")} credentials are stored. A collection never falls back to sample data: add the connection in Administration.`);
+  const available =
+    kind === "github"
+      ? !!(stored as { token?: string } | null)?.token || !!process.env.GITHUB_TOKEN
+      : kind === "okta"
+        ? !!(await oktaTarget(actor.tenantId))
+        : kind === "aws"
+          ? !!stored || !!process.env.AWS_ACCESS_KEY_ID || !!process.env.AWS_PROFILE
+          : !!stored;
+  if (!available)
+    throw userError(
+      `No ${kind.replace("_", " ")} credentials are stored. A collection never falls back to sample data: add the connection in Administration.`,
+    );
 }
 
 export async function syncConnector(actor: Actor, kind: PolledConnector, params: SyncParams = {}): Promise<ConnectorSyncResult> {
@@ -335,10 +583,14 @@ export async function syncConnector(actor: Actor, kind: PolledConnector, params:
     case "gitlab":
       if (!params.project) throw userError("GitLab needs a project path (group/project)");
       return syncGitLab(actor, { project: params.project, assetId: params.assetId, demo: params.demo ?? false });
-    case "aws": return syncAws(actor);
-    case "okta": return syncOkta(actor);
-    case "google_workspace": return syncGoogleWorkspace(actor);
-    case "entra": return syncEntra(actor);
+    case "aws":
+      return syncAws(actor);
+    case "okta":
+      return syncOkta(actor);
+    case "google_workspace":
+      return syncGoogleWorkspace(actor);
+    case "entra":
+      return syncEntra(actor);
   }
 }
 
@@ -355,19 +607,25 @@ export async function testConnection(actor: Actor, kind: CredentialKind): Promis
         if (!token) return done(false, "No GitHub token is stored.");
         const response = await githubApi(token)("/user");
         const login = (response.body as { login?: string } | null)?.login;
-        return response.status === 200 ? done(true, `Authenticated as ${login ?? "GitHub user"}. Repository permissions are checked when you sync.`) : done(false, `GitHub answered ${response.status}${response.status === 401 ? ": the token is invalid or expired" : ""}.`);
+        return response.status === 200
+          ? done(true, `Authenticated as ${login ?? "GitHub user"}. Repository permissions are checked when you sync.`)
+          : done(false, `GitHub answered ${response.status}${response.status === 401 ? ": the token is invalid or expired" : ""}.`);
       }
       case "gitlab": {
         const stored = await loadCredentials(actor.tenantId, "gitlab");
         if (!stored) return done(false, "No GitLab credentials are stored.");
         const response = await gitlabApi(stored.baseUrl, stored.token)("/user");
-        return response.status === 200 ? done(true, `Authenticated as ${(response.body as { username?: string } | null)?.username ?? "GitLab user"}.`) : done(false, `GitLab answered ${response.status}.`);
+        return response.status === 200
+          ? done(true, `Authenticated as ${(response.body as { username?: string } | null)?.username ?? "GitLab user"}.`)
+          : done(false, `GitLab answered ${response.status}.`);
       }
       case "okta": {
         const target = await oktaTarget(actor.tenantId);
         if (!target) return done(false, "No Okta credentials are stored.");
         const response = await oktaApi(target.baseUrl, target.token)("/api/v1/users?limit=1");
-        return response.status === 200 ? done(true, `Connected to ${new URL(target.baseUrl).hostname}.`) : done(false, `Okta answered ${response.status}${response.status === 401 ? ": the API token is invalid" : ""}.`);
+        return response.status === 200
+          ? done(true, `Connected to ${new URL(target.baseUrl).hostname}.`)
+          : done(false, `Okta answered ${response.status}${response.status === 401 ? ": the API token is invalid" : ""}.`);
       }
       case "aws": {
         const stored = await loadCredentials(actor.tenantId, "aws");
@@ -380,14 +638,21 @@ export async function testConnection(actor: Actor, kind: CredentialKind): Promis
         const stored = await loadCredentials(actor.tenantId, "google_workspace");
         if (!stored) return done(false, "No Google Workspace credentials are stored.");
         const response = await googleApi(await googleAccessToken(stored))("/users?customer=my_customer&maxResults=1");
-        return response.status === 200 ? done(true, `Connected to the ${stored.adminEmail.split("@")[1]} directory.`) : done(false, `Google Directory answered ${response.status}${response.status === 403 ? ": check the delegated administrator and the API scope" : ""}.`);
+        return response.status === 200
+          ? done(true, `Connected to the ${stored.adminEmail.split("@")[1]} directory.`)
+          : done(
+              false,
+              `Google Directory answered ${response.status}${response.status === 403 ? ": check the delegated administrator and the API scope" : ""}.`,
+            );
       }
       case "entra": {
         const stored = await loadCredentials(actor.tenantId, "entra");
         if (!stored) return done(false, "No Entra ID credentials are stored.");
         const response = await graphApi(await entraAccessToken(stored))("/organization");
         const name = (response.body as { value?: Array<{ displayName?: string }> } | null)?.value?.[0]?.displayName;
-        return response.status === 200 ? done(true, `Connected to ${name ?? "the tenant"}.`) : done(false, `Microsoft Graph answered ${response.status}.`);
+        return response.status === 200
+          ? done(true, `Connected to ${name ?? "the tenant"}.`)
+          : done(false, `Microsoft Graph answered ${response.status}.`);
       }
     }
   } catch (error) {
@@ -402,9 +667,32 @@ async function persistConnectorEvidence(actor: Actor, source: string, name: stri
   const content = canonicalJson(facts);
   const id = `evidence_${source}_${Date.now()}`;
   await (await getDb()).scope(actor.tenantId).transaction(async (tx) => {
-    await tx.run(`INSERT INTO evidence (id,tenant_id,name,source,collection_method,content_type,content_json,content_hash,collected_at,expires_at,status,created_by) VALUES (?,?,?,?,?,?,?,?,?,?,?,?)`,
-      id, actor.tenantId, name, `${source}:${demo ? "demo" : "api"}`, "automated connector", "application/json", content, sha256(content), now, new Date(Date.now() + 86_400_000).toISOString(), "healthy", actor.userId);
-    await appendAudit({ tenantId: actor.tenantId, actorId: actor.userId, action: "connector.evidence_collected", objectType: "evidence", objectId: id, payload: { source, demo, hash: sha256(content) } }, tx);
+    await tx.run(
+      `INSERT INTO evidence (id,tenant_id,name,source,collection_method,content_type,content_json,content_hash,collected_at,expires_at,status,created_by) VALUES (?,?,?,?,?,?,?,?,?,?,?,?)`,
+      id,
+      actor.tenantId,
+      name,
+      `${source}:${demo ? "demo" : "api"}`,
+      "automated connector",
+      "application/json",
+      content,
+      sha256(content),
+      now,
+      new Date(Date.now() + 86_400_000).toISOString(),
+      "healthy",
+      actor.userId,
+    );
+    await appendAudit(
+      {
+        tenantId: actor.tenantId,
+        actorId: actor.userId,
+        action: "connector.evidence_collected",
+        objectType: "evidence",
+        objectId: id,
+        payload: { source, demo, hash: sha256(content) },
+      },
+      tx,
+    );
   });
 }
 
@@ -412,9 +700,34 @@ async function updateConnector(actor: Actor, kind: string, status: string, facts
   const now = new Date().toISOString();
   const config = JSON.stringify({ lastFactHash: sha256(canonicalJson(facts)) });
   await (await getDb()).scope(actor.tenantId).transaction(async (tx) => {
-    const existing = await tx.get<{ id: string }>("SELECT id FROM connectors WHERE tenant_id = ? AND kind = ? LIMIT 1", actor.tenantId, kind);
-    if (existing) await tx.run("UPDATE connectors SET status = ?, last_sync_at = ?, config_json = ? WHERE id = ?", status, now, config, existing.id);
-    else await tx.run("INSERT INTO connectors (id,tenant_id,kind,name,config_json,status,last_sync_at) VALUES (?,?,?,?,?,?,?)", `connector_${kind}`, actor.tenantId, kind, `${kind.toUpperCase()} connector`, config, status, now);
-    await appendAudit({ tenantId: actor.tenantId, actorId: actor.userId, action: "connector.synced", objectType: "connector", objectId: existing?.id ?? `connector_${kind}`, payload: { kind, status } }, tx);
+    const existing = await tx.get<{ id: string }>(
+      "SELECT id FROM connectors WHERE tenant_id = ? AND kind = ? LIMIT 1",
+      actor.tenantId,
+      kind,
+    );
+    if (existing)
+      await tx.run("UPDATE connectors SET status = ?, last_sync_at = ?, config_json = ? WHERE id = ?", status, now, config, existing.id);
+    else
+      await tx.run(
+        "INSERT INTO connectors (id,tenant_id,kind,name,config_json,status,last_sync_at) VALUES (?,?,?,?,?,?,?)",
+        `connector_${kind}`,
+        actor.tenantId,
+        kind,
+        `${kind.toUpperCase()} connector`,
+        config,
+        status,
+        now,
+      );
+    await appendAudit(
+      {
+        tenantId: actor.tenantId,
+        actorId: actor.userId,
+        action: "connector.synced",
+        objectType: "connector",
+        objectId: existing?.id ?? `connector_${kind}`,
+        payload: { kind, status },
+      },
+      tx,
+    );
   });
 }

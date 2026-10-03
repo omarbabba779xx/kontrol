@@ -73,3 +73,17 @@ test("all, any and none groups combine as documented, and failures are explained
 
   assert.equal(evaluatePolicy({}, facts, NOW).passed, true, "an empty policy has no violated condition");
 });
+
+test("patterns that backtrack badly are refused, including sequential quantifiers, and ordinary ones still work", async () => {
+  const { evaluatePolicy } = await import("../src/lib/core/policy-engine");
+  const run = (value: string, subject: string) => evaluatePolicy({ all: [{ path: "s", op: "matches", value }] } as never, { s: subject }, Date.now()).passed;
+  const started = Date.now();
+  for (const bad of ["(a+)+$", "(a|aa)+$", "a*a*a*b", "^(\\d+)*x", ".*.*.*x", "a+b+c+d", "(?:x+)+y", "(a)\\1", "a{1,}a{1,}a{1,}b"]) assert.equal(run(bad, "a".repeat(1500)), false, `${bad} must be refused, not run`);
+  assert.ok(Date.now() - started < 500, "refusal is immediate: nothing was matched");
+  assert.equal(run("^[a-z]+-\\d{3}$", "repo-123"), true);
+  assert.equal(run("^prod-.*$", "prod-eu-1"), true);
+  assert.equal(run("^a+b*$", "aaabb"), true, "two unbounded quantifiers are allowed");
+  assert.equal(run("^[*+]+x$", "+*x"), true, "quantifier characters inside a class are not quantifiers");
+  assert.equal(run("^\\*+$", "***"), true, "an escaped character is not a quantifier");
+  assert.equal(run("^a+$", "a".repeat(2001)), false, "an over-long subject is not matched");
+});

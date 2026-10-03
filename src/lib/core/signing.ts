@@ -24,7 +24,8 @@ function load() {
     privateKey = createPrivateKey(pem);
     if (privateKey.asymmetricKeyType !== "ed25519") throw new Error("KONTROL_SIGNING_KEY must be an Ed25519 private key");
   } else {
-    if (isProduction()) throw new Error("KONTROL_SIGNING_KEY is required in production (an Ed25519 private key; generate one with `npm run keys:signing`)");
+    if (isProduction())
+      throw new Error("KONTROL_SIGNING_KEY is required in production (an Ed25519 private key; generate one with `npm run keys:signing`)");
     const seed = createHash("sha256").update(`kontrol-dev-signing-key:${signingSecret()}`).digest();
     privateKey = createPrivateKey({ key: Buffer.concat([PKCS8_SEED_HEADER, seed]), format: "der", type: "pkcs8" });
   }
@@ -32,11 +33,20 @@ function load() {
   return cached;
 }
 
-const signingSecretSafe = () => { try { return signingSecret(); } catch { return ""; } };
+const signingSecretSafe = () => {
+  try {
+    return signingSecret();
+  } catch {
+    return "";
+  }
+};
 
 export const generateSigningKey = () => {
   const { privateKey, publicKey } = generateKeyPairSync("ed25519");
-  return { privateKeyPem: privateKey.export({ type: "pkcs8", format: "pem" }).toString(), publicKeyPem: publicKey.export({ type: "spki", format: "pem" }).toString() };
+  return {
+    privateKeyPem: privateKey.export({ type: "pkcs8", format: "pem" }).toString(),
+    publicKeyPem: publicKey.export({ type: "spki", format: "pem" }).toString(),
+  };
 };
 
 /** Public half of the signing key, for third parties; the fingerprint identifies it in published signatures and anchors. */
@@ -54,7 +64,9 @@ export function verifyBytes(message: string, signature: string, publicKeyPem?: s
   try {
     const key = publicKeyPem ? createPublicKey(publicKeyPem) : load().publicKey;
     return verify(null, Buffer.from(message), key, Buffer.from(signature.slice(PREFIX.length), "base64url"));
-  } catch { return false; }
+  } catch {
+    return false;
+  }
 }
 
 /** The pre-asymmetric form, kept only so signatures that already exist stay verifiable. */

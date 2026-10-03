@@ -22,7 +22,12 @@ export function seal(plaintext: string, aad: string): SealedBox {
   const cipher = createCipheriv("aes-256-gcm", key(), iv);
   cipher.setAAD(Buffer.from(aad));
   const ciphertext = Buffer.concat([cipher.update(plaintext, "utf8"), cipher.final()]);
-  return { ciphertext: ciphertext.toString("base64"), iv: iv.toString("base64"), tag: cipher.getAuthTag().toString("base64"), keyVersion: KEY_VERSION };
+  return {
+    ciphertext: ciphertext.toString("base64"),
+    iv: iv.toString("base64"),
+    tag: cipher.getAuthTag().toString("base64"),
+    keyVersion: KEY_VERSION,
+  };
 }
 
 function openWith(material: Buffer, box: { ciphertext: string; iv: string; tag: string }, aad: string) {
@@ -36,14 +41,23 @@ function openWith(material: Buffer, box: { ciphertext: string; iv: string; tag: 
 export function open(box: { ciphertext: string; iv: string; tag: string }, aad: string): string {
   let failure: unknown;
   for (const material of [key(), ...previousSecretsKeys().map(derive)]) {
-    try { return openWith(material, box, aad); } catch (error) { failure = error; }
+    try {
+      return openWith(material, box, aad);
+    } catch (error) {
+      failure = error;
+    }
   }
   throw failure;
 }
 
 /** True when the box opens with the current key, false when it needs a previous one (and should be re-sealed). */
 export function sealedWithCurrentKey(box: { ciphertext: string; iv: string; tag: string }, aad: string) {
-  try { openWith(key(), box, aad); return true; } catch { return false; }
+  try {
+    openWith(key(), box, aad);
+    return true;
+  } catch {
+    return false;
+  }
 }
 
 /**
@@ -65,4 +79,13 @@ export function openField(value: string, aad: string) {
   return open({ iv, tag, ciphertext }, aad);
 }
 
-export const fieldSealedWithCurrentKey = (value: string, aad: string) => isSealedField(value) && sealedWithCurrentKey({ iv: value.slice(FIELD_PREFIX.length).split(".")[0], tag: value.slice(FIELD_PREFIX.length).split(".")[1], ciphertext: value.slice(FIELD_PREFIX.length).split(".")[2] }, aad);
+export const fieldSealedWithCurrentKey = (value: string, aad: string) =>
+  isSealedField(value) &&
+  sealedWithCurrentKey(
+    {
+      iv: value.slice(FIELD_PREFIX.length).split(".")[0],
+      tag: value.slice(FIELD_PREFIX.length).split(".")[1],
+      ciphertext: value.slice(FIELD_PREFIX.length).split(".")[2],
+    },
+    aad,
+  );

@@ -15,7 +15,8 @@ const env = (extra: Record<string, string> = {}) => ({ OIDC_DEFAULT_TENANT_ID: a
 test("an email the identity provider has not verified is refused, including when the claim is missing", async () => {
   const { signInWithClaims } = await oidc();
   assert.deepEqual(await signInWithClaims(claims({ email_verified: false }), context, env({ OIDC_ALLOWED_DOMAINS: "acme.test" })), { ok: false, status: 403, error: "Verified email required" });
-  const { email_verified: _omitted, ...missing } = claims();
+  const missing: Record<string, unknown> = claims();
+  delete missing.email_verified;
   assert.equal((await signInWithClaims(missing, context, env({ OIDC_ALLOWED_DOMAINS: "acme.test" }))).ok, false);
   assert.equal((await signInWithClaims(claims({ email_verified: "true" }), context, env({ OIDC_ALLOWED_DOMAINS: "acme.test" }))).ok, false, "a string is not a verification");
 });

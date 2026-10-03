@@ -16,6 +16,16 @@ export async function rotateSecretKeys(actor: Actor) {
   const credentials = await resealCredentials(actor);
   const documents = await resealDocuments(actor);
   const remaining = credentials.failed.length + documents.failed.length;
-  await appendAudit({ tenantId: actor.tenantId, actorId: actor.userId, action: "keys.rotated", objectType: "tenant", objectId: actor.tenantId, payload: { credentials: { resealed: credentials.resealed, failed: credentials.failed.length }, documents: { resealed: documents.resealed, failed: documents.failed.length } } });
+  await appendAudit({
+    tenantId: actor.tenantId,
+    actorId: actor.userId,
+    action: "keys.rotated",
+    objectType: "tenant",
+    objectId: actor.tenantId,
+    payload: {
+      credentials: { resealed: credentials.resealed, failed: credentials.failed.length },
+      documents: { resealed: documents.resealed, failed: documents.failed.length },
+    },
+  });
   return { credentials, documents, complete: remaining === 0 };
 }

@@ -17,7 +17,11 @@ export function bandOf(score: number): Band {
   return score >= 17 ? "critical" : score >= 10 ? "high" : score >= 5 ? "medium" : "low";
 }
 
-export type ControlEffect = { code: string; /** implementation weight 0..1, null when not applicable */ weight: number | null; backed: boolean };
+export type ControlEffect = {
+  code: string;
+  /** implementation weight 0..1, null when not applicable */ weight: number | null;
+  backed: boolean;
+};
 
 export function controlEffectiveness(effect: ControlEffect) {
   if (effect.weight === null) return null;
@@ -31,7 +35,14 @@ export function residual(input: { likelihood: number; impact: number; controls: 
   // Rounded up: a residual rating is never flattered by rounding.
   const likelihood = Math.max(1, Math.ceil(input.likelihood * (1 - reduction) - 1e-9));
   const score = scoreOf(likelihood, input.impact);
-  return { likelihood, impact: input.impact, score, band: bandOf(score), reduction: Math.round(reduction * 100) / 100, controlsConsidered: values.length };
+  return {
+    likelihood,
+    impact: input.impact,
+    score,
+    band: bandOf(score),
+    reduction: Math.round(reduction * 100) / 100,
+    controlsConsidered: values.length,
+  };
 }
 
 /** Counts of risks per likelihood x impact cell, for a heat map: result[likelihood-1][impact-1]. */

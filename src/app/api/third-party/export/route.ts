@@ -9,6 +9,14 @@ export async function GET(request: Request) {
     const actor = await requireActor(request, "oscal:export");
     const format = new URL(request.url).searchParams.get("format") === "csv" ? "csv" : "json";
     const file = await exportRegister(actor, format);
-    return new Response(file.body, { headers: { "Content-Type": file.contentType, "Content-Disposition": `attachment; filename="${file.filename}"`, "Cache-Control": "no-store" } });
-  } catch (error) { return apiError(error); }
+    return new Response(file.body, {
+      headers: {
+        "Content-Type": file.contentType,
+        "Content-Disposition": `attachment; filename="${file.filename}"`,
+        "Cache-Control": "no-store",
+      },
+    });
+  } catch (error) {
+    return apiError(error);
+  }
 }

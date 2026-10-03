@@ -45,7 +45,14 @@ type CustomRow = { requirement_id: string; title: string; parent: string; framew
 
 /** Sub-requirements an organisation imported, with the controls they inherit from their parents. */
 export async function loadCustomRequirements(tenantId: string) {
-  const rows = await (await getDb()).scope(tenantId).all<CustomRow>("SELECT framework_id, requirement_id, title, parent FROM custom_requirements WHERE tenant_id = ? ORDER BY framework_id, requirement_id", tenantId);
+  const rows = await (
+    await getDb()
+  )
+    .scope(tenantId)
+    .all<CustomRow>(
+      "SELECT framework_id, requirement_id, title, parent FROM custom_requirements WHERE tenant_id = ? ORDER BY framework_id, requirement_id",
+      tenantId,
+    );
   const out = new Map<FrameworkId, CustomRequirement[]>();
   const byKey = new Map(rows.map((row) => [`${row.framework_id}|${row.requirement_id}`, row]));
   for (const row of rows) {
@@ -70,15 +77,36 @@ export async function loadCustomRequirements(tenantId: string) {
 export async function loadLicensedText(tenantId: string, frameworkId: FrameworkId) {
   const db = (await getDb()).scope(tenantId);
   const rows = await db.all<{ requirement_id: string; kind: "procedure" | "guidance"; body: string; source_label: string }>(
-    "SELECT c.requirement_id, c.kind, c.body, i.source_label FROM licensed_content c JOIN content_imports i ON i.id = c.import_id WHERE c.tenant_id = ? AND c.framework_id = ? AND i.status = 'active'", tenantId, frameworkId);
+    "SELECT c.requirement_id, c.kind, c.body, i.source_label FROM licensed_content c JOIN content_imports i ON i.id = c.import_id WHERE c.tenant_id = ? AND c.framework_id = ? AND i.status = 'active'",
+    tenantId,
+    frameworkId,
+  );
   const out = new Map<string, Array<{ kind: "procedure" | "guidance"; body: string; sourceLabel: string }>>();
-  for (const row of rows) out.set(row.requirement_id, [...(out.get(row.requirement_id) ?? []), { kind: row.kind, body: row.body, sourceLabel: row.source_label }]);
+  for (const row of rows)
+    out.set(row.requirement_id, [
+      ...(out.get(row.requirement_id) ?? []),
+      { kind: row.kind, body: row.body, sourceLabel: row.source_label },
+    ]);
   return out;
 }
 
 export async function listImports(tenantId: string) {
-  return (await getDb()).scope(tenantId).all<{ id: string; framework_id: string; source_label: string; licence_reference: string; acknowledged_by: string; acknowledged_at: string; items: number; content_hash: string; status: string }>(
-    "SELECT id, framework_id, source_label, licence_reference, acknowledged_by, acknowledged_at, items, content_hash, status FROM content_imports WHERE tenant_id = ? AND status = 'active' ORDER BY acknowledged_at DESC", tenantId);
+  return (await getDb())
+    .scope(tenantId)
+    .all<{
+      id: string;
+      framework_id: string;
+      source_label: string;
+      licence_reference: string;
+      acknowledged_by: string;
+      acknowledged_at: string;
+      items: number;
+      content_hash: string;
+      status: string;
+    }>(
+      "SELECT id, framework_id, source_label, licence_reference, acknowledged_by, acknowledged_at, items, content_hash, status FROM content_imports WHERE tenant_id = ? AND status = 'active' ORDER BY acknowledged_at DESC",
+      tenantId,
+    );
 }
 
 /** Validates the whole import before writing anything, then replaces the framework's previous import atomically. */
@@ -96,10 +124,12 @@ export async function importLicensedContent(actor: Actor, raw: unknown) {
     const where = `Item ${index + 1} (${item.id})`;
     if (seen.has(item.id)) throw userError(`${where}: duplicate identifier`);
     seen.add(item.id);
-    if (!item.procedure && !item.guidance && known.has(item.id)) throw userError(`${where}: nothing to import for an existing requirement (provide procedure or guidance)`);
+    if (!item.procedure && !item.guidance && known.has(item.id))
+      throw userError(`${where}: nothing to import for an existing requirement (provide procedure or guidance)`);
     if (!known.has(item.id)) {
       if (!item.title) throw userError(`${where}: a new sub-requirement needs a title`);
-      if (!item.parent || !(parents.has(item.parent) || importIds.has(item.parent))) throw userError(`${where}: a new sub-requirement needs a parent that exists in ${framework.name}`);
+      if (!item.parent || !(parents.has(item.parent) || importIds.has(item.parent)))
+        throw userError(`${where}: a new sub-requirement needs a parent that exists in ${framework.name}`);
       customs.push({ id: item.id, title: item.title, parent: item.parent });
     }
     if (item.procedure) texts.push({ id: item.id, kind: "procedure", body: item.procedure });
@@ -121,13 +151,69 @@ export async function importLicensedContent(actor: Actor, raw: unknown) {
   const at = new Date().toISOString();
   const db = (await getDb()).scope(actor.tenantId);
   await db.transaction(async (tx) => {
-    await tx.run("UPDATE content_imports SET status = 'removed', removed_at = ? WHERE tenant_id = ? AND framework_id = ? AND status = 'active'", at, actor.tenantId, input.framework);
+    await tx.run(
+      "UPDATE content_imports SET status = 'removed', removed_at = ? WHERE tenant_id = ? AND framework_id = ? AND status = 'active'",
+      at,
+      actor.tenantId,
+      input.framework,
+    );
     await tx.run("DELETE FROM custom_requirements WHERE tenant_id = ? AND framework_id = ?", actor.tenantId, input.framework);
     await tx.run("DELETE FROM licensed_content WHERE tenant_id = ? AND framework_id = ?", actor.tenantId, input.framework);
-    await tx.run("INSERT INTO content_imports (id,tenant_id,framework_id,source_label,licence_reference,acknowledged_by,acknowledged_at,items,content_hash,status) VALUES (?,?,?,?,?,?,?,?,?,?)", importId, actor.tenantId, input.framework, input.sourceLabel, input.licenceReference, actor.userId, at, input.items.length, contentHash, "active");
-    for (const item of customs) await tx.run("INSERT INTO custom_requirements (id,tenant_id,framework_id,requirement_id,title,parent,import_id,created_at) VALUES (?,?,?,?,?,?,?,?)", `creq_${randomUUID()}`, actor.tenantId, input.framework, item.id, item.title, item.parent, importId, at);
-    for (const text of texts) await tx.run("INSERT INTO licensed_content (id,tenant_id,framework_id,requirement_id,kind,body,import_id) VALUES (?,?,?,?,?,?,?)", `lc_${randomUUID()}`, actor.tenantId, input.framework, text.id, text.kind, text.body, importId);
-    await appendAudit({ tenantId: actor.tenantId, actorId: actor.userId, action: "compliance.licensed_content_imported", objectType: "framework", objectId: input.framework, payload: { importId, sourceLabel: input.sourceLabel, licenceReference: input.licenceReference, items: input.items.length, subRequirements: customs.length, texts: texts.length, contentHash } }, tx);
+    await tx.run(
+      "INSERT INTO content_imports (id,tenant_id,framework_id,source_label,licence_reference,acknowledged_by,acknowledged_at,items,content_hash,status) VALUES (?,?,?,?,?,?,?,?,?,?)",
+      importId,
+      actor.tenantId,
+      input.framework,
+      input.sourceLabel,
+      input.licenceReference,
+      actor.userId,
+      at,
+      input.items.length,
+      contentHash,
+      "active",
+    );
+    for (const item of customs)
+      await tx.run(
+        "INSERT INTO custom_requirements (id,tenant_id,framework_id,requirement_id,title,parent,import_id,created_at) VALUES (?,?,?,?,?,?,?,?)",
+        `creq_${randomUUID()}`,
+        actor.tenantId,
+        input.framework,
+        item.id,
+        item.title,
+        item.parent,
+        importId,
+        at,
+      );
+    for (const text of texts)
+      await tx.run(
+        "INSERT INTO licensed_content (id,tenant_id,framework_id,requirement_id,kind,body,import_id) VALUES (?,?,?,?,?,?,?)",
+        `lc_${randomUUID()}`,
+        actor.tenantId,
+        input.framework,
+        text.id,
+        text.kind,
+        text.body,
+        importId,
+      );
+    await appendAudit(
+      {
+        tenantId: actor.tenantId,
+        actorId: actor.userId,
+        action: "compliance.licensed_content_imported",
+        objectType: "framework",
+        objectId: input.framework,
+        payload: {
+          importId,
+          sourceLabel: input.sourceLabel,
+          licenceReference: input.licenceReference,
+          items: input.items.length,
+          subRequirements: customs.length,
+          texts: texts.length,
+          contentHash,
+        },
+      },
+      tx,
+    );
   });
   return { importId, framework: input.framework, subRequirements: customs.length, texts: texts.length, contentHash };
 }
@@ -138,10 +224,29 @@ export async function removeLicensedContent(actor: Actor, frameworkId: Framework
   const db = (await getDb()).scope(actor.tenantId);
   const counts = { subRequirements: 0, texts: 0 };
   await db.transaction(async (tx) => {
-    counts.subRequirements = (await tx.run("DELETE FROM custom_requirements WHERE tenant_id = ? AND framework_id = ?", actor.tenantId, frameworkId)).changes;
-    counts.texts = (await tx.run("DELETE FROM licensed_content WHERE tenant_id = ? AND framework_id = ?", actor.tenantId, frameworkId)).changes;
-    await tx.run("UPDATE content_imports SET status = 'removed', removed_at = ? WHERE tenant_id = ? AND framework_id = ? AND status = 'active'", new Date().toISOString(), actor.tenantId, frameworkId);
-    await appendAudit({ tenantId: actor.tenantId, actorId: actor.userId, action: "compliance.licensed_content_removed", objectType: "framework", objectId: frameworkId, payload: counts }, tx);
+    counts.subRequirements = (
+      await tx.run("DELETE FROM custom_requirements WHERE tenant_id = ? AND framework_id = ?", actor.tenantId, frameworkId)
+    ).changes;
+    counts.texts = (
+      await tx.run("DELETE FROM licensed_content WHERE tenant_id = ? AND framework_id = ?", actor.tenantId, frameworkId)
+    ).changes;
+    await tx.run(
+      "UPDATE content_imports SET status = 'removed', removed_at = ? WHERE tenant_id = ? AND framework_id = ? AND status = 'active'",
+      new Date().toISOString(),
+      actor.tenantId,
+      frameworkId,
+    );
+    await appendAudit(
+      {
+        tenantId: actor.tenantId,
+        actorId: actor.userId,
+        action: "compliance.licensed_content_removed",
+        objectType: "framework",
+        objectId: frameworkId,
+        payload: counts,
+      },
+      tx,
+    );
   });
   return counts;
 }

@@ -5,14 +5,42 @@
  * of amendment proposals, so check the current timeline at the Official Journal / AI Office before planning against a date.
  */
 export const PROHIBITED_PRACTICES = [
-  { id: "manipulation", label: "Subliminal or purposefully manipulative techniques that materially distort behaviour and cause significant harm", article: "Art.5(1)(a)" },
-  { id: "vulnerabilities", label: "Exploiting vulnerabilities due to age, disability or social or economic situation", article: "Art.5(1)(b)" },
+  {
+    id: "manipulation",
+    label: "Subliminal or purposefully manipulative techniques that materially distort behaviour and cause significant harm",
+    article: "Art.5(1)(a)",
+  },
+  {
+    id: "vulnerabilities",
+    label: "Exploiting vulnerabilities due to age, disability or social or economic situation",
+    article: "Art.5(1)(b)",
+  },
   { id: "social_scoring", label: "Social scoring leading to detrimental or unjustified treatment", article: "Art.5(1)(c)" },
-  { id: "crime_profiling", label: "Predicting the risk of an individual committing a criminal offence based solely on profiling", article: "Art.5(1)(d)" },
-  { id: "face_scraping", label: "Building facial recognition databases by untargeted scraping of the internet or CCTV", article: "Art.5(1)(e)" },
-  { id: "emotion_work_school", label: "Inferring emotions of people in the workplace or education (except medical or safety reasons)", article: "Art.5(1)(f)" },
-  { id: "biometric_categorisation", label: "Biometric categorisation inferring race, political opinions, religion, sexual orientation and similar sensitive attributes", article: "Art.5(1)(g)" },
-  { id: "realtime_remote_biometric", label: "Real-time remote biometric identification in public spaces for law enforcement (outside the narrow exceptions)", article: "Art.5(1)(h)" },
+  {
+    id: "crime_profiling",
+    label: "Predicting the risk of an individual committing a criminal offence based solely on profiling",
+    article: "Art.5(1)(d)",
+  },
+  {
+    id: "face_scraping",
+    label: "Building facial recognition databases by untargeted scraping of the internet or CCTV",
+    article: "Art.5(1)(e)",
+  },
+  {
+    id: "emotion_work_school",
+    label: "Inferring emotions of people in the workplace or education (except medical or safety reasons)",
+    article: "Art.5(1)(f)",
+  },
+  {
+    id: "biometric_categorisation",
+    label: "Biometric categorisation inferring race, political opinions, religion, sexual orientation and similar sensitive attributes",
+    article: "Art.5(1)(g)",
+  },
+  {
+    id: "realtime_remote_biometric",
+    label: "Real-time remote biometric identification in public spaces for law enforcement (outside the narrow exceptions)",
+    article: "Art.5(1)(h)",
+  },
 ] as const;
 
 export const ANNEX_III_AREAS = [
@@ -21,7 +49,10 @@ export const ANNEX_III_AREAS = [
   { id: "critical_infrastructure", label: "Safety components of critical infrastructure (digital, road traffic, utilities)" },
   { id: "education", label: "Education and vocational training: access, assessment, proctoring" },
   { id: "employment", label: "Employment and workers management: recruitment, evaluation, promotion, termination" },
-  { id: "essential_services", label: "Essential services: public benefits, creditworthiness, life and health insurance pricing, emergency dispatch" },
+  {
+    id: "essential_services",
+    label: "Essential services: public benefits, creditworthiness, life and health insurance pricing, emergency dispatch",
+  },
   { id: "law_enforcement", label: "Law enforcement" },
   { id: "migration", label: "Migration, asylum and border control" },
   { id: "justice_democracy", label: "Administration of justice and democratic processes" },
@@ -53,7 +84,13 @@ export type Answers = {
 
 export type Obligation = { id: string; article: string; title: string; ucCode: string; applies: "provider" | "deployer" | "both" };
 
-const O = (id: string, article: string, title: string, ucCode: string, applies: Obligation["applies"]): Obligation => ({ id, article, title, ucCode, applies });
+const O = (id: string, article: string, title: string, ucCode: string, applies: Obligation["applies"]): Obligation => ({
+  id,
+  article,
+  title,
+  ucCode,
+  applies,
+});
 
 export const HIGH_RISK_OBLIGATIONS: Obligation[] = [
   O("risk_management", "Art.9", "Risk management system across the lifecycle", "UC-AI-02", "provider"),
@@ -80,7 +117,13 @@ export const FRIA_OBLIGATION = O("fria", "Art.27", "Fundamental rights impact as
 export const TRANSPARENCY_OBLIGATIONS: Obligation[] = [
   O("disclose_ai_interaction", "Art.50(1)", "Tell people they are interacting with an AI system", "UC-AI-04", "provider"),
   O("mark_synthetic", "Art.50(2)", "Mark synthetic audio, image, video or text in a machine-readable way", "UC-AI-04", "provider"),
-  O("inform_emotion_biometric", "Art.50(3)", "Inform people exposed to emotion recognition or biometric categorisation", "UC-AI-04", "deployer"),
+  O(
+    "inform_emotion_biometric",
+    "Art.50(3)",
+    "Inform people exposed to emotion recognition or biometric categorisation",
+    "UC-AI-04",
+    "deployer",
+  ),
   O("disclose_deepfake", "Art.50(4)", "Disclose deep fakes and AI-generated text published to inform the public", "UC-AI-04", "deployer"),
   O("ai_literacy_limited", "Art.4", "AI literacy of staff operating the system", "UC-AI-01", "both"),
 ];
@@ -121,37 +164,62 @@ export function classify(answers: Answers): Classification {
 
   let tier: Tier = "minimal";
   if (answers.annexIProduct) {
-    tier = "high"; reasons.push("The system is, or is a safety component of, a product covered by Annex I harmonisation legislation that requires third-party conformity assessment (Art.6(1)).");
-    review.push("Whether the product legislation requires third-party conformity assessment, and which application date governs, depends on the sector regulation.");
+    tier = "high";
+    reasons.push(
+      "The system is, or is a safety component of, a product covered by Annex I harmonisation legislation that requires third-party conformity assessment (Art.6(1)).",
+    );
+    review.push(
+      "Whether the product legislation requires third-party conformity assessment, and which application date governs, depends on the sector regulation.",
+    );
   }
   if (answers.annexIIIArea !== "none") {
     const area = ANNEX_III_AREAS.find((item) => item.id === answers.annexIIIArea)!;
     if (answers.derogationClaimed && !answers.profilesPeople) {
-      reasons.push(`Falls in an Annex III area (${area.label}) but the Art.6(3) derogation is claimed: not high-risk if it performs only a narrow procedural task, improves a prior human activity, detects patterns without replacing human assessment, or does a preparatory task.`);
-      review.push("An Art.6(3) derogation must be documented and the system registered; the assessment can be challenged by the authorities.");
+      reasons.push(
+        `Falls in an Annex III area (${area.label}) but the Art.6(3) derogation is claimed: not high-risk if it performs only a narrow procedural task, improves a prior human activity, detects patterns without replacing human assessment, or does a preparatory task.`,
+      );
+      review.push(
+        "An Art.6(3) derogation must be documented and the system registered; the assessment can be challenged by the authorities.",
+      );
     } else {
       tier = "high";
       reasons.push(`Annex III area: ${area.label} (Art.6(2)).`);
-      if (answers.derogationClaimed && answers.profilesPeople) reasons.push("The derogation does not apply: a system that profiles natural persons is always high-risk (Art.6(3)).");
+      if (answers.derogationClaimed && answers.profilesPeople)
+        reasons.push("The derogation does not apply: a system that profiles natural persons is always high-risk (Art.6(3)).");
     }
   }
   if (tier !== "high") {
-    const transparency = answers.interactsWithPeople || answers.generatesSyntheticContent || answers.emotionRecognitionOrBiometricCategorisation;
+    const transparency =
+      answers.interactsWithPeople || answers.generatesSyntheticContent || answers.emotionRecognitionOrBiometricCategorisation;
     if (transparency) {
       tier = "limited";
-      if (answers.interactsWithPeople) reasons.push("The system interacts directly with people: they must be told it is an AI system (Art.50(1)).");
-      if (answers.generatesSyntheticContent) reasons.push("The system generates synthetic audio, image, video or text: outputs must be machine-readably marked (Art.50(2)).");
-      if (answers.emotionRecognitionOrBiometricCategorisation) reasons.push("Emotion recognition or biometric categorisation: people exposed must be informed (Art.50(3)).");
+      if (answers.interactsWithPeople)
+        reasons.push("The system interacts directly with people: they must be told it is an AI system (Art.50(1)).");
+      if (answers.generatesSyntheticContent)
+        reasons.push("The system generates synthetic audio, image, video or text: outputs must be machine-readably marked (Art.50(2)).");
+      if (answers.emotionRecognitionOrBiometricCategorisation)
+        reasons.push("Emotion recognition or biometric categorisation: people exposed must be informed (Art.50(3)).");
     }
   }
-  if (tier === "minimal") reasons.push("No prohibited practice, no Annex III or Annex I trigger and no transparency trigger: minimal risk. Voluntary codes of conduct and AI literacy (Art.4) still apply.");
+  if (tier === "minimal")
+    reasons.push(
+      "No prohibited practice, no Annex III or Annex I trigger and no transparency trigger: minimal risk. Voluntary codes of conduct and AI literacy (Art.4) still apply.",
+    );
   if (gpai.provider) {
-    reasons.push(`The organisation provides a general-purpose AI model (Art.53)${gpai.systemic ? ", presumed to pose systemic risk (Art.51, Art.55)" : ""}. This is assessed separately from the risk tier of any system built on it.`);
-    if (gpai.systemic) review.push("A systemic-risk designation rests on a compute threshold or a Commission decision and carries notification duties to the AI Office.");
+    reasons.push(
+      `The organisation provides a general-purpose AI model (Art.53)${gpai.systemic ? ", presumed to pose systemic risk (Art.51, Art.55)" : ""}. This is assessed separately from the risk tier of any system built on it.`,
+    );
+    if (gpai.systemic)
+      review.push(
+        "A systemic-risk designation rests on a compute threshold or a Commission decision and carries notification duties to the AI Office.",
+      );
   }
 
   const friaRequired = tier === "high" && deployer && (answers.publicService || answers.annexIIIArea === "essential_services");
-  if (friaRequired) reasons.push("A fundamental rights impact assessment is required before first use (Art.27): the deployer provides public services or the use is creditworthiness or life and health insurance pricing.");
+  if (friaRequired)
+    reasons.push(
+      "A fundamental rights impact assessment is required before first use (Art.27): the deployer provides public services or the use is creditworthiness or life and health insurance pricing.",
+    );
 
   const wants = (item: Obligation) => (item.applies === "both" ? true : item.applies === "provider" ? provider : deployer);
   let obligations: Obligation[] = [];
@@ -176,4 +244,15 @@ export const MODEL_CARD_FIELDS = [
   { id: "change_log", label: "Changes since the previous version", required: false },
 ] as const;
 
-export const FRIA_RIGHTS = ["Human dignity", "Non-discrimination", "Privacy and data protection", "Freedom of expression", "Access to essential services", "Workers' rights", "Right to an effective remedy and fair trial", "Rights of the child", "Rights of persons with disabilities", "Consumer protection"] as const;
+export const FRIA_RIGHTS = [
+  "Human dignity",
+  "Non-discrimination",
+  "Privacy and data protection",
+  "Freedom of expression",
+  "Access to essential services",
+  "Workers' rights",
+  "Right to an effective remedy and fair trial",
+  "Rights of the child",
+  "Rights of persons with disabilities",
+  "Consumer protection",
+] as const;

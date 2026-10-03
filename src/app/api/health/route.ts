@@ -7,6 +7,8 @@ export async function GET() {
   try {
     const check = await (await getDb()).system().get<{ ok: number | string }>("SELECT 1 AS ok");
     healthy = Number(check?.ok) === 1;
-  } catch { healthy = false; }
+  } catch {
+    healthy = false;
+  }
   return Response.json({ status: healthy ? "healthy" : "degraded", service: "kontrol-kernel", time: new Date().toISOString() });
 }

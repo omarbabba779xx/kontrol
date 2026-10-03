@@ -12,5 +12,7 @@ export async function GET(request: Request) {
     const controls = await db.all("SELECT * FROM controls WHERE tenant_id = ? AND valid_to IS NULL", actor.tenantId);
     const edges = await db.all("SELECT * FROM graph_edges WHERE tenant_id = ? AND valid_to IS NULL", actor.tenantId);
     return Response.json({ nodes: { assets, obligations, controls }, edges });
-  } catch (error) { return apiError(error); }
+  } catch (error) {
+    return apiError(error);
+  }
 }

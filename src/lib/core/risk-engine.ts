@@ -30,16 +30,23 @@ function percentile(sorted: number[], value: number) {
 export function simulateRisk(scenario: Scenario) {
   const seed = JSON.stringify(scenario);
   const random = seededRandom(seed);
-  const frequencyMultiplier = 1 + (scenario.materialDecision ? .34 : 0) + (scenario.sensitiveData ? .18 : 0) + (scenario.thirdPartyModel ? .1 : 0) + (scenario.crossBorder ? .08 : 0) - (scenario.humanReview ? .26 : 0);
-  const baseFrequency = Math.max(.4, scenario.annualEvents / 55_000) * frequencyMultiplier;
-  const baseMagnitude = 260_000 * (1 + (scenario.materialDecision ? 1.25 : 0) + (scenario.sensitiveData ? .7 : 0) + (scenario.crossBorder ? .25 : 0));
+  const frequencyMultiplier =
+    1 +
+    (scenario.materialDecision ? 0.34 : 0) +
+    (scenario.sensitiveData ? 0.18 : 0) +
+    (scenario.thirdPartyModel ? 0.1 : 0) +
+    (scenario.crossBorder ? 0.08 : 0) -
+    (scenario.humanReview ? 0.26 : 0);
+  const baseFrequency = Math.max(0.4, scenario.annualEvents / 55_000) * frequencyMultiplier;
+  const baseMagnitude =
+    260_000 * (1 + (scenario.materialDecision ? 1.25 : 0) + (scenario.sensitiveData ? 0.7 : 0) + (scenario.crossBorder ? 0.25 : 0));
   const losses: number[] = [];
 
   for (let iteration = 0; iteration < scenario.iterations; iteration += 1) {
     const frequency = Math.max(0, Math.round(baseFrequency + normal(random) * Math.sqrt(baseFrequency)));
     let aggregate = 0;
     for (let event = 0; event < frequency; event += 1) {
-      const logNormal = Math.exp(Math.log(baseMagnitude) + .72 * normal(random));
+      const logNormal = Math.exp(Math.log(baseMagnitude) + 0.72 * normal(random));
       aggregate += logNormal;
     }
     losses.push(Math.round(aggregate));
@@ -47,10 +54,15 @@ export function simulateRisk(scenario: Scenario) {
   losses.sort((a, b) => a - b);
 
   const classification = scenario.materialDecision ? "high-risk" : scenario.sensitiveData ? "limited-risk" : "minimal-risk";
-  const requiredControls = 12 + (scenario.materialDecision ? 9 : 0) + (scenario.sensitiveData ? 6 : 0) + (scenario.thirdPartyModel ? 4 : 0) + (scenario.crossBorder ? 3 : 0);
-  const p50 = percentile(losses, .5);
-  const p90 = percentile(losses, .9);
-  const p95 = percentile(losses, .95);
+  const requiredControls =
+    12 +
+    (scenario.materialDecision ? 9 : 0) +
+    (scenario.sensitiveData ? 6 : 0) +
+    (scenario.thirdPartyModel ? 4 : 0) +
+    (scenario.crossBorder ? 3 : 0);
+  const p50 = percentile(losses, 0.5);
+  const p90 = percentile(losses, 0.9);
+  const p95 = percentile(losses, 0.95);
   const mean = Math.round(losses.reduce((sum, loss) => sum + loss, 0) / losses.length);
 
   return {
@@ -59,7 +71,7 @@ export function simulateRisk(scenario: Scenario) {
     iterations: scenario.iterations,
     annualizedLoss: { mean, p50, p90, p95, currency: "EUR" },
     requiredControls,
-    factors: { baseFrequency, baseMagnitude, humanReviewReduction: scenario.humanReview ? .26 : 0 },
+    factors: { baseFrequency, baseMagnitude, humanReviewReduction: scenario.humanReview ? 0.26 : 0 },
     histogram: Array.from({ length: 20 }, (_, index) => {
       const start = percentile(losses, index / 20);
       const end = percentile(losses, (index + 1) / 20);
@@ -72,9 +84,31 @@ export async function persistRiskSimulation(actor: Actor, scenario: Scenario, re
   const id = `risk_${randomUUID()}`;
   const now = new Date().toISOString();
   const db = (await getDb()).scope(actor.tenantId);
-  await db.run(`INSERT INTO risks (id,tenant_id,title,scenario,asset_id,owner_id,status,likelihood,impact,p50_loss,p90_loss,currency,assumptions_json,valid_from,recorded_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
-    id, actor.tenantId, scenario.name, `Loss arising from ${result.classification} AI deployment`, "asset_ai_014", actor.userId, "open", result.factors.baseFrequency, result.factors.baseMagnitude, result.annualizedLoss.p50, result.annualizedLoss.p90, "EUR", JSON.stringify(scenario), now, now,
+  await db.run(
+    `INSERT INTO risks (id,tenant_id,title,scenario,asset_id,owner_id,status,likelihood,impact,p50_loss,p90_loss,currency,assumptions_json,valid_from,recorded_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+    id,
+    actor.tenantId,
+    scenario.name,
+    `Loss arising from ${result.classification} AI deployment`,
+    "asset_ai_014",
+    actor.userId,
+    "open",
+    result.factors.baseFrequency,
+    result.factors.baseMagnitude,
+    result.annualizedLoss.p50,
+    result.annualizedLoss.p90,
+    "EUR",
+    JSON.stringify(scenario),
+    now,
+    now,
   );
-  await appendAudit({ tenantId: actor.tenantId, actorId: actor.userId, action: "risk.simulated", objectType: "risk", objectId: id, payload: { scenario, result } });
+  await appendAudit({
+    tenantId: actor.tenantId,
+    actorId: actor.userId,
+    action: "risk.simulated",
+    objectType: "risk",
+    objectId: id,
+    payload: { scenario, result },
+  });
   return id;
 }

@@ -10,5 +10,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
     const actor = await requireActor(request, "controls:evaluate");
     const { reason } = z.object({ reason: z.string().min(5).max(1000) }).parse(await request.json());
     return Response.json(await cancelWorkflow(actor, (await params).id, reason));
-  } catch (error) { return apiError(error); }
+  } catch (error) {
+    return apiError(error);
+  }
 }

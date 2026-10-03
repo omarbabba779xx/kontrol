@@ -7,5 +7,12 @@ export async function POST(request: Request) {
   const actor = await authenticate(request);
   if (!actor) return Response.json({ error: "Demo actor unavailable" }, { status: 500 });
   const token = await issueSessionToken(actor);
-  return Response.json({ actor, token }, { headers: { "Set-Cookie": `kontrol_session=${token}; HttpOnly; SameSite=Lax; Path=/; Max-Age=28800${process.env.NODE_ENV === "production" ? "; Secure" : ""}` } });
+  return Response.json(
+    { actor, token },
+    {
+      headers: {
+        "Set-Cookie": `kontrol_session=${token}; HttpOnly; SameSite=Lax; Path=/; Max-Age=28800${process.env.NODE_ENV === "production" ? "; Secure" : ""}`,
+      },
+    },
+  );
 }

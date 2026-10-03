@@ -12,6 +12,17 @@ export async function POST(request: Request) {
   try {
     const actor = await requireActor(request, "controls:evaluate");
     const input = controlEvaluationSchema.parse(await request.json());
-    return Response.json(await evaluateControl(actor, { ...input, source: `manual:${actor.userId}`, provenance: { collector: { name: "manual-assertion", version: "1" }, limits: ["facts were asserted by the caller and not collected from the system"] } }));
-  } catch (error) { return apiError(error); }
+    return Response.json(
+      await evaluateControl(actor, {
+        ...input,
+        source: `manual:${actor.userId}`,
+        provenance: {
+          collector: { name: "manual-assertion", version: "1" },
+          limits: ["facts were asserted by the caller and not collected from the system"],
+        },
+      }),
+    );
+  } catch (error) {
+    return apiError(error);
+  }
 }

@@ -47,7 +47,14 @@ export const githubSyncSchema = z.object({
 });
 
 export const agentRequestSchema = z.object({
-  agent: z.enum(["regulatory_analyst", "control_engineer", "evidence_analyst", "risk_quantifier", "audit_assistant", "contradiction_detector"]),
+  agent: z.enum([
+    "regulatory_analyst",
+    "control_engineer",
+    "evidence_analyst",
+    "risk_quantifier",
+    "audit_assistant",
+    "contradiction_detector",
+  ]),
   question: z.string().min(5).max(4000),
   subjectId: z.string().optional(),
 });

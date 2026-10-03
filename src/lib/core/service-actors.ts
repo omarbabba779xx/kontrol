@@ -16,7 +16,15 @@ export async function serviceActor(tenantId: string, service: keyof typeof SERVI
   const user = SERVICE_USERS[service];
   const db = (await getDb()).system();
   if (!(await db.get("SELECT id FROM users WHERE id = ? AND tenant_id = ?", user.id, tenantId))) {
-    await db.run("INSERT INTO users (id,tenant_id,email,name,role,created_at) VALUES (?,?,?,?,?,?) ON CONFLICT DO NOTHING", user.id, tenantId, user.email, user.name, "control_owner", new Date().toISOString());
+    await db.run(
+      "INSERT INTO users (id,tenant_id,email,name,role,created_at) VALUES (?,?,?,?,?,?) ON CONFLICT DO NOTHING",
+      user.id,
+      tenantId,
+      user.email,
+      user.name,
+      "control_owner",
+      new Date().toISOString(),
+    );
   }
   return { userId: user.id, tenantId, email: user.email, name: user.name, role: "control_owner" };
 }

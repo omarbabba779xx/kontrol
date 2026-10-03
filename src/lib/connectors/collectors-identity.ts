@@ -22,15 +22,22 @@ export async function collectGoogleWorkspace(api: Api, domain: string, now = Dat
   let truncated = false;
   try {
     for (let page = 0; ; page++) {
-      if (page >= MAX_PAGES) { truncated = true; break; }
-      const response: JsonResponse = await api(`/users?customer=my_customer&maxResults=500&projection=basic${pageToken ? `&pageToken=${encodeURIComponent(pageToken)}` : ""}`);
+      if (page >= MAX_PAGES) {
+        truncated = true;
+        break;
+      }
+      const response: JsonResponse = await api(
+        `/users?customer=my_customer&maxResults=500&projection=basic${pageToken ? `&pageToken=${encodeURIComponent(pageToken)}` : ""}`,
+      );
       if (response.status !== 200) throw new Error(`Google Directory API ${response.status}`);
       const body = record(response.body);
       users.push(...list(body.users).map(record));
       pageToken = typeof body.nextPageToken === "string" && body.nextPageToken ? body.nextPageToken : null;
       if (!pageToken) break;
     }
-  } catch { return facts; }
+  } catch {
+    return facts;
+  }
 
   const active = users.filter((user) => user.suspended !== true && user.archived !== true);
   const enrolled = active.filter((user) => user.isEnrolledIn2Sv === true).length;
@@ -40,7 +47,10 @@ export async function collectGoogleWorkspace(api: Api, domain: string, now = Dat
     const reference = Number.isNaN(login) || login < Date.parse("2000-01-01") ? Date.parse(String(user.creationTime ?? "")) : login;
     return reference;
   };
-  const inactive = active.filter((user) => { const at = lastActivity(user); return !Number.isNaN(at) && now - at > 90 * DAY; }).length;
+  const inactive = active.filter((user) => {
+    const at = lastActivity(user);
+    return !Number.isNaN(at) && now - at > 90 * DAY;
+  }).length;
   const superAdmins = active.filter((user) => user.isAdmin === true);
 
   facts.users = {
@@ -51,11 +61,13 @@ export async function collectGoogleWorkspace(api: Api, domain: string, now = Dat
     inactiveOver90Days: truncated ? null : inactive,
     truncated,
   };
-  facts.admins = truncated ? null : {
-    superAdmins: superAdmins.length,
-    superAdminsWithout2Sv: superAdmins.filter((user) => user.isEnrolledIn2Sv !== true).length,
-    delegatedAdmins: active.filter((user) => user.isDelegatedAdmin === true).length,
-  };
+  facts.admins = truncated
+    ? null
+    : {
+        superAdmins: superAdmins.length,
+        superAdminsWithout2Sv: superAdmins.filter((user) => user.isEnrolledIn2Sv !== true).length,
+        delegatedAdmins: active.filter((user) => user.isDelegatedAdmin === true).length,
+      };
   return facts;
 }
 
@@ -67,7 +79,10 @@ async function graphPages(api: Api, first: string) {
   let next: string | null = first;
   let truncated = false;
   for (let page = 0; next; page++) {
-    if (page >= MAX_PAGES) { truncated = true; break; }
+    if (page >= MAX_PAGES) {
+      truncated = true;
+      break;
+    }
     const response: JsonResponse = await api(next);
     if (response.status !== 200) throw new Error(`Graph API ${response.status}`);
     const body = record(response.body);
@@ -86,14 +101,18 @@ export async function collectEntra(api: Api, tenant: string, now = Date.now()): 
     const { items, truncated } = await graphPages(api, "/reports/authenticationMethods/userRegistrationDetails?$top=999");
     const members = items.filter((item) => item.userType !== "guest");
     const admins = members.filter((item) => item.isAdmin === true);
-    facts.mfa = truncated ? null : {
-      members: members.length,
-      mfaRegistered: members.filter((item) => item.isMfaRegistered === true).length,
-      mfaCoverage: members.length ? members.filter((item) => item.isMfaRegistered === true).length / members.length : null,
-      admins: admins.length,
-      adminsWithoutMfa: admins.filter((item) => item.isMfaRegistered !== true).length,
-    };
-  } catch { /* Reports.Read.All missing or Entra ID P1 not available */ }
+    facts.mfa = truncated
+      ? null
+      : {
+          members: members.length,
+          mfaRegistered: members.filter((item) => item.isMfaRegistered === true).length,
+          mfaCoverage: members.length ? members.filter((item) => item.isMfaRegistered === true).length / members.length : null,
+          admins: admins.length,
+          adminsWithoutMfa: admins.filter((item) => item.isMfaRegistered !== true).length,
+        };
+  } catch {
+    /* Reports.Read.All missing or Entra ID P1 not available */
+  }
 
   try {
     const { items } = await graphPages(api, "/identity/conditionalAccess/policies");
@@ -104,23 +123,44 @@ export async function collectEntra(api: Api, tenant: string, now = Date.now()): 
     facts.conditionalAccess = {
       policies: items.length,
       enabledPolicies: enabled.length,
-      mfaForAllUsers: enabled.some((policy) => forAllUsers(policy) && forAllApps(policy) && (includes(grants(policy).builtInControls, "mfa") || Boolean(record(grants(policy).authenticationStrength).id))),
-      legacyAuthBlocked: enabled.some((policy) => forAllUsers(policy) && includes(record(policy.conditions).clientAppTypes, "exchangeActiveSync") && includes(record(policy.conditions).clientAppTypes, "other") && includes(grants(policy).builtInControls, "block")),
+      mfaForAllUsers: enabled.some(
+        (policy) =>
+          forAllUsers(policy) &&
+          forAllApps(policy) &&
+          (includes(grants(policy).builtInControls, "mfa") || Boolean(record(grants(policy).authenticationStrength).id)),
+      ),
+      legacyAuthBlocked: enabled.some(
+        (policy) =>
+          forAllUsers(policy) &&
+          includes(record(policy.conditions).clientAppTypes, "exchangeActiveSync") &&
+          includes(record(policy.conditions).clientAppTypes, "other") &&
+          includes(grants(policy).builtInControls, "block"),
+      ),
     };
-  } catch { /* Policy.Read.All missing */ }
+  } catch {
+    /* Policy.Read.All missing */
+  }
 
   try {
     const { items, truncated } = await graphPages(api, "/users?$select=id,accountEnabled,userType,createdDateTime,signInActivity&$top=999");
     const members = items.filter((user) => user.accountEnabled === true && user.userType !== "Guest" && user.userType !== "guest");
-    const hasActivityData = members.some((user) => record(user.signInActivity).lastSuccessfulSignInDateTime !== undefined || record(user.signInActivity).lastSignInDateTime !== undefined);
+    const hasActivityData = members.some(
+      (user) =>
+        record(user.signInActivity).lastSuccessfulSignInDateTime !== undefined ||
+        record(user.signInActivity).lastSignInDateTime !== undefined,
+    );
     const inactive = members.filter((user) => {
       const activity = record(user.signInActivity);
-      const reference = Date.parse(String(activity.lastSuccessfulSignInDateTime ?? activity.lastSignInDateTime ?? user.createdDateTime ?? ""));
+      const reference = Date.parse(
+        String(activity.lastSuccessfulSignInDateTime ?? activity.lastSignInDateTime ?? user.createdDateTime ?? ""),
+      );
       return !Number.isNaN(reference) && now - reference > 90 * DAY;
     }).length;
     // Without AuditLog.Read.All the signInActivity property is absent: that is "unknown", not "nobody is dormant".
     facts.users = { enabled: members.length, inactiveOver90Days: truncated || !hasActivityData ? null : inactive, truncated };
-  } catch { /* AuditLog.Read.All missing */ }
+  } catch {
+    /* AuditLog.Read.All missing */
+  }
 
   return facts;
 }
@@ -150,7 +190,13 @@ export async function collectGitLab(api: Api, projectPath: string, group?: strin
     };
   } else if (protectedBranch.status === 404) {
     // The project itself was readable, so a 404 here means the default branch is not protected.
-    branchProtection = { enabled: false, developersCanPush: true, forcePushAllowed: true, codeOwnerApprovalRequired: false, requiredReviews: 0 };
+    branchProtection = {
+      enabled: false,
+      developersCanPush: true,
+      forcePushAllowed: true,
+      codeOwnerApprovalRequired: false,
+      requiredReviews: 0,
+    };
   }
 
   // Approval rules are a paid feature: unavailable means unknown, never zero.
@@ -161,7 +207,11 @@ export async function collectGitLab(api: Api, projectPath: string, group?: strin
   }
 
   let twoFactorRequired: boolean | null = null;
-  const groupPath = group ?? (typeof record(data.namespace).full_path === "string" && record(data.namespace).kind === "group" ? String(record(data.namespace).full_path) : undefined);
+  const groupPath =
+    group ??
+    (typeof record(data.namespace).full_path === "string" && record(data.namespace).kind === "group"
+      ? String(record(data.namespace).full_path)
+      : undefined);
   if (groupPath) {
     const response = await api(`/groups/${encodeURIComponent(groupPath)}`);
     const flag = record(response.body).require_two_factor_authentication;

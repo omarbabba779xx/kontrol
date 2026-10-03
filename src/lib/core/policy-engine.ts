@@ -1,3 +1,4 @@
+import { MAX_SUBJECT, safeRegex } from "@/lib/core/regex-guard";
 import "server-only";
 
 import { randomUUID } from "node:crypto";
@@ -7,14 +8,29 @@ import { appendAudit, canonicalJson, sha256 } from "@/lib/core/integrity";
 import { crossCheckWithOpa } from "@/lib/core/opa";
 import { userError } from "@/lib/core/errors";
 
-export type Operator = "eq" | "neq" | "gt" | "gte" | "lt" | "lte" | "between" | "in" | "not_in" | "includes" | "exists" | "not_exists" | "length_gte" | "length_lte" | "matches" | "within_days" | "older_than_days";
+export type Operator =
+  | "eq"
+  | "neq"
+  | "gt"
+  | "gte"
+  | "lt"
+  | "lte"
+  | "between"
+  | "in"
+  | "not_in"
+  | "includes"
+  | "exists"
+  | "not_exists"
+  | "length_gte"
+  | "length_lte"
+  | "matches"
+  | "within_days"
+  | "older_than_days";
 export type Condition = { path: string; op: Operator; value?: unknown };
 /** `all` must hold, at least one of `any` must hold (when present) and none of `none` may hold. */
 export type Policy = { all?: Condition[]; any?: Condition[]; none?: Condition[] };
 
 const DAY_MS = 86_400_000;
-const MAX_PATTERN = 120;
-const MAX_SUBJECT = 10_000;
 
 function getPath(input: unknown, path: string): unknown {
   return path.split(".").reduce<unknown>((current, segment) => {
@@ -27,15 +43,14 @@ const isNumber = (value: unknown): value is number => typeof value === "number" 
 
 /** Structural equality, so arrays and objects compare by value (as they do in Rego), never by reference. */
 function same(left: unknown, right: unknown): boolean {
-  return left === right || (left !== null && right !== null && typeof left === "object" && typeof right === "object" && canonicalJson(left) === canonicalJson(right));
-}
-
-/** Rejects patterns that are long or that nest quantifiers, the classic source of catastrophic backtracking. */
-function safeRegex(pattern: unknown): RegExp | null {
-  if (typeof pattern !== "string" || pattern.length === 0 || pattern.length > MAX_PATTERN) return null;
-  // No back-references, no quantified groups, no stacked quantifiers.
-  if (/\\[1-9]/.test(pattern) || /\)\s*[*+?{]/.test(pattern) || /[*+?}]\s*[*+{]/.test(pattern)) return null;
-  try { return new RegExp(pattern); } catch { return null; }
+  return (
+    left === right ||
+    (left !== null &&
+      right !== null &&
+      typeof left === "object" &&
+      typeof right === "object" &&
+      canonicalJson(left) === canonicalJson(right))
+  );
 }
 
 function timestamp(value: unknown): number | null {
@@ -50,44 +65,114 @@ export function testCondition(facts: Record<string, unknown>, condition: Conditi
   const actual = getPath(facts, condition.path);
   const expected = condition.value;
   switch (condition.op) {
-    case "eq": return actual !== undefined && same(actual, expected);
-    case "neq": return actual !== undefined && !same(actual, expected);
-    case "gt": return isNumber(actual) && isNumber(expected) && actual > expected;
-    case "gte": return isNumber(actual) && isNumber(expected) && actual >= expected;
-    case "lt": return isNumber(actual) && isNumber(expected) && actual < expected;
-    case "lte": return isNumber(actual) && isNumber(expected) && actual <= expected;
-    case "between": return isNumber(actual) && Array.isArray(expected) && expected.length === 2 && isNumber(expected[0]) && isNumber(expected[1]) && actual >= expected[0] && actual <= expected[1];
-    case "in": return Array.isArray(expected) && actual !== undefined && expected.some((item) => same(item, actual));
-    case "not_in": return Array.isArray(expected) && actual !== undefined && !expected.some((item) => same(item, actual));
-    case "includes": return Array.isArray(actual) ? actual.some((item) => same(item, expected)) : typeof actual === "string" && typeof expected === "string" && actual.includes(expected);
-    case "exists": return expected === false ? actual === undefined : actual !== undefined;
-    case "not_exists": return actual === undefined;
-    case "length_gte": return (Array.isArray(actual) || typeof actual === "string") && isNumber(expected) && actual.length >= expected;
-    case "length_lte": return (Array.isArray(actual) || typeof actual === "string") && isNumber(expected) && actual.length <= expected;
-    case "matches": { const pattern = safeRegex(expected); return pattern !== null && typeof actual === "string" && actual.length <= MAX_SUBJECT && pattern.test(actual); }
-    case "within_days": { const at = timestamp(actual); return at !== null && isNumber(expected) && expected >= 0 && at <= now && now - at <= expected * DAY_MS; }
-    case "older_than_days": { const at = timestamp(actual); return at !== null && isNumber(expected) && expected >= 0 && now - at > expected * DAY_MS; }
-    default: return false;
+    case "eq":
+      return actual !== undefined && same(actual, expected);
+    case "neq":
+      return actual !== undefined && !same(actual, expected);
+    case "gt":
+      return isNumber(actual) && isNumber(expected) && actual > expected;
+    case "gte":
+      return isNumber(actual) && isNumber(expected) && actual >= expected;
+    case "lt":
+      return isNumber(actual) && isNumber(expected) && actual < expected;
+    case "lte":
+      return isNumber(actual) && isNumber(expected) && actual <= expected;
+    case "between":
+      return (
+        isNumber(actual) &&
+        Array.isArray(expected) &&
+        expected.length === 2 &&
+        isNumber(expected[0]) &&
+        isNumber(expected[1]) &&
+        actual >= expected[0] &&
+        actual <= expected[1]
+      );
+    case "in":
+      return Array.isArray(expected) && actual !== undefined && expected.some((item) => same(item, actual));
+    case "not_in":
+      return Array.isArray(expected) && actual !== undefined && !expected.some((item) => same(item, actual));
+    case "includes":
+      return Array.isArray(actual)
+        ? actual.some((item) => same(item, expected))
+        : typeof actual === "string" && typeof expected === "string" && actual.includes(expected);
+    case "exists":
+      return expected === false ? actual === undefined : actual !== undefined;
+    case "not_exists":
+      return actual === undefined;
+    case "length_gte":
+      return (Array.isArray(actual) || typeof actual === "string") && isNumber(expected) && actual.length >= expected;
+    case "length_lte":
+      return (Array.isArray(actual) || typeof actual === "string") && isNumber(expected) && actual.length <= expected;
+    case "matches": {
+      const pattern = safeRegex(expected);
+      return pattern !== null && typeof actual === "string" && actual.length <= MAX_SUBJECT && pattern.test(actual);
+    }
+    case "within_days": {
+      const at = timestamp(actual);
+      return at !== null && isNumber(expected) && expected >= 0 && at <= now && now - at <= expected * DAY_MS;
+    }
+    case "older_than_days": {
+      const at = timestamp(actual);
+      return at !== null && isNumber(expected) && expected >= 0 && now - at > expected * DAY_MS;
+    }
+    default:
+      return false;
   }
 }
 
 export function evaluatePolicy(policy: Policy, facts: Record<string, unknown>, now = Date.now()) {
-  const run = (conditions: Condition[] | undefined) => (conditions ?? []).map((condition) => ({ condition, actual: getPath(facts, condition.path), passed: testCondition(facts, condition, now) }));
+  const run = (conditions: Condition[] | undefined) =>
+    (conditions ?? []).map((condition) => ({
+      condition,
+      actual: getPath(facts, condition.path),
+      passed: testCondition(facts, condition, now),
+    }));
   const allResults = run(policy.all);
   const anyResults = run(policy.any);
   const noneResults = run(policy.none).map((result) => ({ ...result, passed: !result.passed }));
-  const passed = allResults.every((result) => result.passed) && (anyResults.length === 0 || anyResults.some((result) => result.passed)) && noneResults.every((result) => result.passed);
+  const passed =
+    allResults.every((result) => result.passed) &&
+    (anyResults.length === 0 || anyResults.some((result) => result.passed)) &&
+    noneResults.every((result) => result.passed);
   const tests = [...allResults, ...anyResults, ...noneResults];
   // For an `any` group the individual misses only matter when the whole group failed.
   const anyFailed = anyResults.length === 0 || anyResults.some((result) => result.passed) ? [] : anyResults;
-  return { passed, tests, failed: [...allResults.filter((result) => !result.passed), ...anyFailed, ...noneResults.filter((result) => !result.passed)] };
+  return {
+    passed,
+    tests,
+    failed: [...allResults.filter((result) => !result.passed), ...anyFailed, ...noneResults.filter((result) => !result.passed)],
+  };
 }
 
-export async function evaluateControl(actor: Actor, input: { controlCode: string; assetId: string; facts: Record<string, unknown>; source: string; periodStart?: string; periodEnd?: string; /** How long the evidence stays current; defaults to one day. */ validForDays?: number; /** Where the facts came from and what could not be seen. Stored inside the hashed evidence. */ provenance?: { collector: { name: string; version: string }; scope?: Record<string, unknown>; limits?: string[] } }) {
+export async function evaluateControl(
+  actor: Actor,
+  input: {
+    controlCode: string;
+    assetId: string;
+    facts: Record<string, unknown>;
+    source: string;
+    periodStart?: string;
+    periodEnd?: string;
+    /** How long the evidence stays current; defaults to one day. */ validForDays?: number;
+    /** Where the facts came from and what could not be seen. Stored inside the hashed evidence. */ provenance?: {
+      collector: { name: string; version: string };
+      scope?: Record<string, unknown>;
+      limits?: string[];
+    };
+  },
+) {
   const db = (await getDb()).scope(actor.tenantId);
-  const control = await db.get<{ id: string; code: string; title: string; objective: string; policy_json: string; valid_from: string }>("SELECT * FROM controls WHERE tenant_id = ? AND code = ? AND valid_to IS NULL", actor.tenantId, input.controlCode);
+  const control = await db.get<{ id: string; code: string; title: string; objective: string; policy_json: string; valid_from: string }>(
+    "SELECT * FROM controls WHERE tenant_id = ? AND code = ? AND valid_to IS NULL",
+    actor.tenantId,
+    input.controlCode,
+  );
   if (!control) throw userError(`Control ${input.controlCode} not found`);
-  const asset = await db.get<{ id: string; name: string }>("SELECT id, name FROM assets WHERE tenant_id = ? AND id = ? AND valid_to IS NULL", actor.tenantId, input.assetId);
+  const asset = await db.get<{ id: string; name: string }>(
+    "SELECT id, name FROM assets WHERE tenant_id = ? AND id = ? AND valid_to IS NULL",
+    actor.tenantId,
+    input.assetId,
+  );
   if (!asset) throw userError(`Asset ${input.assetId} not found`);
 
   const nowMs = Date.now();
@@ -103,45 +188,133 @@ export async function evaluateControl(actor: Actor, input: { controlCode: string
   // Provenance travels inside the hashed content, so it cannot be edited without breaking the evidence hash: who collected what, with
   // which collector and which rule, over what scope and period, until when it counts, and what the collector could not see.
   const provenance = {
-    tenantId: actor.tenantId, source: input.source, sample, collectionMethod: method, collectedBy: actor.userId,
+    tenantId: actor.tenantId,
+    source: input.source,
+    sample,
+    collectionMethod: method,
+    collectedBy: actor.userId,
     collector: input.provenance?.collector ?? { name: "direct-api", version: "1" },
-    rule: { controlCode: control.code, title: control.title, policySha256: sha256(canonicalJson(policy)), controlVersionFrom: control.valid_from },
-    asset: { id: asset.id, name: asset.name }, scope: input.provenance?.scope ?? {},
-    period: { start: input.periodStart ?? null, end: input.periodEnd ?? evaluatedAt }, collectedAt: evaluatedAt, expiresAt,
+    rule: {
+      controlCode: control.code,
+      title: control.title,
+      policySha256: sha256(canonicalJson(policy)),
+      controlVersionFrom: control.valid_from,
+    },
+    asset: { id: asset.id, name: asset.name },
+    scope: input.provenance?.scope ?? {},
+    period: { start: input.periodStart ?? null, end: input.periodEnd ?? evaluatedAt },
+    collectedAt: evaluatedAt,
+    expiresAt,
     limits: input.provenance?.limits ?? [],
   };
   const evidencePayload = { control: control.code, asset: asset.id, facts: input.facts, result, opa, evaluatedAt, provenance };
   const content = canonicalJson(evidencePayload);
 
   const finding = await db.transaction(async (tx) => {
-    await tx.run(`INSERT INTO evidence (id,tenant_id,control_id,asset_id,name,source,collection_method,content_type,content_json,content_hash,period_start,period_end,collected_at,expires_at,status,created_by) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
-      evidenceId, actor.tenantId, control.id, asset.id, `${control.title} evaluation`, input.source, method, "application/vnd.kontrol.control-result+json", content, sha256(content), input.periodStart ?? null, input.periodEnd ?? null, evaluatedAt, expiresAt, result.passed ? "healthy" : "failed", actor.userId);
+    await tx.run(
+      `INSERT INTO evidence (id,tenant_id,control_id,asset_id,name,source,collection_method,content_type,content_json,content_hash,period_start,period_end,collected_at,expires_at,status,created_by) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+      evidenceId,
+      actor.tenantId,
+      control.id,
+      asset.id,
+      `${control.title} evaluation`,
+      input.source,
+      method,
+      "application/vnd.kontrol.control-result+json",
+      content,
+      sha256(content),
+      input.periodStart ?? null,
+      input.periodEnd ?? null,
+      evaluatedAt,
+      expiresAt,
+      result.passed ? "healthy" : "failed",
+      actor.userId,
+    );
 
     let outcome: string | string[];
     if (!result.passed) {
-      const existing = await tx.get<{ id: string }>("SELECT id FROM findings WHERE tenant_id = ? AND control_id = ? AND asset_id = ? AND status IN ('open','remediating') LIMIT 1", actor.tenantId, control.id, asset.id);
+      const existing = await tx.get<{ id: string }>(
+        "SELECT id FROM findings WHERE tenant_id = ? AND control_id = ? AND asset_id = ? AND status IN ('open','remediating') LIMIT 1",
+        actor.tenantId,
+        control.id,
+        asset.id,
+      );
       if (existing) {
-        await tx.run("UPDATE findings SET evidence_id = ?, reason = ?, opened_at = ?, title = ? WHERE id = ?", evidenceId, JSON.stringify(result.failed), evaluatedAt, `${sample ? "[Sample data] " : ""}${control.title} failed on ${asset.name}`, existing.id);
+        await tx.run(
+          "UPDATE findings SET evidence_id = ?, reason = ?, opened_at = ?, title = ? WHERE id = ?",
+          evidenceId,
+          JSON.stringify(result.failed),
+          evaluatedAt,
+          `${sample ? "[Sample data] " : ""}${control.title} failed on ${asset.name}`,
+          existing.id,
+        );
         outcome = existing.id;
       } else {
         const findingId = `finding_${randomUUID()}`;
-        await tx.run(`INSERT INTO findings (id,tenant_id,control_id,asset_id,evidence_id,title,severity,status,reason,remediation,owner_id,due_at,opened_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)`,
-          findingId, actor.tenantId, control.id, asset.id, evidenceId, `${sample ? "[Sample data] " : ""}${control.title} failed on ${asset.name}`, "high", "open", JSON.stringify(result.failed), `Remediate failed policy conditions for ${control.code}, then trigger a re-test.`, actor.userId, new Date(Date.now() + 14 * 86_400_000).toISOString(), evaluatedAt);
+        await tx.run(
+          `INSERT INTO findings (id,tenant_id,control_id,asset_id,evidence_id,title,severity,status,reason,remediation,owner_id,due_at,opened_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+          findingId,
+          actor.tenantId,
+          control.id,
+          asset.id,
+          evidenceId,
+          `${sample ? "[Sample data] " : ""}${control.title} failed on ${asset.name}`,
+          "high",
+          "open",
+          JSON.stringify(result.failed),
+          `Remediate failed policy conditions for ${control.code}, then trigger a re-test.`,
+          actor.userId,
+          new Date(Date.now() + 14 * 86_400_000).toISOString(),
+          evaluatedAt,
+        );
         outcome = findingId;
       }
     } else {
-      const openFindings = await tx.all<{ id: string }>("SELECT id FROM findings WHERE tenant_id = ? AND control_id = ? AND asset_id = ? AND status IN ('open','remediating')", actor.tenantId, control.id, asset.id);
-      for (const item of openFindings) await tx.run("UPDATE findings SET status = 'closed', closed_at = ?, evidence_id = ? WHERE id = ?", evaluatedAt, evidenceId, item.id);
+      const openFindings = await tx.all<{ id: string }>(
+        "SELECT id FROM findings WHERE tenant_id = ? AND control_id = ? AND asset_id = ? AND status IN ('open','remediating')",
+        actor.tenantId,
+        control.id,
+        asset.id,
+      );
+      for (const item of openFindings)
+        await tx.run(
+          "UPDATE findings SET status = 'closed', closed_at = ?, evidence_id = ? WHERE id = ?",
+          evaluatedAt,
+          evidenceId,
+          item.id,
+        );
       outcome = openFindings.map((item) => item.id);
     }
     if (opa.status === "disagree") {
       // Two independent engines disagree on the same policy and facts: surface it for investigation.
       const fingerprint = sha256(`policy-divergence:${control.id}:${asset.id}:${result.passed}:${opa.opaPassed}`);
-      await tx.run(`INSERT INTO drift_events (id,tenant_id,fingerprint,kind,subject_type,subject_id,severity,title,details_json,status,detected_at) VALUES (?,?,?,?,?,?,?,?,?,?,?)
+      await tx.run(
+        `INSERT INTO drift_events (id,tenant_id,fingerprint,kind,subject_type,subject_id,severity,title,details_json,status,detected_at) VALUES (?,?,?,?,?,?,?,?,?,?,?)
         ON CONFLICT(tenant_id, fingerprint) DO UPDATE SET detected_at = excluded.detected_at, status = 'open'`,
-        `drift_${randomUUID()}`, actor.tenantId, fingerprint, "policy_engine_divergence", "control", control.id, "high", `Policy engines disagree on ${control.code}`, JSON.stringify({ evidenceId, local: result.passed, opa: opa.opaPassed, asset: asset.id }), "open", evaluatedAt);
+        `drift_${randomUUID()}`,
+        actor.tenantId,
+        fingerprint,
+        "policy_engine_divergence",
+        "control",
+        control.id,
+        "high",
+        `Policy engines disagree on ${control.code}`,
+        JSON.stringify({ evidenceId, local: result.passed, opa: opa.opaPassed, asset: asset.id }),
+        "open",
+        evaluatedAt,
+      );
     }
-    await appendAudit({ tenantId: actor.tenantId, actorId: actor.userId, action: "control.evaluated", objectType: "control", objectId: control.id, payload: { assetId: asset.id, evidenceId, result, opa: opa.status, finding: outcome } }, tx);
+    await appendAudit(
+      {
+        tenantId: actor.tenantId,
+        actorId: actor.userId,
+        action: "control.evaluated",
+        objectType: "control",
+        objectId: control.id,
+        payload: { assetId: asset.id, evidenceId, result, opa: opa.status, finding: outcome },
+      },
+      tx,
+    );
     return outcome;
   });
 

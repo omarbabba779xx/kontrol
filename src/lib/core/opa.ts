@@ -17,7 +17,9 @@ function endpoint() {
   try {
     const url = new URL(raw);
     return url.protocol === "http:" || url.protocol === "https:" ? url.origin : null;
-  } catch { return null; }
+  } catch {
+    return null;
+  }
 }
 
 /**
@@ -25,7 +27,12 @@ function endpoint() {
  * The TypeScript engine stays authoritative; a disagreement is a signal that one of the two engines is wrong.
  * An unreachable OPA never blocks an evaluation.
  */
-export async function crossCheckWithOpa(policy: Policy, facts: Record<string, unknown>, now: number, localPassed: boolean): Promise<OpaVerdict> {
+export async function crossCheckWithOpa(
+  policy: Policy,
+  facts: Record<string, unknown>,
+  now: number,
+  localPassed: boolean,
+): Promise<OpaVerdict> {
   const base = endpoint();
   if (!base) return { status: "disabled" };
   try {
@@ -39,7 +46,9 @@ export async function crossCheckWithOpa(policy: Policy, facts: Record<string, un
     if (!response.ok) return { status: "unavailable", detail: `HTTP ${response.status}` };
     const body = (await response.json()) as { result?: { passed?: unknown } };
     if (typeof body.result?.passed !== "boolean") return { status: "unavailable", detail: "Policy package kontrol.policy is not loaded" };
-    return body.result.passed === localPassed ? { status: "agree", opaPassed: body.result.passed } : { status: "disagree", opaPassed: body.result.passed };
+    return body.result.passed === localPassed
+      ? { status: "agree", opaPassed: body.result.passed }
+      : { status: "disagree", opaPassed: body.result.passed };
   } catch (error) {
     return { status: "unavailable", detail: error instanceof Error ? error.message : "request failed" };
   }

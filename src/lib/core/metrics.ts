@@ -27,13 +27,22 @@ const escapeLabel = (value: string) => value.replaceAll("\\", "\\\\").replaceAll
 
 export function render(samples: Sample[]) {
   const names = [...new Set(samples.map((sample) => sample.name))];
-  return names.flatMap((name) => [
-    `# HELP ${name} ${HELP[name]?.[1] ?? name}`, `# TYPE ${name} ${HELP[name]?.[0] ?? "gauge"}`,
-    ...samples.filter((sample) => sample.name === name).map((sample) => {
-      const labels = Object.entries(sample.labels ?? {}).map(([key, value]) => `${key}="${escapeLabel(value)}"`).join(",");
-      return `${name}${labels ? `{${labels}}` : ""} ${Number.isFinite(sample.value) ? sample.value : 0}`;
-    }),
-  ]).join("\n") + "\n";
+  return (
+    names
+      .flatMap((name) => [
+        `# HELP ${name} ${HELP[name]?.[1] ?? name}`,
+        `# TYPE ${name} ${HELP[name]?.[0] ?? "gauge"}`,
+        ...samples
+          .filter((sample) => sample.name === name)
+          .map((sample) => {
+            const labels = Object.entries(sample.labels ?? {})
+              .map(([key, value]) => `${key}="${escapeLabel(value)}"`)
+              .join(",");
+            return `${name}${labels ? `{${labels}}` : ""} ${Number.isFinite(sample.value) ? sample.value : 0}`;
+          }),
+      ])
+      .join("\n") + "\n"
+  );
 }
 
 export async function collectMetrics(now = Date.now()) {
@@ -43,27 +52,41 @@ export async function collectMetrics(now = Date.now()) {
   await system.get("SELECT 1 AS ok");
   samples.push({ name: "kontrol_up", value: 1 });
 
-  for (const row of await system.all<{ tenant_id: string; enabled: number | string; failing: number | string; total: number | string }>("SELECT tenant_id, SUM(CASE WHEN enabled = 1 THEN 1 ELSE 0 END) AS enabled, SUM(CASE WHEN consecutive_failures >= 3 THEN 1 ELSE 0 END) AS failing, COUNT(*) AS total FROM connector_schedules GROUP BY tenant_id")) {
+  for (const row of await system.all<{ tenant_id: string; enabled: number | string; failing: number | string; total: number | string }>(
+    "SELECT tenant_id, SUM(CASE WHEN enabled = 1 THEN 1 ELSE 0 END) AS enabled, SUM(CASE WHEN consecutive_failures >= 3 THEN 1 ELSE 0 END) AS failing, COUNT(*) AS total FROM connector_schedules GROUP BY tenant_id",
+  )) {
     samples.push({ name: "kontrol_schedules", labels: { tenant: row.tenant_id, state: "enabled" }, value: Number(row.enabled) });
     samples.push({ name: "kontrol_schedules", labels: { tenant: row.tenant_id, state: "total" }, value: Number(row.total) });
     samples.push({ name: "kontrol_collections_failing", labels: { tenant: row.tenant_id }, value: Number(row.failing) });
   }
-  for (const row of await system.all<{ tenant_id: string; oldest: string | null }>("SELECT tenant_id, MIN(COALESCE(last_run_at, next_run_at)) AS oldest FROM connector_schedules WHERE enabled = 1 AND COALESCE(last_status, 'ok') = 'ok' GROUP BY tenant_id")) {
+  for (const row of await system.all<{ tenant_id: string; oldest: string | null }>(
+    "SELECT tenant_id, MIN(COALESCE(last_run_at, next_run_at)) AS oldest FROM connector_schedules WHERE enabled = 1 AND COALESCE(last_status, 'ok') = 'ok' GROUP BY tenant_id",
+  )) {
     samples.push({ name: "kontrol_collection_oldest_success_seconds", labels: { tenant: row.tenant_id }, value: age(row.oldest) });
   }
-  for (const row of await system.all<{ tenant_id: string; severity: string; n: number | string }>("SELECT tenant_id, severity, COUNT(*) AS n FROM findings WHERE status IN ('open','remediating') GROUP BY tenant_id, severity")) {
+  for (const row of await system.all<{ tenant_id: string; severity: string; n: number | string }>(
+    "SELECT tenant_id, severity, COUNT(*) AS n FROM findings WHERE status IN ('open','remediating') GROUP BY tenant_id, severity",
+  )) {
     samples.push({ name: "kontrol_findings_open", labels: { tenant: row.tenant_id, severity: row.severity }, value: Number(row.n) });
   }
-  for (const row of await system.all<{ tenant_id: string; state: string; n: number | string }>("SELECT tenant_id, state, COUNT(*) AS n FROM workflows GROUP BY tenant_id, state")) {
+  for (const row of await system.all<{ tenant_id: string; state: string; n: number | string }>(
+    "SELECT tenant_id, state, COUNT(*) AS n FROM workflows GROUP BY tenant_id, state",
+  )) {
     samples.push({ name: "kontrol_workflows", labels: { tenant: row.tenant_id, state: row.state }, value: Number(row.n) });
   }
-  for (const row of await system.all<{ tenant_id: string; oldest: string | null }>("SELECT tenant_id, MIN(updated_at) AS oldest FROM workflows WHERE state = 'awaiting_approval' GROUP BY tenant_id")) {
+  for (const row of await system.all<{ tenant_id: string; oldest: string | null }>(
+    "SELECT tenant_id, MIN(updated_at) AS oldest FROM workflows WHERE state = 'awaiting_approval' GROUP BY tenant_id",
+  )) {
     samples.push({ name: "kontrol_workflows_waiting_oldest_seconds", labels: { tenant: row.tenant_id }, value: age(row.oldest) });
   }
-  for (const row of await system.all<{ tenant_id: string; status: string; n: number | string }>("SELECT tenant_id, status, COUNT(*) AS n FROM notifications GROUP BY tenant_id, status")) {
+  for (const row of await system.all<{ tenant_id: string; status: string; n: number | string }>(
+    "SELECT tenant_id, status, COUNT(*) AS n FROM notifications GROUP BY tenant_id, status",
+  )) {
     samples.push({ name: "kontrol_notifications", labels: { tenant: row.tenant_id, status: row.status }, value: Number(row.n) });
   }
-  for (const row of await system.all<{ tenant_id: string; n: number | string }>("SELECT tenant_id, COUNT(*) AS n FROM audit_log GROUP BY tenant_id")) {
+  for (const row of await system.all<{ tenant_id: string; n: number | string }>(
+    "SELECT tenant_id, COUNT(*) AS n FROM audit_log GROUP BY tenant_id",
+  )) {
     samples.push({ name: "kontrol_audit_entries", labels: { tenant: row.tenant_id }, value: Number(row.n) });
   }
   return render(samples);
