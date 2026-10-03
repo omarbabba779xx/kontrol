@@ -104,7 +104,9 @@ Every setting is documented in [`.env.example`](.env.example). The ones that mat
 | --- | --- |
 | `KONTROL_AUTH_SECRET`, `KONTROL_SIGNING_SECRET` | Session and decision signing. **Required in production**, distinct, 32+ characters |
 | `KONTROL_DB_DRIVER`, `POSTGRES_URL` | Storage driver (`sqlite` default, `postgres` for production) |
-| `KONTROL_SEED` | Seed the demo tenant into an empty database (`false` in production) |
+| `KONTROL_SEED` | Load the demonstration tenant. **Opt-in in production** (`true` to load it); on by default elsewhere (`false` to skip) |
+| `KONTROL_BOOTSTRAP_ADMIN_EMAIL`, `KONTROL_BOOTSTRAP_TENANT_NAME`, `OIDC_DEFAULT_TENANT_ID` | On an empty database, create the first organisation and its administrator (who then signs in through the identity provider). Without demo data this is how the first person gets in |
+| `KONTROL_SECRETS_KEY`, `KONTROL_SECRETS_KEY_PREVIOUS` | Key that encrypts stored credentials and vault documents (**required in production**). To rotate: set the new key, keep the old one in `KONTROL_SECRETS_KEY_PREVIOUS`, restart, run the key rotation from Administration (`POST /api/admin {"action":"rotate_keys"}`), then drop the old key |
 | `KONTROL_AUTH_MODE` | `demo` is honoured only outside production |
 | `OIDC_*`, `OIDC_TRUST_ROLE_CLAIM` | Single sign-on; new users are `viewer` unless the IdP is trusted for roles |
 | `GITHUB_TOKEN`, `AWS_*`, `OKTA_*` | Live collectors (demo data when absent) |

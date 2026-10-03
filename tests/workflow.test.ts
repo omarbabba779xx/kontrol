@@ -3,7 +3,7 @@ import { test } from "node:test";
 import { admin, riskOwner, setEnv, isolateDatabase } from "./setup";
 
 isolateDatabase();
-setEnv({ NODE_ENV: "production", KONTROL_AUTH_MODE: undefined, KONTROL_ALLOW_DEMO_IN_PRODUCTION: undefined });
+setEnv({ NODE_ENV: "production", KONTROL_SEED: "true", KONTROL_AUTH_MODE: undefined, KONTROL_ALLOW_DEMO_IN_PRODUCTION: undefined });
 
 async function advanceToApproval(actor: typeof admin | typeof riskOwner, kind: "ai_release" | "regulatory_change") {
   const { startWorkflow, runNextWorkflowStep } = await import("../src/lib/core/workflow-engine");

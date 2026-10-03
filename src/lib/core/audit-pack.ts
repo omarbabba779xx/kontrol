@@ -1,13 +1,12 @@
 import "server-only";
 
-import { existsSync, readFileSync, statSync } from "node:fs";
-import { join, resolve, sep } from "node:path";
 import { strToU8, zipSync } from "fflate";
 import type { Actor } from "@/lib/core/auth";
 import { complianceSnapshot, exportStatement } from "@/lib/core/compliance-engine";
 import { engagementFor, periodCoverage, recordDownload } from "@/lib/core/audit-workspace";
 import { canonicalJson, sha256, signDecision, verifyAuditChain } from "@/lib/core/integrity";
 import { buildReadinessReport } from "@/lib/core/report";
+import { localPath, readLocalDocument } from "@/lib/core/vault-store";
 import { getDb } from "@/lib/db";
 
 /**
@@ -21,14 +20,6 @@ const MAX_AUDIT_ROWS = 100_000;
 const MAX_MACHINE_POINTS = 400;
 
 const safeName = (value: string) => value.replace(/[^A-Za-z0-9._-]/g, "_").slice(0, 80);
-
-function vaultPath(tenantId: string, storageUri: string) {
-  const match = /^local-vault:\/\/([^/]+)\/([^/]+)\/(.+)$/.exec(storageUri);
-  if (!match || match[1] !== tenantId) return null;
-  const root = resolve(process.env.KONTROL_VAULT_DIR ?? join(process.cwd(), ".data", "vault"));
-  const file = resolve(root, match[1], match[2], match[3]);
-  return file.startsWith(root + sep) ? file : null; // never read outside the vault
-}
 
 const README = `KONTROL EVIDENCE PACK
 
@@ -84,10 +75,10 @@ export async function buildEvidencePack(actor: Actor, engagementId: string) {
     for (const doc of docs) {
       if (!doc.vault_document_id) continue;
       const row = await db.get<{ name: string; storage_uri: string; size_bytes: number }>("SELECT name, storage_uri, size_bytes FROM vault_documents WHERE tenant_id = ? AND id = ?", actor.tenantId, doc.vault_document_id);
-      const path = row ? vaultPath(actor.tenantId, row.storage_uri) : null;
-      if (!row || !path || !existsSync(path) || statSync(path).size > MAX_FILE_BYTES) { notes.push(`${doc.title}: file not embedded (${row?.storage_uri.startsWith("s3://") ? "stored in S3 object storage" : "unavailable or too large"}); its SHA-256 is ${doc.content_hash}`); continue; }
-      const bytes = readFileSync(path);
-      if (sha256(bytes) !== doc.content_hash) { notes.push(`${doc.title}: file on disk does not match its recorded hash and was not embedded`); continue; }
+      if (!row || !localPath(actor.tenantId, row.storage_uri) || row.size_bytes > MAX_FILE_BYTES) { notes.push(`${doc.title}: file not embedded (${row?.storage_uri.startsWith("s3://") ? "stored in S3 object storage" : "unavailable or too large"}); its SHA-256 is ${doc.content_hash}`); continue; }
+      let bytes: Buffer;
+      try { bytes = readLocalDocument({ id: doc.vault_document_id, tenant_id: actor.tenantId, storage_uri: row.storage_uri, content_hash: doc.content_hash }).bytes; }
+      catch (error) { notes.push(`${doc.title}: not embedded, ${error instanceof Error ? error.message : "unreadable"}`); continue; }
       add(`evidence/${control.code}/${safeName(doc.id)}-${safeName(row.name)}`, bytes);
     }
   }

@@ -9,7 +9,7 @@
     "lint": "eslint",
     "test": "node --conditions=react-server --import tsx --test \"tests/**/*.test.ts\"",
     "typecheck": "next typegen && tsc --noEmit",
-    "test:postgres": "cross-env KONTROL_TEST_DB=postgres node --conditions=react-server --import tsx --test --test-concurrency=4 \"tests/**/*.test.ts\"",
+    "test:postgres": "cross-env KONTROL_TEST_DB=postgres node --conditions=react-server --import tsx --test --test-concurrency=2 \"tests/**/*.test.ts\"",
     "db:migrate": "node --conditions=react-server --import tsx scripts/migrate-sqlite-to-postgres.ts",
     "check": "npm run lint && npm run typecheck && npm run test && npm run test:postgres && npm run build",
     "test:e2e": "playwright test",

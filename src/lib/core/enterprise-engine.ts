@@ -1,7 +1,6 @@
 import "server-only";
 
-import { mkdirSync, writeFileSync } from "node:fs";
-import { join } from "node:path";
+import { writeLocalDocument } from "@/lib/core/vault-store";
 import { randomUUID } from "node:crypto";
 import postgres from "postgres";
 import { allTables } from "@/lib/db/migrations";
@@ -59,7 +58,7 @@ export async function storeVaultDocument(actor: Actor, file: File, documentType:
   const previous = await db.get<{ id: string; version: number }>("SELECT id,version FROM vault_documents WHERE tenant_id=? AND name=? ORDER BY version DESC LIMIT 1", actor.tenantId, file.name);
   const id = `vault_${randomUUID()}`; let storageUri: string;
   if (process.env.S3_BUCKET && process.env.S3_ENDPOINT) { const key = `${actor.tenantId}/${id}/${file.name}`; await s3Client().send(new PutObjectCommand({ Bucket: process.env.S3_BUCKET, Key: key, Body: bytes, ContentType: file.type, ObjectLockMode: "GOVERNANCE", ObjectLockRetainUntilDate: new Date(Date.now() + 365 * 86_400_000) })); storageUri = `s3://${process.env.S3_BUCKET}/${key}`; }
-  else { const folder = join(process.env.KONTROL_VAULT_DIR ?? join(process.cwd(), ".data", "vault"), actor.tenantId, id); mkdirSync(folder, { recursive: true }); const safeName = file.name.replace(/[^a-zA-Z0-9._-]/g, "_"); writeFileSync(join(folder, safeName), bytes, { flag: "wx" }); storageUri = `local-vault://${actor.tenantId}/${id}/${safeName}`; }
+  else { storageUri = writeLocalDocument(actor.tenantId, id, file.name, bytes); }
   const text = file.type.startsWith("text/") || file.type === "application/json" ? bytes.toString("utf8").slice(0, 200_000) : ""; const exceptions = text.split(/\r?\n/).filter((line) => /exception|qualified|adverse|non[- ]conform/i.test(line)).slice(0, 50);
   const signature = signDecision({ id, hash, name: file.name, uploadedAt: new Date().toISOString() }); const now = new Date().toISOString();
   await db.run("INSERT INTO vault_documents (id,tenant_id,name,document_type,storage_uri,content_hash,previous_version_id,version,content_type,size_bytes,extracted_text,exceptions_json,signature,retention_until,status,uploaded_by,uploaded_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)", id, actor.tenantId, file.name, documentType, storageUri, hash, previous?.id ?? null, (previous?.version ?? 0) + 1, file.type || "application/octet-stream", bytes.length, text || null, JSON.stringify(exceptions), signature, new Date(Date.now() + 365 * 86_400_000).toISOString(), text ? "analyzed" : "stored_pending_extraction", actor.userId, now);

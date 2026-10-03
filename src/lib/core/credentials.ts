@@ -5,7 +5,7 @@ import { z } from "zod";
 import type { Actor } from "@/lib/core/auth";
 import { userError } from "@/lib/core/errors";
 import { appendAudit } from "@/lib/core/integrity";
-import { open, seal } from "@/lib/core/secrets";
+import { open, seal, sealedWithCurrentKey } from "@/lib/core/secrets";
 import { assertPublicHttpsUrl } from "@/lib/core/net-guard";
 import { getDb } from "@/lib/db";
 
@@ -68,4 +68,22 @@ export async function credentialStatus(tenantId: string) {
   const rows = await (await getDb()).scope(tenantId).all<{ kind: string; hint: string; rotated_at: string }>("SELECT kind, hint, rotated_at FROM connector_credentials WHERE tenant_id = ?", tenantId);
   const byKind = new Map(rows.map((row) => [row.kind, row]));
   return CREDENTIAL_KINDS.map((kind) => ({ kind, configured: byKind.has(kind), hint: byKind.get(kind)?.hint ?? null, rotatedAt: byKind.get(kind)?.rotated_at ?? null }));
+}
+
+/** Re-seals every stored credential of the tenant with the current key. Returns how many needed it. */
+export async function resealCredentials(actor: Actor) {
+  const db = (await getDb()).scope(actor.tenantId);
+  const rows = await db.all<{ kind: string; ciphertext: string; iv: string; tag: string }>("SELECT kind, ciphertext, iv, tag FROM connector_credentials WHERE tenant_id = ?", actor.tenantId);
+  let resealed = 0, current = 0;
+  const failed: string[] = [];
+  for (const row of rows) {
+    const context = aad(actor.tenantId, row.kind);
+    if (sealedWithCurrentKey(row, context)) { current += 1; continue; }
+    try {
+      const box = seal(open(row, context), context);
+      await db.run("UPDATE connector_credentials SET ciphertext = ?, iv = ?, tag = ?, key_version = ? WHERE tenant_id = ? AND kind = ?", box.ciphertext, box.iv, box.tag, box.keyVersion, actor.tenantId, row.kind);
+      resealed += 1;
+    } catch { failed.push(row.kind); }
+  }
+  return { resealed, alreadyCurrent: current, failed };
 }
