@@ -6,6 +6,7 @@ import type { Actor } from "@/lib/core/auth";
 import { userError } from "@/lib/core/errors";
 import { appendAudit } from "@/lib/core/integrity";
 import { serviceActor } from "@/lib/core/service-actors";
+import { log } from "@/lib/core/log";
 import { getDb } from "@/lib/db";
 
 /**
@@ -98,6 +99,8 @@ async function execute(row: ScheduleRow, trigger: "schedule" | "manual", now: nu
   await db.run("UPDATE connector_schedules SET claimed_at = NULL, last_run_at = ?, last_status = ?, last_error = ?, consecutive_failures = ?, next_run_at = ? WHERE id = ?",
     finished, error ? "failed" : "ok", error, failures, new Date(now + delay).toISOString(), row.id);
   const event = { tenantId: row.tenant_id, kind: row.kind, target: row.target, failures, error: error ?? "" };
+  if (error) log.warn("collection.failed", { tenantId: row.tenant_id, connector: row.kind, target: row.target, trigger, consecutiveFailures: failures, error });
+  else log.info("collection.completed", { tenantId: row.tenant_id, connector: row.kind, target: row.target, trigger, durationMs: Date.parse(finished) - Date.parse(started) });
   if (error && failures === FAILING_AFTER) await failureHook?.(event);
   if (!error && row.consecutive_failures >= FAILING_AFTER) await recoveryHook?.(event);
   return { scheduleId: row.id, status: error ? "failed" : "ok", error, summary };

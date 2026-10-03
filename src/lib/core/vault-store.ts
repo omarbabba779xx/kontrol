@@ -5,6 +5,7 @@ import { join, resolve, sep } from "node:path";
 import type { Actor } from "@/lib/core/auth";
 import { UserError, userError } from "@/lib/core/errors";
 import { appendAudit, sha256 } from "@/lib/core/integrity";
+import { log } from "@/lib/core/log";
 import { openBytes, sealBytes } from "@/lib/core/vault-crypto";
 import { getDb } from "@/lib/db";
 
@@ -47,9 +48,9 @@ export function readLocalDocument(row: Pick<VaultRow, "id" | "tenant_id" | "stor
   // A document that cannot be authenticated or does not match its recorded hash is refused with an explicit integrity error.
   let opened: ReturnType<typeof openBytes>;
   try { opened = openBytes(readFileSync(path), aadFor(row.tenant_id, row.id)); }
-  catch (error) { throw new UserError(`Integrity failure: ${error instanceof Error ? error.message : "the document cannot be opened"}`, 409); }
+  catch (error) { log.error("vault.integrity_failure", { tenantId: row.tenant_id, documentId: row.id, reason: error instanceof Error ? error.message : "unreadable" }); throw new UserError(`Integrity failure: ${error instanceof Error ? error.message : "the document cannot be opened"}`, 409); }
   const hash = sha256(opened.bytes);
-  if (hash !== row.content_hash) throw new UserError("Integrity failure: the stored document does not match the hash recorded at upload", 409);
+  if (hash !== row.content_hash) { log.error("vault.integrity_failure", { tenantId: row.tenant_id, documentId: row.id, reason: "hash mismatch" }); throw new UserError("Integrity failure: the stored document does not match the hash recorded at upload", 409); }
   return { bytes: opened.bytes, sha256: hash, legacy: opened.legacy, needsRekey: opened.needsRekey };
 }
 

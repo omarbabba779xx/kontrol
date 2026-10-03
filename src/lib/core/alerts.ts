@@ -59,6 +59,9 @@ export async function scanAndNotify(tenantId: string, now = Date.now()) {
     await send({ type: "risk.treatment_overdue", severity: "medium", title: `Risk treatment overdue ${row.ref}: ${row.title}`, body: `Target date was ${row.target_date.slice(0, 10)}.`, link: publicLink("/risk-register"), dedupeKey: `risk.treatment:${row.id}:${isoWeek(now)}` });
   }
 
+  for (const row of await db.all<{ id: string; kind: string; updated_at: string }>("SELECT id, kind, updated_at FROM workflows WHERE tenant_id = ? AND state = 'awaiting_approval' AND updated_at < ?", tenantId, new Date(now - 3 * DAY).toISOString())) {
+    await send({ type: "workflow.stuck", severity: "medium", title: `A ${row.kind} workflow has waited for approval since ${row.updated_at.slice(0, 10)}`, body: "Nobody has approved or rejected it. A different person from the requester must decide.", link: publicLink("/operations"), dedupeKey: `workflow.stuck:${row.id}:${isoWeek(now)}` });
+  }
   for (const row of await db.all<{ id: string; title: string; severity: Severity }>("SELECT id, title, severity FROM findings WHERE tenant_id = ? AND status = 'open' AND severity IN ('high','critical') AND opened_at > ?", tenantId, new Date(now - 2 * DAY).toISOString())) {
     await send({ type: "finding.opened", severity: row.severity, title: `New ${row.severity} finding: ${row.title}`, body: "A control evaluation failed. Create a remediation task and assign an owner.", link: publicLink("/controls"), dedupeKey: `finding.opened:${row.id}` });
   }

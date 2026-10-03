@@ -21,7 +21,8 @@
     "db:upgrade": "node --conditions=react-server --import tsx scripts/db.ts upgrade",
     "setup": "npm ci --ignore-scripts && npm rebuild esbuild unrs-resolver",
     "verify": "node scripts/verify.mjs",
-    "verify:strict": "node scripts/verify.mjs --strict --e2e"
+    "verify:strict": "node scripts/verify.mjs --strict --e2e",
+    "backup": "node --conditions=react-server --import tsx scripts/backup.ts"
   },
   "dependencies": {
     "@aws-sdk/client-cloudtrail": "^3.1144.0",

@@ -61,7 +61,7 @@ flowchart LR
 ## Quick start
 
 ```bash
-npm install
+npm ci            # Node 24; on Windows use `npm run setup` (see docs/OPERATIONS.md)
 cp .env.example .env.local      # on Windows: copy .env.example .env.local
 npm run dev
 ```
