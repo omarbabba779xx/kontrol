@@ -10,9 +10,13 @@ import {
   createTreatmentTask,
   quantifyRisk,
   riskSnapshot,
+  riskTraceability,
+  setRiskMethod,
+  treatmentPlanCsv,
   TREATMENTS,
   updateRisk,
 } from "@/lib/core/risk-register";
+import { METHODS, THREAT_SOURCES } from "@/lib/core/risk-method";
 import { scenarioSchema } from "@/lib/core/schemas";
 
 export const runtime = "nodejs";
@@ -27,9 +31,16 @@ const actionSchema = z.discriminatedUnion("action", [
     category: z.enum(CATEGORIES),
     asset: z.string().max(200).optional(),
     ownerId: z.string().min(3).optional(),
-    likelihood: score,
+    likelihood: score.optional(),
     impact: score,
     controls: z.array(code).max(30).optional(),
+    assetId: z.string().min(3).optional(),
+    threatSource: z.enum(THREAT_SOURCES).optional(),
+    threatEvent: z.string().max(500).optional(),
+    vulnerability: z.string().max(1000).optional(),
+    predisposingConditions: z.string().max(1000).optional(),
+    likelihoodInitiation: score.optional(),
+    likelihoodImpact: score.optional(),
   }),
   z.object({
     action: z.literal("update"),
@@ -45,22 +56,43 @@ const actionSchema = z.discriminatedUnion("action", [
     treatment: z.enum(TREATMENTS).optional(),
     treatmentPlan: z.string().max(4000).optional(),
     targetDate: z.string().datetime().nullable().optional(),
+    assetId: z.string().min(3).nullable().optional(),
+    threatSource: z.enum(THREAT_SOURCES).optional(),
+    threatEvent: z.string().max(500).optional(),
+    vulnerability: z.string().max(1000).optional(),
+    predisposingConditions: z.string().max(1000).optional(),
+    likelihoodInitiation: score.optional(),
+    likelihoodImpact: score.optional(),
   }),
   z.object({
     action: z.literal("accept"),
     id: z.string().min(3),
-    days: z.number().int().min(1).max(365),
+    days: z.number().int().min(1).max(730),
     note: z.string().min(10).max(2000),
   }),
   z.object({ action: z.literal("close"), id: z.string().min(3), note: z.string().min(10).max(2000) }),
   z.object({ action: z.literal("quantify"), id: z.string().min(3), scenario: scenarioSchema }),
   z.object({ action: z.literal("from_gaps"), limit: z.number().int().min(1).max(25).default(10) }),
   z.object({ action: z.literal("treatment_task"), id: z.string().min(3) }),
+  z.object({
+    action: z.literal("set_method"),
+    method: z.enum(METHODS),
+    thresholds: z.object({ medium: z.number().int(), high: z.number().int(), critical: z.number().int() }),
+    appetite: z.enum(["low", "medium", "high"]),
+    maxAcceptanceDays: z.number().int(),
+    likelihoodLabels: z.array(z.string()).length(5).optional(),
+    impactLabels: z.array(z.string()).length(5).optional(),
+    impactCriteria: z.array(z.string()).length(5).optional(),
+  }),
 ]);
 
 export async function GET(request: Request) {
   try {
     const actor = await requireActor(request, "graph:read");
+    const params = new URL(request.url).searchParams;
+    if (params.get("format") === "treatment-plan")
+      return new Response(await treatmentPlanCsv(actor.tenantId), { headers: { "Content-Type": "text/csv; charset=utf-8", "Content-Disposition": 'attachment; filename="risk-treatment-plan.csv"' } });
+    if (params.get("view") === "traceability") return Response.json(await riskTraceability(actor.tenantId));
     return Response.json(await riskSnapshot(actor.tenantId));
   } catch (error) {
     return apiError(error);
@@ -85,6 +117,8 @@ export async function POST(request: Request) {
         return Response.json(await quantifyRisk(actor, input));
       case "from_gaps":
         return Response.json(await createFromGaps(actor, input), { status: 201 });
+      case "set_method":
+        return Response.json(await setRiskMethod(actor, input));
       case "treatment_task":
         return Response.json(await createTreatmentTask(actor, input), { status: 201 });
     }

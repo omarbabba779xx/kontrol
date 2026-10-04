@@ -28,7 +28,7 @@ export function controlEffectiveness(effect: ControlEffect) {
   return effect.weight * (effect.backed ? 1 : UNBACKED_DISCOUNT);
 }
 
-export function residual(input: { likelihood: number; impact: number; controls: ControlEffect[] }) {
+export function residual(input: { likelihood: number; impact: number; controls: ControlEffect[]; /** The organisation's own rating of a likelihood and an impact; the default matrix otherwise. */ rate?: (likelihood: number, impact: number) => Band }) {
   const values = input.controls.map(controlEffectiveness).filter((value): value is number => value !== null);
   const average = values.length ? values.reduce((sum, value) => sum + value, 0) / values.length : 0;
   const reduction = Math.min(MAX_REDUCTION, average * MAX_REDUCTION);
@@ -39,7 +39,7 @@ export function residual(input: { likelihood: number; impact: number; controls: 
     likelihood,
     impact: input.impact,
     score,
-    band: bandOf(score),
+    band: input.rate ? input.rate(likelihood, input.impact) : bandOf(score),
     reduction: Math.round(reduction * 100) / 100,
     controlsConsidered: values.length,
   };

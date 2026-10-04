@@ -9,7 +9,7 @@ import { CSV_RISKY } from "@/lib/core/compliance/actions";
 import { frameworkDetail, refreshSnapshots } from "@/lib/core/compliance/snapshot";
 import { DAY, loadStates, scope } from "@/lib/core/compliance/state";
 
-function csvCell(value: unknown) {
+export function csvCell(value: unknown) {
   let text = value === null || value === undefined ? "" : String(value);
   if (CSV_RISKY.test(text)) text = `'${text}`; // spreadsheet formula injection guard
   return /[",\n]/.test(text) ? `"${text.replace(/"/g, '""')}"` : text;
@@ -19,6 +19,13 @@ function csvCell(value: unknown) {
 export async function exportStatement(tenantId: string, frameworkId: FrameworkId) {
   const detail = await frameworkDetail(tenantId, frameworkId);
   const { states } = await loadStates(tenantId);
+  // ISO/IEC 27001 6.1.3 d) asks the statement to justify why each control is included. A control is there because a risk is treated
+  // by it, because the framework requires it, or both; the open risks it treats are named.
+  const riskLinks = await (await scope(tenantId)).all<{ ref: string; uc_code: string }>(
+      "SELECT r.ref AS ref, c.uc_code AS uc_code FROM risk_item_controls c JOIN risk_items r ON r.id = c.risk_id WHERE c.tenant_id = ? AND r.status <> 'closed' ORDER BY r.ref",
+      tenantId,
+    );
+  const risksOf = (codes: string[]) => [...new Set(riskLinks.filter((link) => codes.includes(link.uc_code)).map((link) => link.ref))];
   const header = [
     "requirement_id",
     "title",
@@ -31,6 +38,8 @@ export async function exportStatement(tenantId: string, frameworkId: FrameworkId
     "unified_controls",
     "mapping_basis",
     "control_statuses",
+    "risks_treated",
+    "inclusion_reason",
   ];
   const rows = detail.requirements.map((requirement) => [
     requirement.id,
@@ -44,6 +53,8 @@ export async function exportStatement(tenantId: string, frameworkId: FrameworkId
     requirement.controls.join(" "),
     requirement.links.map((link) => `${link.ucCode}=${link.review ?? link.basis}`).join(" "),
     requirement.controls.map((code) => `${code}=${states.get(code)?.status ?? "not_started"}`).join(" "),
+    risksOf(requirement.controls).join(" "),
+    requirement.status === "not_applicable" ? "" : risksOf(requirement.controls).length ? "risk treatment and framework requirement" : "framework requirement",
   ]);
   return {
     json: {
@@ -51,7 +62,7 @@ export async function exportStatement(tenantId: string, frameworkId: FrameworkId
       generatedAt: new Date().toISOString(),
       score: detail.score,
       readiness: detail.readiness,
-      requirements: detail.requirements,
+      requirements: detail.requirements.map((requirement) => ({ ...requirement, risksTreated: risksOf(requirement.controls) })),
     },
     csv: [header, ...rows].map((row) => row.map(csvCell).join(",")).join("\n"),
   };
