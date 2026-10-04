@@ -116,3 +116,34 @@ test("an unreachable sink is reported, not thrown, and the anchor endpoint shows
   assert.equal(body.publication.scheduledEveryHours, 24);
   assert.equal(body.publication.anchors, 3);
 });
+
+test("with an S3 bucket, anchors are written once under an Object Lock retention, and a bucket without it is not counted as safe", async () => {
+  const { publishAnchor, anchorSink, anchorStatus, setAnchorS3Client } = await publisher();
+  const { listAnchors } = await import("../src/lib/core/audit-anchor");
+  const [anchor] = await listAnchors(admin.tenantId, 1);
+  process.env.KONTROL_ANCHOR_S3_BUCKET = "acme-audit-anchors";
+  const sent: Array<{ input: Record<string, unknown> }> = [];
+  try {
+    const sink = anchorSink();
+    assert.deepEqual(sink, { kind: "s3", bucket: "acme-audit-anchors", prefix: "audit-anchors", retentionDays: 3650, mode: "COMPLIANCE" }, "compliance mode by default: nobody can shorten the retention");
+    setAnchorS3Client({ send: async (command) => { sent.push(command as { input: Record<string, unknown> }); return {}; } });
+    assert.equal(await publishAnchor(anchor, sink), null);
+    const put = sent[0].input;
+    assert.equal(put.Bucket, "acme-audit-anchors");
+    assert.match(String(put.Key), new RegExp(`^audit-anchors/${admin.tenantId}/[0-9]{12}[.]json$`));
+    assert.deepEqual([put.ObjectLockMode, put.IfNoneMatch], ["COMPLIANCE", "*"]);
+    assert.ok((put.ObjectLockRetainUntilDate as Date).getTime() > Date.now() + 3600 * 86_400_000, "retained for years");
+    assert.match(JSON.parse(String(put.Body)).anchor.signature, /^ed25519:/);
+
+    const fail = (name: string) => setAnchorS3Client({ send: async () => { throw Object.assign(new Error(name), { name }); } });
+    fail("PreconditionFailed");
+    assert.equal(await publishAnchor(anchor, sink), null, "already there: published");
+    fail("InvalidRequest");
+    assert.match((await publishAnchor(anchor, sink)) ?? "", /does not have Object Lock enabled/);
+    fail("AccessDenied");
+    assert.match((await publishAnchor(anchor, sink)) ?? "", /^S3 AccessDenied/);
+    const status = await anchorStatus(admin.tenantId);
+    assert.match(status.sink ?? "", /^s3:\/\/acme-audit-anchors\/audit-anchors \(Object Lock, COMPLIANCE, 3650 days\)$/);
+    assert.match(status.guarantee, /Object Lock retention/);
+  } finally { setAnchorS3Client(null); delete process.env.KONTROL_ANCHOR_S3_BUCKET; }
+});

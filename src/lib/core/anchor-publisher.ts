@@ -26,10 +26,52 @@ export const anchorIntervalHours = () => {
   const value = Number(process.env.KONTROL_ANCHOR_INTERVAL_HOURS ?? 24);
   return Number.isFinite(value) && value >= 0 ? value : 24;
 };
-export const anchorSink = () => {
+export type AnchorSink = { kind: "https"; url: string; token?: string } | { kind: "s3"; bucket: string; prefix: string; retentionDays: number; mode: "COMPLIANCE" | "GOVERNANCE" };
+
+/**
+ * Where anchors go. An S3 bucket with Object Lock is written to directly (`KONTROL_ANCHOR_S3_BUCKET`): each anchor is a new object
+ * under a retention lock, in COMPLIANCE mode by default, which nobody can shorten or remove, the account root included. Otherwise an
+ * HTTPS endpoint (`KONTROL_ANCHOR_SINK_URL`) receives them.
+ */
+export const anchorSink = (): AnchorSink | null => {
+  const bucket = process.env.KONTROL_ANCHOR_S3_BUCKET?.trim();
+  if (bucket) {
+    const days = Number(process.env.KONTROL_ANCHOR_RETENTION_DAYS ?? 3650);
+    return { kind: "s3", bucket, prefix: (process.env.KONTROL_ANCHOR_S3_PREFIX ?? "audit-anchors").replace(/^\/+|\/+$/g, ""), retentionDays: Number.isFinite(days) && days >= 1 ? Math.floor(days) : 3650, mode: process.env.KONTROL_ANCHOR_LOCK_MODE === "GOVERNANCE" ? "GOVERNANCE" : "COMPLIANCE" };
+  }
   const url = process.env.KONTROL_ANCHOR_SINK_URL?.trim().replace(/\/$/, "");
-  return url ? { url, token: process.env.KONTROL_ANCHOR_SINK_TOKEN } : null;
+  return url ? { kind: "https", url, token: process.env.KONTROL_ANCHOR_SINK_TOKEN } : null;
 };
+
+type S3Like = { send(command: unknown): Promise<unknown> };
+let s3Client: S3Like | null = null;
+/** Test seam: replaces the S3 client. Never called by application code. */
+export function setAnchorS3Client(client: S3Like | null) { s3Client = client; }
+
+async function putToS3(sink: Extract<AnchorSink, { kind: "s3" }>, anchor: Anchor, body: string): Promise<string | null> {
+  const { PutObjectCommand, S3Client } = await import("@aws-sdk/client-s3");
+  const client = s3Client ?? new S3Client({});
+  try {
+    await client.send(new PutObjectCommand({
+      Bucket: sink.bucket,
+      Key: `${sink.prefix}/${anchor.tenantId}/${String(anchor.entries).padStart(12, "0")}.json`,
+      Body: body,
+      ContentType: "application/json",
+      // Never replace an anchor that is already there, and hold the new one under a retention lock.
+      IfNoneMatch: "*",
+      ObjectLockMode: sink.mode,
+      ObjectLockRetainUntilDate: new Date(Date.now() + sink.retentionDays * 86_400_000),
+    }));
+    return null;
+  } catch (error) {
+    const name = error && typeof error === "object" && "name" in error ? String((error as { name: unknown }).name) : "";
+    // The object already exists: a write-once store refusing a repeat means the anchor is safely there.
+    if (name === "PreconditionFailed") return null;
+    // A bucket without Object Lock would silently store a deletable copy: say so instead of counting it as published.
+    if (name === "InvalidRequest" || name === "InvalidBucketState") return "the bucket does not have Object Lock enabled: anchors written there could be deleted";
+    return `S3 ${name || "error"}: ${error instanceof Error ? error.message.slice(0, 160) : "unknown"}`;
+  }
+}
 
 type Row = { id: string; tenant_id: string; entries: number; head_hash: string; key_fingerprint: string; signature: string; created_at: string };
 
@@ -37,6 +79,7 @@ type Row = { id: string; tenant_id: string; entries: number; head_hash: string; 
 export async function publishAnchor(anchor: Anchor, sink = anchorSink()): Promise<string | null> {
   if (!sink) return "no sink configured";
   const body = JSON.stringify({ kind: "kontrol.audit-anchor", anchor, publicKey: publicSigningKey() });
+  if (sink.kind === "s3") return putToS3(sink, anchor, body);
   try {
     const response = await safeFetch(`${sink.url}/${encodeURIComponent(anchor.tenantId)}/${anchor.entries}.json`, {
       method: "PUT",
@@ -106,6 +149,7 @@ export async function anchorStatus(tenantId: string) {
     unpublished: Number(counts?.pending ?? 0),
     lastAnchoredAt: counts?.last_at ?? null,
     lastPublishedAt: counts?.last_published_at ?? null,
-    guarantee: sink ? "anchors are copied to the external sink" : "anchors are kept in the database only: removing them along with the chain would not be detected until a sink is configured",
+    sink: sink ? (sink.kind === "s3" ? `s3://${sink.bucket}/${sink.prefix} (Object Lock, ${sink.mode}, ${sink.retentionDays} days)` : sink.url) : null,
+    guarantee: sink ? (sink.kind === "s3" ? "anchors are written to an S3 bucket under an Object Lock retention" : "anchors are copied to the external sink") : "anchors are kept in the database only: removing them along with the chain would not be detected until a sink is configured",
   };
 }
