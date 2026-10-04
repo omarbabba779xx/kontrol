@@ -1,5 +1,6 @@
 import "server-only";
 
+import { backedByRecords, ismsClauses } from "@/lib/core/isms-checks";
 import { loadCustomRequirements } from "@/lib/core/licensed-content";
 import { getDb } from "@/lib/db";
 import type { Executor } from "@/lib/db";
@@ -109,11 +110,14 @@ export type EvidenceRow = {
 export const requireCountersignature = () => process.env.KONTROL_REQUIRE_COUNTERSIGN === "true";
 export const REVIEW_DAYS: Partial<Record<ImplementationStatus, number>> = { implemented: 365, partial: 180, planned: 90 };
 
-/** Machine evidence wins over documents; documents back a claim only while an accepted one is still valid. */
-function combineVerification(machine: Verification, documents: EvidenceRow[], now: string): Verification {
+/**
+ * Machine evidence wins over documents; documents back a claim only while an accepted one is still valid. A governance control whose
+ * own management-system records exist, are approved and are current (see isms-checks.ts) is documented by those records.
+ */
+function combineVerification(machine: Verification, documents: EvidenceRow[], now: string, backedByOwnRecords = false): Verification {
   if (machine === "failing" || machine === "verified") return machine;
   const accepted = documents.filter((row) => row.status === "accepted");
-  if (accepted.some((row) => row.valid_until > now)) return "documented";
+  if (accepted.some((row) => row.valid_until > now) || backedByOwnRecords) return "documented";
   return machine === "stale" || accepted.length > 0 ? "stale" : "unverified";
 }
 
@@ -132,12 +136,14 @@ export async function loadStates(tenantId: string) {
       )
     ).map((row) => row.uc_code),
   );
+  const records = backedByRecords(await ismsClauses(db, tenantId));
   const states = new Map<string, ControlState>();
   for (const row of rows) {
     const verification = combineVerification(
       await evidenceVerification(db, tenantId, row.linked_control_code),
       documents.filter((item) => item.uc_code === row.uc_code),
       now,
+      records.has(row.uc_code),
     );
     const claimed = row.status === "implemented" || row.status === "partial";
     states.set(row.uc_code, {
