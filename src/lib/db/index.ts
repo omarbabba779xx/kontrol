@@ -20,6 +20,17 @@ export function databaseDriver(): "sqlite" | "postgres" {
   return process.env.KONTROL_DB_DRIVER === "postgres" ? "postgres" : "sqlite";
 }
 
+/**
+ * SQLite separates organisations by a filter in each query; PostgreSQL enforces it in the database with row-level security. One
+ * organisation on SQLite has nothing to be separated from, so that is allowed in production. Several are not: a single query that
+ * forgot its filter would cross organisations with nothing underneath to stop it.
+ */
+export async function assertIsolation(db: Db, env: NodeJS.ProcessEnv = process.env) {
+  if (db.dialect !== "sqlite" || env.NODE_ENV !== "production") return;
+  const row = await db.system().get<{ n: number | string }>("SELECT COUNT(*) AS n FROM tenants");
+  if (Number(row?.n ?? 0) > 1) throw new Error("Several organisations on SQLite in production: use PostgreSQL (KONTROL_DB_DRIVER=postgres), which isolates them with row-level security");
+}
+
 async function open(): Promise<Db> {
   let db: Db;
   if (databaseDriver() === "postgres") {
@@ -31,6 +42,7 @@ async function open(): Promise<Db> {
   }
   if (shouldSeed()) await seedDatabase(db);
   else await bootstrapTenant(db, process.env, DEFAULT_TENANT_ID);
+  await assertIsolation(db);
   return db;
 }
 
