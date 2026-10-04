@@ -277,6 +277,11 @@ function demoGitHubFacts(owner: string, repository: string): Facts {
     },
     security: { secretScanning: "enabled", pushProtection: "disabled", dependabotSecurityUpdates: "enabled" },
     vulnerabilityAlertsEnabled: true,
+    alerts: { openSecrets: 0, openHighVulnerabilities: 2, openHighCode: 0 },
+    codeScanning: { enabled: true },
+    actions: { defaultWorkflowPermissions: "write", canApprovePullRequests: false },
+    access: { outsideAdmins: 0, writableDeployKeys: 1, insecureWebhooks: 0 },
+    files: { securityPolicy: true, codeOwners: false },
     org: { twoFactorRequired: true },
   };
 }

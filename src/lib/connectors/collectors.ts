@@ -100,6 +100,61 @@ export async function collectGitHub(api: GitHubApi, owner: string, repository: s
     else if (fixes.status === 404 && vulnerabilityAlertsEnabled === false) dependabotSecurityUpdates = "disabled";
   }
 
+  // Secret scanning is absent from the repository summary on plans that do not include it, but its alerts endpoint says plainly when
+  // it is off. Push protection cannot be on without it.
+  let secretScanning = status("secret_scanning");
+  let pushProtection = status("secret_scanning_push_protection");
+  let openSecretAlerts: number | null = null;
+  const secrets = await api(`${base}/secret-scanning/alerts?state=open&per_page=100`);
+  if (secrets.status === 200 && Array.isArray(secrets.body)) {
+    secretScanning ??= "enabled";
+    openSecretAlerts = secrets.body.length;
+  } else if (secrets.status === 404 && /secret scanning is disabled/i.test(text(record(secrets.body).message) ?? "")) {
+    secretScanning ??= "disabled";
+    pushProtection ??= "disabled";
+  }
+
+  // Open Dependabot alerts of high or critical severity. "Disabled" is not zero alerts: it is unknown.
+  let openHighVulnerabilities: number | null = null;
+  const vulnerabilities = await api(`${base}/dependabot/alerts?state=open&severity=critical,high&per_page=100`);
+  if (vulnerabilities.status === 200 && Array.isArray(vulnerabilities.body)) openHighVulnerabilities = vulnerabilities.body.length;
+
+  // Code scanning: 200 on the alerts endpoint means an analysis is configured; the "not enabled" refusal is a readable no.
+  let codeScanning: boolean | null = null;
+  let openHighCodeAlerts: number | null = null;
+  const code = await api(`${base}/code-scanning/alerts?state=open&per_page=100`);
+  if (code.status === 200 && Array.isArray(code.body)) {
+    codeScanning = true;
+    openHighCodeAlerts = (code.body as unknown[]).map(record).filter((alert) => ["critical", "high"].includes(text(record(alert.rule).security_severity_level) ?? "")).length;
+  } else if ((code.status === 403 || code.status === 404) && /not enabled|no analysis found/i.test(text(record(code.body).message) ?? "")) codeScanning = false;
+
+  // What the token of a workflow may do when the workflow does not say: "read" is the safe default.
+  const workflow = await api(`${base}/actions/permissions/workflow`);
+  const workflowBody = record(workflow.body);
+  const actions = workflow.status === 200 ? { defaultWorkflowPermissions: text(workflowBody.default_workflow_permissions), canApprovePullRequests: workflowBody.can_approve_pull_request_reviews === true } : { defaultWorkflowPermissions: null, canApprovePullRequests: null };
+
+  // People outside the organisation and deploy keys that can write. On a personal repository every collaborator is "outside".
+  const outside = await api(`${base}/collaborators?affiliation=outside&per_page=100`);
+  const outsideAdmins = outside.status === 200 && Array.isArray(outside.body) ? (outside.body as unknown[]).map(record).filter((user) => record(user.permissions).admin === true).length : null;
+  const keys = await api(`${base}/keys?per_page=100`);
+  const writableDeployKeys = keys.status === 200 && Array.isArray(keys.body) ? (keys.body as unknown[]).map(record).filter((key) => key.read_only === false).length : null;
+
+  // Webhooks that skip certificate verification. Needs a scope many tokens lack, in which case it stays unknown.
+  const hooks = await api(`${base}/hooks?per_page=100`);
+  const insecureWebhooks = hooks.status === 200 && Array.isArray(hooks.body) ? (hooks.body as unknown[]).map(record).filter((hook) => hook.active !== false && String(record(hook.config).insecure_ssl ?? "0") !== "0").length : null;
+
+  // A published way to report a vulnerability, and owners for review. Either file may live in the root, .github/ or docs/.
+  const exists = async (name: string) => {
+    let unknown = false;
+    for (const folder of ["", ".github/", "docs/"]) {
+      const file = await api(`${base}/contents/${folder}${name}`);
+      if (file.status === 200) return true;
+      if (file.status !== 404) unknown = true;
+    }
+    return unknown ? null : false;
+  };
+  const files = { securityPolicy: await exists("SECURITY.md"), codeOwners: await exists("CODEOWNERS") };
+
   let twoFactorRequired: boolean | null = null;
   const isOrganization = record(data.owner).type === "Organization";
   if (isOrganization) {
@@ -116,11 +171,16 @@ export async function collectGitHub(api: GitHubApi, owner: string, repository: s
     archived: data.archived === true,
     branchProtection: protection,
     security: {
-      secretScanning: status("secret_scanning"),
-      pushProtection: status("secret_scanning_push_protection"),
+      secretScanning,
+      pushProtection,
       dependabotSecurityUpdates,
     },
     vulnerabilityAlertsEnabled,
+    alerts: { openSecrets: openSecretAlerts, openHighVulnerabilities, openHighCode: openHighCodeAlerts },
+    codeScanning: { enabled: codeScanning },
+    actions,
+    access: { outsideAdmins, writableDeployKeys, insecureWebhooks },
+    files,
     org: { isOrganization, twoFactorRequired },
   };
 }

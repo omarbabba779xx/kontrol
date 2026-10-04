@@ -25,12 +25,32 @@ const router = (routes: Record<string, Route>) => async (path: string): Promise<
 
 const OPA = "/repos/open-policy-agent/opa";
 
+// The settings endpoints of a repository, as an administrator sees them when everything is in order, and as a caller without rights does.
+const settings = (base: string, mode: "admin" | "denied") => {
+  const denied = { status: 401, body: realUnauthenticated };
+  const ok = (body: unknown) => (mode === "admin" ? { status: 200, body } : denied);
+  return {
+    [`${base}/secret-scanning/alerts?state=open&per_page=100`]: ok([]),
+    [`${base}/dependabot/alerts?state=open&severity=critical,high&per_page=100`]: ok([]),
+    [`${base}/code-scanning/alerts?state=open&per_page=100`]: ok([]),
+    [`${base}/actions/permissions/workflow`]: ok({ default_workflow_permissions: "read", can_approve_pull_request_reviews: false }),
+    [`${base}/collaborators?affiliation=outside&per_page=100`]: ok([]),
+    [`${base}/keys?per_page=100`]: ok([]),
+    [`${base}/hooks?per_page=100`]: ok([]),
+    [`${base}/automated-security-fixes`]: ok({ enabled: true, paused: false }),
+    // Files of a public repository are readable by anyone, so they answer the same either way.
+    [`${base}/contents/SECURITY.md`]: { status: 200, body: { name: "SECURITY.md" } },
+    [`${base}/contents/.github/CODEOWNERS`]: { status: 200, body: { name: "CODEOWNERS" } },
+  };
+};
+
 test("GitHub: what an unauthenticated caller can see never turns into a failed control", async () => {
   const facts = await collectGitHub(router({
     [OPA]: { status: 200, body: realRepo },
     [`${OPA}/branches/main/protection`]: { status: 401, body: realUnauthenticated },
     [`${OPA}/vulnerability-alerts`]: { status: 401, body: realUnauthenticated },
     "/orgs/open-policy-agent": { status: 200, body: realOrg },
+    ...settings(OPA, "denied"),
   }), "open-policy-agent", "opa");
 
   assert.equal(facts.repository, "open-policy-agent/opa");
@@ -39,7 +59,9 @@ test("GitHub: what an unauthenticated caller can see never turns into a failed c
   assert.equal(facts.branchProtection, null, "401 means unknown, not unprotected");
   assert.equal(facts.vulnerabilityAlertsEnabled, null);
   assert.equal((facts.org as { twoFactorRequired: unknown }).twoFactorRequired, null, "the public org view does not expose the 2FA requirement");
-  for (const control of PACK.filter((item) => item.connector === "github")) assert.ok(missingFacts(control, facts).length > 0, `${control.code} must be skipped, not failed`);
+  // The published files are public, so that one control can be judged without any right; every setting stays unknown.
+  for (const control of PACK.filter((item) => item.connector === "github" && item.code !== "CTL-GH-010")) assert.ok(missingFacts(control, facts).length > 0, `${control.code} must be skipped, not failed`);
+  assert.deepEqual(facts.files, { securityPolicy: true, codeOwners: true });
 });
 
 const protectionDocs = {
@@ -56,6 +78,7 @@ test("GitHub: an administrator token yields complete facts and every GitHub cont
     [`${OPA}/branches/main/protection`]: { status: 200, body: protectionDocs },
     [`${OPA}/vulnerability-alerts`]: { status: 204, body: null },
     "/orgs/open-policy-agent": { status: 200, body: { ...realOrg, two_factor_requirement_enabled: true } },
+    ...settings(OPA, "admin"),
   }), "open-policy-agent", "opa");
 
   assert.deepEqual(facts.branchProtection, { enabled: true, source: "branch_protection", requiredReviews: 2, enforceAdmins: true, dismissStaleReviews: true, requireCodeOwnerReviews: true, requireSignedCommits: false });
@@ -203,6 +226,7 @@ test("a sync installs the control pack, opens findings for failures and records 
     [`${OPA}/branches/main/protection`]: { status: 404, body: { message: "Branch not protected" } },
     [`${OPA}/rules/branches/main`]: { status: 200, body: [] },
     [`${OPA}/vulnerability-alerts`]: { status: 204, body: null },
+    ...settings(OPA, "admin"),
   }));
   assert.equal(github.mode, "live");
   assert.ok(github.evaluations.find((item) => item.controlCode === "CTL-SDLC-004" && !item.passed));

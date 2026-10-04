@@ -94,6 +94,81 @@ export const PACK: PackControl[] = [
         : null,
   },
   {
+    code: "CTL-GH-006",
+    title: "Workflow tokens are read-only by default",
+    objective: "A workflow that does not ask for more cannot write to the repository or approve its own pull requests.",
+    connector: "github",
+    frequency: "daily",
+    policy: {
+      all: [
+        { path: "actions.defaultWorkflowPermissions", op: "eq", value: "read" },
+        { path: "actions.canApprovePullRequests", op: "eq", value: false },
+      ],
+    },
+    requires: ["actions.defaultWorkflowPermissions", "actions.canApprovePullRequests"],
+  },
+  {
+    code: "CTL-GH-007",
+    title: "No outside administrator and no writable deploy key",
+    objective: "Nobody outside the organisation administers the repository, and no standing key can push to it.",
+    connector: "github",
+    frequency: "daily",
+    policy: {
+      all: [
+        { path: "access.outsideAdmins", op: "eq", value: 0 },
+        { path: "access.writableDeployKeys", op: "eq", value: 0 },
+      ],
+    },
+    requires: ["access.outsideAdmins", "access.writableDeployKeys"],
+  },
+  {
+    code: "CTL-GH-008",
+    title: "Code scanning with no open high finding",
+    objective: "Static analysis runs on the repository and its high and critical findings are resolved.",
+    connector: "github",
+    frequency: "daily",
+    policy: {
+      all: [
+        { path: "codeScanning.enabled", op: "eq", value: true },
+        { path: "alerts.openHighCode", op: "eq", value: 0 },
+      ],
+    },
+    // The count is only readable when scanning is on; a readable "off" is enough to fail the control.
+    requires: ["codeScanning.enabled"],
+  },
+  {
+    code: "CTL-GH-009",
+    title: "No open high or critical dependency vulnerability",
+    objective: "Known high and critical vulnerabilities in dependencies are remediated, not just reported.",
+    connector: "github",
+    frequency: "daily",
+    policy: { all: [{ path: "alerts.openHighVulnerabilities", op: "eq", value: 0 }] },
+    requires: ["alerts.openHighVulnerabilities"],
+  },
+  {
+    code: "CTL-GH-010",
+    title: "Security policy and code owners are published",
+    objective: "There is a stated way to report a vulnerability, and changes have named reviewers.",
+    connector: "github",
+    frequency: "daily",
+    policy: {
+      all: [
+        { path: "files.securityPolicy", op: "eq", value: true },
+        { path: "files.codeOwners", op: "eq", value: true },
+      ],
+    },
+    requires: ["files.securityPolicy", "files.codeOwners"],
+  },
+  {
+    code: "CTL-GH-011",
+    title: "Webhooks verify certificates",
+    objective: "Repository events are not delivered to an endpoint whose certificate is not checked.",
+    connector: "github",
+    frequency: "daily",
+    policy: { all: [{ path: "access.insecureWebhooks", op: "eq", value: 0 }] },
+    requires: ["access.insecureWebhooks"],
+  },
+  {
     code: "CTL-AWS-001",
     title: "Root account protected",
     objective: "The AWS root user has MFA and no access keys.",
@@ -329,10 +404,11 @@ export const PACK: PackControl[] = [
 
 /** Which executable controls provide machine evidence for which unified control. Suggestions, applied on request. */
 export const SUGGESTED_LINKS: Record<string, string[]> = {
-  "UC-SDL-01": ["CTL-SDLC-004", "CTL-GH-002", "CTL-GH-004", "CTL-GL-001", "CTL-GL-002"],
-  "UC-OPS-02": ["CTL-GH-003"],
+  "UC-SDL-01": ["CTL-SDLC-004", "CTL-GH-002", "CTL-GH-004", "CTL-GH-006", "CTL-GH-008", "CTL-GH-010", "CTL-GL-001", "CTL-GL-002"],
+  "UC-OPS-02": ["CTL-GH-003", "CTL-GH-009"],
+  "UC-IAM-04": ["CTL-GH-007"],
   "UC-OPS-01": ["CTL-AWS-004"],
-  "UC-OPS-04": ["CTL-AWS-003"],
+  "UC-OPS-04": ["CTL-AWS-003", "CTL-GH-011"],
   "UC-DAT-04": ["CTL-AWS-003"],
   "UC-OPS-05": ["CTL-AWS-005"],
   "UC-IAM-01": ["CTL-OKTA-002", "CTL-HR-002", "CTL-GWS-003", "CTL-ENTRA-004"],
