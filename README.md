@@ -193,7 +193,7 @@ Collectors are written against injected clients and tested at three levels: resp
 
 - Per-user rate limits are per process; limits on sign-in, public endpoints and authentication failures are shared through the database and fall back to per-process if it is unreachable. Schedules are claimed with a database lease, so several instances can run the scheduler; that has not been load-tested.
 - **COBIT.** Only identifiers and names are carried. Objectives outside information security (portfolio, budget, innovation, programmes) have no built-in control: map them yourself or exclude them with a justification. The mapping of the others is editorial.
-- **NIST SP 800-30.** The assessment scales are transcribed from Rev. 1 (Tables G-5 and I-2). Check them against your copy before relying on a rating in an assessment report.
+- **NIST SP 800-30.** The assessment scales are those of Rev. 1, Table G-5 (overall likelihood) and Table I-2 (level of risk), checked cell by cell against the NIST publication. The mapping of its five levels onto four bands (very low and low together) is this product's choice, not NIST's.
 - Evidence objects go to S3 with Object Lock when configured; otherwise a local folder is used and flagged as a fallback.
 - Benchmarking uses a disclosed synthetic cohort; connect an approved aggregation service before making peer claims.
 - **Catalogue depth.** Without an import, PCI DSS is at section level and SOC 2 at criterion level. Importing your licensed copy takes both further; the EU regulations cover the articles that bind the entity, not the whole text.

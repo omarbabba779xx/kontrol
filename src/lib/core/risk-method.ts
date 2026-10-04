@@ -48,6 +48,7 @@ export const DEFAULT_METHOD: RiskMethod = {
   approvedAt: null,
 };
 
+// Both tables below were checked cell by cell against the publication (nvlpubs.nist.gov, SP 800-30 Rev. 1, appendices G and I).
 // NIST SP 800-30 Rev. 1, Table G-5: overall likelihood. Rows: likelihood of threat event initiation or occurrence (very low to very
 // high). Columns: likelihood that the event results in adverse impact (very low to very high). Values are levels 1-5.
 const TABLE_G5 = [
