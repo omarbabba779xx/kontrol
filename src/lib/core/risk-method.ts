@@ -34,6 +34,8 @@ export type RiskMethod = {
   impactLabels: string[];
   /** What each impact level means for this organisation (money, service, people, legal), in its own words. */
   impactCriteria: string[];
+  /** What each impact level means for each security property: five entries for confidentiality, integrity and availability. */
+  impactCriteriaByDimension?: Record<"confidentiality" | "integrity" | "availability", string[]>;
   version: number;
   approvedBy: string | null;
   approvedAt: string | null;
@@ -121,7 +123,7 @@ export function aboveAppetite(method: RiskMethod, likelihood: number, impact: nu
 }
 
 /** Checks a method before it is stored: thresholds in order and inside the matrix, five labels per scale, a sane acceptance limit. */
-export function validateMethod(input: Pick<RiskMethod, "method" | "thresholds" | "appetite" | "maxAcceptanceDays" | "likelihoodLabels" | "impactLabels" | "impactCriteria"> & { appetiteLevel?: number }): string | null {
+export function validateMethod(input: Pick<RiskMethod, "method" | "thresholds" | "appetite" | "maxAcceptanceDays" | "likelihoodLabels" | "impactLabels" | "impactCriteria"> & { appetiteLevel?: number; impactCriteriaByDimension?: RiskMethod["impactCriteriaByDimension"] }): string | null {
   if (!METHODS.includes(input.method)) return "Unknown method";
   if (input.appetiteLevel !== undefined && (!Number.isInteger(input.appetiteLevel) || input.appetiteLevel < 1 || input.appetiteLevel > 4)) return "The appetite level is between 1 (very low) and 4 (high): a very high risk is never within appetite";
   if (input.appetiteLevel !== undefined && input.method !== "nist_800_30") return "An appetite level applies to NIST SP 800-30; the matrix method uses the appetite band";
@@ -135,5 +137,9 @@ export function validateMethod(input: Pick<RiskMethod, "method" | "thresholds" |
   }
   if ([...input.likelihoodLabels, ...input.impactLabels].some((label) => !label.trim() || label.length > 60)) return "Scale labels must be 1 to 60 characters";
   if (input.impactCriteria.some((text) => text.length > 400)) return "An impact criterion is at most 400 characters";
+  for (const [dimension, levels] of Object.entries(input.impactCriteriaByDimension ?? {})) {
+    if (!["confidentiality", "integrity", "availability"].includes(dimension)) return "Impact criteria are given for confidentiality, integrity and availability";
+    if (!Array.isArray(levels) || levels.length !== 5 || levels.some((text) => typeof text !== "string" || text.length > 400)) return `Give five ${dimension} criteria of at most 400 characters, one per level`;
+  }
   return null;
 }

@@ -63,6 +63,10 @@ type RiskRow = {
   likelihood_initiation: number | null;
   likelihood_impact: number | null;
   asset_id: string | null;
+  threat_id: string | null;
+  impact_c: number | null;
+  impact_i: number | null;
+  impact_a: number | null;
 };
 
 async function db(tenantId: string) {
@@ -95,7 +99,7 @@ export async function riskMethod(tenantId: string): Promise<RiskMethod> {
     tenantId,
   );
   if (!row) return DEFAULT_METHOD;
-  const scales = JSON.parse(row.scales_json) as Pick<RiskMethod, "likelihoodLabels" | "impactLabels" | "impactCriteria" | "appetiteLevel">;
+  const scales = JSON.parse(row.scales_json) as Pick<RiskMethod, "likelihoodLabels" | "impactLabels" | "impactCriteria" | "appetiteLevel" | "impactCriteriaByDimension">;
   return {
     method: row.method,
     thresholds: { medium: Number(row.threshold_medium), high: Number(row.threshold_high), critical: Number(row.threshold_critical) },
@@ -113,7 +117,7 @@ export async function riskMethod(tenantId: string): Promise<RiskMethod> {
  * Existing risks are re-rated by the new criteria at once (ratings are computed, not stored), and standing acceptances are kept:
  * the acceptance list shows any that now sit above the new appetite.
  */
-export async function setRiskMethod(actor: Actor, input: Pick<RiskMethod, "method" | "thresholds" | "appetite" | "maxAcceptanceDays"> & Partial<Pick<RiskMethod, "likelihoodLabels" | "impactLabels" | "impactCriteria" | "appetiteLevel">>) {
+export async function setRiskMethod(actor: Actor, input: Pick<RiskMethod, "method" | "thresholds" | "appetite" | "maxAcceptanceDays"> & Partial<Pick<RiskMethod, "likelihoodLabels" | "impactLabels" | "impactCriteria" | "appetiteLevel" | "impactCriteriaByDimension">>) {
   if (actor.role !== "admin") throw new UserError("Only an administrator can set the risk method: it is a management decision", 403);
   const next = { ...input, likelihoodLabels: input.likelihoodLabels ?? DEFAULT_METHOD.likelihoodLabels, impactLabels: input.impactLabels ?? DEFAULT_METHOD.impactLabels, impactCriteria: input.impactCriteria ?? DEFAULT_METHOD.impactCriteria };
   const problem = validateMethod(next);
@@ -127,7 +131,7 @@ export async function setRiskMethod(actor: Actor, input: Pick<RiskMethod, "metho
       `INSERT INTO risk_methods (tenant_id,method,threshold_medium,threshold_high,threshold_critical,appetite,max_acceptance_days,scales_json,version,approved_by,approved_at) VALUES (?,?,?,?,?,?,?,?,?,?,?)
        ON CONFLICT(tenant_id) DO UPDATE SET method = excluded.method, threshold_medium = excluded.threshold_medium, threshold_high = excluded.threshold_high, threshold_critical = excluded.threshold_critical, appetite = excluded.appetite, max_acceptance_days = excluded.max_acceptance_days, scales_json = excluded.scales_json, version = excluded.version, approved_by = excluded.approved_by, approved_at = excluded.approved_at`,
       actor.tenantId, next.method, next.thresholds.medium, next.thresholds.high, next.thresholds.critical, next.appetite, next.maxAcceptanceDays,
-      JSON.stringify({ likelihoodLabels: next.likelihoodLabels, impactLabels: next.impactLabels, impactCriteria: next.impactCriteria, appetiteLevel: next.method === "nist_800_30" ? next.appetiteLevel : undefined }), version, actor.userId, now,
+      JSON.stringify({ likelihoodLabels: next.likelihoodLabels, impactLabels: next.impactLabels, impactCriteria: next.impactCriteria, impactCriteriaByDimension: next.impactCriteriaByDimension, appetiteLevel: next.method === "nist_800_30" ? next.appetiteLevel : undefined }), version, actor.userId, now,
     );
     await appendAudit({ tenantId: actor.tenantId, actorId: actor.userId, action: "risk.method_set", objectType: "risk_method", objectId: actor.tenantId, payload: { version, method: next.method, thresholds: next.thresholds, appetite: next.appetite, appetiteLevel: next.appetiteLevel ?? null, maxAcceptanceDays: next.maxAcceptanceDays, previous: { method: previous.method, thresholds: previous.thresholds, appetite: previous.appetite } } }, tx);
   });

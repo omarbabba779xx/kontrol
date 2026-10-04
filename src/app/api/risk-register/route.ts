@@ -16,6 +16,7 @@ import {
   TREATMENTS,
   updateRisk,
 } from "@/lib/core/risk-register";
+import { createScenario, riskIdentification, valueAsset } from "@/lib/core/risk-assets";
 import { METHODS, THREAT_SOURCES } from "@/lib/core/risk-method";
 import { scenarioSchema } from "@/lib/core/schemas";
 
@@ -74,6 +75,8 @@ const actionSchema = z.discriminatedUnion("action", [
   z.object({ action: z.literal("quantify"), id: z.string().min(3), scenario: scenarioSchema }),
   z.object({ action: z.literal("from_gaps"), limit: z.number().int().min(1).max(25).default(10) }),
   z.object({ action: z.literal("treatment_task"), id: z.string().min(3) }),
+  z.object({ action: z.literal("value_asset"), assetId: z.string().min(3), confidentiality: score, integrity: score, availability: score, rationale: z.string().max(1000).optional() }),
+  z.object({ action: z.literal("scenario"), assetId: z.string().min(3), threatId: z.string().regex(/^TH-[A-Z]+-\d{2}$/), likelihood: score.optional(), likelihoodInitiation: score.optional(), likelihoodImpact: score.optional(), impact: score.optional(), impactReason: z.string().max(500).optional(), ownerId: z.string().min(3).optional() }),
   z.object({
     action: z.literal("set_method"),
     method: z.enum(METHODS),
@@ -84,6 +87,7 @@ const actionSchema = z.discriminatedUnion("action", [
     likelihoodLabels: z.array(z.string()).length(5).optional(),
     impactLabels: z.array(z.string()).length(5).optional(),
     impactCriteria: z.array(z.string()).length(5).optional(),
+    impactCriteriaByDimension: z.object({ confidentiality: z.array(z.string()).length(5), integrity: z.array(z.string()).length(5), availability: z.array(z.string()).length(5) }).optional(),
   }),
 ]);
 
@@ -93,6 +97,7 @@ export async function GET(request: Request) {
     const params = new URL(request.url).searchParams;
     if (params.get("format") === "treatment-plan")
       return new Response(await treatmentPlanCsv(actor.tenantId), { headers: { "Content-Type": "text/csv; charset=utf-8", "Content-Disposition": 'attachment; filename="risk-treatment-plan.csv"' } });
+    if (params.get("view") === "identification") return Response.json(await riskIdentification(actor.tenantId));
     if (params.get("view") === "traceability") return Response.json(await riskTraceability(actor.tenantId));
     return Response.json(await riskSnapshot(actor.tenantId));
   } catch (error) {
@@ -118,6 +123,10 @@ export async function POST(request: Request) {
         return Response.json(await quantifyRisk(actor, input));
       case "from_gaps":
         return Response.json(await createFromGaps(actor, input), { status: 201 });
+      case "value_asset":
+        return Response.json(await valueAsset(actor, input));
+      case "scenario":
+        return Response.json(await createScenario(actor, input), { status: 201 });
       case "set_method":
         return Response.json(await setRiskMethod(actor, input));
       case "treatment_task":
