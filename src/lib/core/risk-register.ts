@@ -9,7 +9,7 @@ import { requirementsOf } from "@/lib/frameworks/scoring";
 import { UserError, userError } from "@/lib/core/errors";
 import { appendAudit } from "@/lib/core/integrity";
 import { simulateRisk } from "@/lib/core/risk-engine";
-import { bandFor, DEFAULT_METHOD, exceedsAppetite, overallLikelihood, THREAT_SOURCES, validateMethod, type MethodId, type RiskMethod, type ThreatSource } from "@/lib/core/risk-method";
+import { aboveAppetite, appetiteLevelOf, bandFor, DEFAULT_METHOD, levelFor, NIST_LEVELS, overallLikelihood, THREAT_SOURCES, validateMethod, type MethodId, type RiskMethod, type ThreatSource } from "@/lib/core/risk-method";
 import { heatMap, residual, scoreOf, type Band, type ControlEffect } from "@/lib/core/risk-rating";
 import type { scenarioSchema } from "@/lib/core/schemas";
 import { createTask } from "@/lib/core/tasks";
@@ -95,7 +95,7 @@ export async function riskMethod(tenantId: string): Promise<RiskMethod> {
     tenantId,
   );
   if (!row) return DEFAULT_METHOD;
-  const scales = JSON.parse(row.scales_json) as Pick<RiskMethod, "likelihoodLabels" | "impactLabels" | "impactCriteria">;
+  const scales = JSON.parse(row.scales_json) as Pick<RiskMethod, "likelihoodLabels" | "impactLabels" | "impactCriteria" | "appetiteLevel">;
   return {
     method: row.method,
     thresholds: { medium: Number(row.threshold_medium), high: Number(row.threshold_high), critical: Number(row.threshold_critical) },
@@ -113,7 +113,7 @@ export async function riskMethod(tenantId: string): Promise<RiskMethod> {
  * Existing risks are re-rated by the new criteria at once (ratings are computed, not stored), and standing acceptances are kept:
  * the acceptance list shows any that now sit above the new appetite.
  */
-export async function setRiskMethod(actor: Actor, input: Pick<RiskMethod, "method" | "thresholds" | "appetite" | "maxAcceptanceDays"> & Partial<Pick<RiskMethod, "likelihoodLabels" | "impactLabels" | "impactCriteria">>) {
+export async function setRiskMethod(actor: Actor, input: Pick<RiskMethod, "method" | "thresholds" | "appetite" | "maxAcceptanceDays"> & Partial<Pick<RiskMethod, "likelihoodLabels" | "impactLabels" | "impactCriteria" | "appetiteLevel">>) {
   if (actor.role !== "admin") throw new UserError("Only an administrator can set the risk method: it is a management decision", 403);
   const next = { ...input, likelihoodLabels: input.likelihoodLabels ?? DEFAULT_METHOD.likelihoodLabels, impactLabels: input.impactLabels ?? DEFAULT_METHOD.impactLabels, impactCriteria: input.impactCriteria ?? DEFAULT_METHOD.impactCriteria };
   const problem = validateMethod(next);
@@ -127,9 +127,9 @@ export async function setRiskMethod(actor: Actor, input: Pick<RiskMethod, "metho
       `INSERT INTO risk_methods (tenant_id,method,threshold_medium,threshold_high,threshold_critical,appetite,max_acceptance_days,scales_json,version,approved_by,approved_at) VALUES (?,?,?,?,?,?,?,?,?,?,?)
        ON CONFLICT(tenant_id) DO UPDATE SET method = excluded.method, threshold_medium = excluded.threshold_medium, threshold_high = excluded.threshold_high, threshold_critical = excluded.threshold_critical, appetite = excluded.appetite, max_acceptance_days = excluded.max_acceptance_days, scales_json = excluded.scales_json, version = excluded.version, approved_by = excluded.approved_by, approved_at = excluded.approved_at`,
       actor.tenantId, next.method, next.thresholds.medium, next.thresholds.high, next.thresholds.critical, next.appetite, next.maxAcceptanceDays,
-      JSON.stringify({ likelihoodLabels: next.likelihoodLabels, impactLabels: next.impactLabels, impactCriteria: next.impactCriteria }), version, actor.userId, now,
+      JSON.stringify({ likelihoodLabels: next.likelihoodLabels, impactLabels: next.impactLabels, impactCriteria: next.impactCriteria, appetiteLevel: next.method === "nist_800_30" ? next.appetiteLevel : undefined }), version, actor.userId, now,
     );
-    await appendAudit({ tenantId: actor.tenantId, actorId: actor.userId, action: "risk.method_set", objectType: "risk_method", objectId: actor.tenantId, payload: { version, method: next.method, thresholds: next.thresholds, appetite: next.appetite, maxAcceptanceDays: next.maxAcceptanceDays, previous: { method: previous.method, thresholds: previous.thresholds, appetite: previous.appetite } } }, tx);
+    await appendAudit({ tenantId: actor.tenantId, actorId: actor.userId, action: "risk.method_set", objectType: "risk_method", objectId: actor.tenantId, payload: { version, method: next.method, thresholds: next.thresholds, appetite: next.appetite, appetiteLevel: next.appetiteLevel ?? null, maxAcceptanceDays: next.maxAcceptanceDays, previous: { method: previous.method, thresholds: previous.thresholds, appetite: previous.appetite } } }, tx);
   });
   return { version, method: next.method };
 }
@@ -360,8 +360,11 @@ export async function acceptRisk(actor: Actor, input: { id: string; days: number
   if (current.residual.band === "critical")
     throw userError(`A critical residual risk (${current.residual.score}) cannot be accepted: treat it, or reduce it first`);
   // Above the appetite, acceptance is a management decision: an administrator, and a note that says why the exposure is tolerable.
-  if (exceedsAppetite(method, current.residual.band)) {
-    if (actor.role !== "admin") throw new UserError(`This ${current.residual.band} residual risk is above the risk appetite (${method.appetite}): only an administrator can accept it`, 403);
+  const over = aboveAppetite(method, current.residual.likelihood, current.residual.impact);
+  if (over) {
+    const rated = current.residual.level?.label.toLowerCase() ?? current.residual.band;
+    const appetite = method.method === "nist_800_30" ? NIST_LEVELS[appetiteLevelOf(method) - 1].toLowerCase() : method.appetite;
+    if (actor.role !== "admin") throw new UserError(`This ${rated} residual risk is above the risk appetite (${appetite}): only an administrator can accept it`, 403);
     if (input.note.trim().length < 40) throw userError("Above the risk appetite, the acceptance note must explain the decision (40 characters minimum)");
   }
   const scope = await db(actor.tenantId);
@@ -386,7 +389,7 @@ export async function acceptRisk(actor: Actor, input: { id: string; days: number
         action: "risk.accepted",
         objectType: "risk_item",
         objectId: row.id,
-        payload: { ref: row.ref, days: input.days, note: input.note, residual: current.residual, aboveAppetite: exceedsAppetite(method, current.residual.band), methodVersion: method.version },
+        payload: { ref: row.ref, days: input.days, note: input.note, residual: current.residual, aboveAppetite: over, methodVersion: method.version },
       },
       tx,
     );
@@ -584,11 +587,11 @@ function present(
             ...(JSON.parse(row.fair_scenario_json ?? "{}") as { p50?: number; p95?: number; currency?: string }),
           },
     fair_scenario_json: undefined,
-    inherent: { score: inherentScore, band: rate(row.likelihood, row.impact) as Band },
-    aboveAppetite: row.status !== "closed" && exceedsAppetite(method, result.band),
+    inherent: { score: inherentScore, band: rate(row.likelihood, row.impact) as Band, level: levelFor(method, row.likelihood, row.impact) },
+    aboveAppetite: row.status !== "closed" && aboveAppetite(method, result.likelihood, result.impact),
     /** Under SP 800-30, an open risk without its threat description has not been assessed by the method. */
     needsThreatDescription: method.method === "nist_800_30" && row.status !== "closed" && !describedByThreat,
-    residual: result,
+    residual: { ...result, level: levelFor(method, result.likelihood, result.impact) },
     controls: codes.map((code) => ({
       code,
       title: posture.get(code)?.title ?? code,
@@ -610,7 +613,7 @@ export async function riskSnapshot(tenantId: string) {
   const method = await riskMethod(tenantId);
   return {
     risks,
-    method: { ...method, approved: method.version > 0 },
+    method: { ...method, approved: method.version > 0, appetiteLevel: method.method === "nist_800_30" ? appetiteLevelOf(method) : undefined },
     heat: {
       inherent: heatMap(open.map((risk) => ({ likelihood: risk.likelihood, impact: risk.impact }))),
       residual: heatMap(open.map((risk) => ({ likelihood: risk.residual.likelihood, impact: risk.residual.impact }))),

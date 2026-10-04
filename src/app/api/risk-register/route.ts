@@ -79,6 +79,7 @@ const actionSchema = z.discriminatedUnion("action", [
     method: z.enum(METHODS),
     thresholds: z.object({ medium: z.number().int(), high: z.number().int(), critical: z.number().int() }),
     appetite: z.enum(["low", "medium", "high"]),
+    appetiteLevel: z.number().int().min(1).max(4).optional(),
     maxAcceptanceDays: z.number().int(),
     likelihoodLabels: z.array(z.string()).length(5).optional(),
     impactLabels: z.array(z.string()).length(5).optional(),

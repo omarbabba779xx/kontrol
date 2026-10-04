@@ -48,8 +48,9 @@ defaults apply and are reported as not approved, which the ISMS checklist counts
 - **Matrix (ISO/IEC 27005 style).** Likelihood x impact, 1 to 5 each. You choose the score at which medium, high and critical start.
 - **NIST SP 800-30 Rev. 1.** A risk is described by a threat source (adversarial, accidental, structural, environmental), a threat
   event, a vulnerability and predisposing conditions. Likelihood has two parts, initiation or occurrence and resulting adverse impact,
-  combined by Table G-5; the level of risk comes from Table I-2 and is shown on the same four bands (very low and low as *low*, moderate
-  as *medium*, high as *high*, very high as *critical*). A risk raised automatically from a gap has no threat description yet and is
+  combined by Table G-5; the level of risk comes from Table I-2 and is kept on NIST's five levels (very low, low, moderate, high, very
+  high): that is what the register shows, what the appetite is stated in (very low to high) and what an acceptance is judged against.
+  A risk raised automatically from a gap has no threat description yet and is
   listed as needing one.
 - **Appetite.** The highest band accepted without a management decision. Above it, a risk can only be accepted by an administrator, with
   a note of at least 40 characters, and stays counted as "accepted above appetite". A critical residual risk cannot be accepted at all.

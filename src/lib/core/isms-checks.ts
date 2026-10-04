@@ -1,6 +1,6 @@
 import "server-only";
 
-import { bandFor, DEFAULT_METHOD, exceedsAppetite, type RiskMethod } from "@/lib/core/risk-method";
+import { aboveAppetite, DEFAULT_METHOD, type RiskMethod } from "@/lib/core/risk-method";
 import type { Executor } from "@/lib/db";
 
 /**
@@ -19,9 +19,9 @@ const count = (row: { n: number | string } | undefined) => Number(row?.n ?? 0);
 const check = (clause: string, title: string, status: ClauseStatus, detail: string, next: string | null = null): ClauseCheck => ({ clause, title, status, detail, next: status === "met" ? null : next });
 
 async function methodOf(db: Executor, tenantId: string): Promise<RiskMethod> {
-  const row = await db.get<{ method: RiskMethod["method"]; threshold_medium: number; threshold_high: number; threshold_critical: number; appetite: RiskMethod["appetite"]; max_acceptance_days: number; version: number; approved_by: string; approved_at: string }>("SELECT * FROM risk_methods WHERE tenant_id = ?", tenantId);
+  const row = await db.get<{ method: RiskMethod["method"]; threshold_medium: number; threshold_high: number; threshold_critical: number; appetite: RiskMethod["appetite"]; max_acceptance_days: number; scales_json: string; version: number; approved_by: string; approved_at: string }>("SELECT * FROM risk_methods WHERE tenant_id = ?", tenantId);
   if (!row) return DEFAULT_METHOD;
-  return { ...DEFAULT_METHOD, method: row.method, thresholds: { medium: Number(row.threshold_medium), high: Number(row.threshold_high), critical: Number(row.threshold_critical) }, appetite: row.appetite, maxAcceptanceDays: Number(row.max_acceptance_days), version: Number(row.version), approvedBy: row.approved_by, approvedAt: row.approved_at };
+  return { ...DEFAULT_METHOD, appetiteLevel: (JSON.parse(row.scales_json) as { appetiteLevel?: number }).appetiteLevel, method: row.method, thresholds: { medium: Number(row.threshold_medium), high: Number(row.threshold_high), critical: Number(row.threshold_critical) }, appetite: row.appetite, maxAcceptanceDays: Number(row.max_acceptance_days), version: Number(row.version), approvedBy: row.approved_by, approvedAt: row.approved_at };
 }
 
 export async function ismsClauses(db: Executor, tenantId: string, now = Date.now()): Promise<ClauseCheck[]> {
@@ -69,7 +69,7 @@ export async function ismsClauses(db: Executor, tenantId: string, now = Date.now
     : risks.length === 0 ? check("6.1.2", "Risk assessment", "partial", `Method ${method.method} version ${method.version} is approved, but no risk is recorded.`, "Assess and record the information security risks.")
     : undescribed > 0 ? check("6.1.2", "Risk assessment", "partial", `${undescribed} open risk(s) lack the threat description the method requires.`, "Describe the threat source, event and likelihood parts of those risks.")
     : check("6.1.2", "Risk assessment", "met", `Method ${method.method} version ${method.version}, ${risks.length} open risk(s) assessed.`);
-  const untreatedAbove = risks.filter((risk) => (risk.status === "identified" || (risk.status === "accepted" && risk.accepted_until !== null && risk.accepted_until <= nowIso)) && exceedsAppetite(method, bandFor(method, risk.likelihood, risk.impact))).length;
+  const untreatedAbove = risks.filter((risk) => (risk.status === "identified" || (risk.status === "accepted" && risk.accepted_until !== null && risk.accepted_until <= nowIso)) && aboveAppetite(method, risk.likelihood, risk.impact)).length;
   const adopted = await n("SELECT COUNT(*) AS n FROM framework_adoptions WHERE tenant_id = ?");
   const c613 = risks.length === 0 || adopted === 0 ? check("6.1.3", "Risk treatment and statement of applicability", "missing", adopted === 0 ? "No framework is adopted, so there is no statement of applicability." : "No risk is recorded, so there is nothing to treat.", adopted === 0 ? "Adopt the framework the ISMS is built on." : "Record the risks and decide their treatment.")
     : untreatedAbove > 0 ? check("6.1.3", "Risk treatment and statement of applicability", "partial", `${untreatedAbove} risk(s) above the appetite have no treatment decision in force.`, "Decide the treatment of every risk above the appetite.")

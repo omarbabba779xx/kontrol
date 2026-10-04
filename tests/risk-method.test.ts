@@ -162,3 +162,36 @@ test("the API exposes the method, the traceability view and the treatment plan, 
   assert.equal((await post(riskOwner)).status, 403);
   assert.equal((await post(admin)).status, 200);
 });
+
+test("under SP 800-30 the five NIST levels stay distinct: very low is not low, in the rating, in the appetite and in the decision", async () => {
+  const { aboveAppetite, levelFor, appetiteLevelOf } = await import("../src/lib/core/risk-method");
+  const { createRisk, riskSnapshot, setRiskMethod, acceptRisk } = await rr();
+  assert.deepEqual(levelFor(nist, 1, 3), { level: 1, label: "Very low" });
+  assert.deepEqual(levelFor(nist, 2, 2), { level: 2, label: "Low" });
+  assert.equal(levelFor(DEFAULT_METHOD, 2, 2), null, "the matrix method has no NIST level");
+  assert.equal(appetiteLevelOf(nist), 3, "without a stated level the appetite band is used");
+  const veryLowAppetite: RiskMethod = { ...nist, appetiteLevel: 1 };
+  assert.equal(aboveAppetite(veryLowAppetite, 1, 3), false, "a very low risk is within a very low appetite");
+  assert.equal(aboveAppetite(veryLowAppetite, 2, 2), true, "a low risk is above it: the two levels are not merged");
+  assert.equal(aboveAppetite({ ...nist, appetiteLevel: 2 }, 2, 2), false);
+
+  await assert.rejects(setRiskMethod(admin, { ...matrix, appetiteLevel: 2 }), /applies to NIST SP 800-30/);
+  await assert.rejects(setRiskMethod(admin, { ...matrix, method: "nist_800_30", appetiteLevel: 5 }), /between 1 \(very low\) and 4 \(high\)/);
+  await setRiskMethod(admin, { ...matrix, method: "nist_800_30", appetiteLevel: 1 });
+  const threat = { threatSource: "accidental" as const, threatEvent: "Misdirected email", ownerId: riskOwner.userId, category: "privacy" as const };
+  const veryLow = await createRisk(riskOwner, { ...threat, title: "Very low risk", impact: 3, likelihoodInitiation: 1, likelihoodImpact: 1 });
+  const low = await createRisk(riskOwner, { ...threat, title: "Low risk", impact: 2, likelihoodInitiation: 2, likelihoodImpact: 2 });
+  const snapshot = await riskSnapshot(admin.tenantId);
+  assert.equal(snapshot.method.appetiteLevel, 1);
+  const view = (id: string) => snapshot.risks.find((risk) => risk.id === id)!;
+  assert.deepEqual([view(veryLow.id).inherent.level?.label, view(veryLow.id).residual.level?.label, view(veryLow.id).aboveAppetite], ["Very low", "Very low", false]);
+  assert.deepEqual([view(low.id).inherent.level?.label, view(low.id).aboveAppetite], ["Low", true]);
+  assert.equal(view(low.id).inherent.band, view(veryLow.id).inherent.band, "the method-neutral band is the same for both, and decides nothing here");
+
+  const note = "Accepted for the quarter while the mail gateway rule is rolled out to all staff.";
+  await assert.rejects(acceptRisk({ ...riskOwner, userId: "usr_other_owner" }, { id: low.id, days: 30, note }), /This low residual risk is above the risk appetite \(very low\)/);
+  await acceptRisk({ ...riskOwner, userId: "usr_other_owner" }, { id: veryLow.id, days: 30, note });
+  await acceptRisk(second, { id: low.id, days: 30, note });
+  await setRiskMethod(admin, matrix);
+  assert.equal((await riskSnapshot(admin.tenantId)).method.appetiteLevel, undefined, "the matrix method has no appetite level");
+});

@@ -8,17 +8,21 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { cn } from "@/lib/utils";
 import { errorMessage, fetchJson, isAbort } from "@/components/api-client";
-import { bandFor, THREAT_SOURCES, type RiskMethod } from "@/lib/core/risk-method";
+import { bandFor, levelFor, NIST_LEVELS, THREAT_SOURCES, type RiskMethod } from "@/lib/core/risk-method";
 
 type Band = "low" | "medium" | "high" | "critical";
 type Risk = {
   id: string; ref: string; title: string; description: string; category: string; asset: string; owner_id: string | null; likelihood: number; impact: number;
   treatment: string; treatment_plan: string; target_date: string | null; status: string; accepted_by: string | null; accepted_until: string | null; acceptance_note: string | null; source_type: string;
   fair: { mean: number | null; p90: number; p50?: number; p95?: number; currency?: string } | null;
-  inherent: { score: number; band: Band }; residual: { likelihood: number; impact: number; score: number; band: Band; reduction: number; controlsConsidered: number };
+  inherent: { score: number; band: Band; level: Level | null }; residual: { likelihood: number; impact: number; score: number; band: Band; level: Level | null; reduction: number; controlsConsidered: number };
   controls: Array<{ code: string; title: string; status: string; verification: string }>; acceptanceExpired: boolean; treatmentOverdue: boolean; effectiveStatus: string; aboveAppetite: boolean; needsThreatDescription: boolean; threat_event: string | null;
 };
+type Level = { level: number; label: string };
 type Method = RiskMethod & { approved: boolean };
+// SP 800-30 has five levels of risk; each keeps its own colour so that very low and low are not shown as one.
+const LEVEL_STYLE = ["bg-[#e6efe9] text-[#245c3f]", "bg-[#dcebe1] text-[#245c3f]", "bg-[#f1e7cc] text-[#7a5a1a]", "bg-[#f6e3d3] text-[#944a15]", "bg-[#f5e5e1] text-[#9f2923]"];
+const LEVEL_CELL = ["bg-[#eef4f0]", "bg-[#dcebe1]", "bg-[#f1e7cc]", "bg-[#f0cdb0]", "bg-[#e9b4ab]"];
 type Snapshot = { risks: Risk[]; method: Method; heat: { inherent: number[][]; residual: number[][] }; summary: { open: number; critical: number; high: number; untreated: number; acceptanceExpired: number; quantified: number; aboveAppetite: number; needsThreatDescription: number; annualLossMean: number; annualLossP90Indicative: number } };
 type Person = { id: string; name: string; role: string; external: boolean };
 
@@ -106,7 +110,7 @@ function HeatMap({ grid, method }: { grid: number[][]; method: RiskMethod }) {
       {[5, 4, 3, 2, 1].map((likelihood) => (
         <div key={likelihood} role="row" className={row}>
           <span role="rowheader" className="grid place-items-center text-[#5f5d56]">L{likelihood}</span>
-          {[1, 2, 3, 4, 5].map((impact) => { const count = grid[likelihood - 1][impact - 1]; return <span key={impact} role="cell" aria-label={`Likelihood ${likelihood}, impact ${impact}: ${count} risk${count === 1 ? "" : "s"}`} className={cn("grid h-9 place-items-center", CELL[bandFor(method, likelihood, impact)], count > 0 && "font-bold ring-1 ring-[#171713]")}>{count || ""}</span>; })}
+          {[1, 2, 3, 4, 5].map((impact) => { const count = grid[likelihood - 1][impact - 1]; return <span key={impact} role="cell" aria-label={`Likelihood ${likelihood}, impact ${impact}: ${count} risk${count === 1 ? "" : "s"}`} className={cn("grid h-9 place-items-center", (levelFor(method, likelihood, impact) ? LEVEL_CELL[levelFor(method, likelihood, impact)!.level - 1] : CELL[bandFor(method, likelihood, impact)]), count > 0 && "font-bold ring-1 ring-[#171713]")}>{count || ""}</span>; })}
         </div>))}
       <div role="row" className={row}><span role="columnheader"><span className="sr-only">Likelihood</span></span>{[1, 2, 3, 4, 5].map((impact) => <span key={impact} role="columnheader" className="pt-1 text-[#5f5d56]">I{impact}</span>)}</div>
     </div>
@@ -114,16 +118,20 @@ function HeatMap({ grid, method }: { grid: number[][]; method: RiskMethod }) {
 }
 
 function MethodPanel({ method, needsThreat, act, pending }: { method: Method; needsThreat: number; act: Act; pending: boolean }) {
-  const [form, setForm] = useState({ method: method.method, medium: method.thresholds.medium, high: method.thresholds.high, critical: method.thresholds.critical, appetite: method.appetite, maxAcceptanceDays: method.maxAcceptanceDays });
+  const [form, setForm] = useState({ method: method.method, medium: method.thresholds.medium, high: method.thresholds.high, critical: method.thresholds.critical, appetite: method.appetite, appetiteLevel: method.appetiteLevel ?? 3, maxAcceptanceDays: method.maxAcceptanceDays });
   const number = (key: "medium" | "high" | "critical" | "maxAcceptanceDays", name: string) => <label className="flex-1 text-[8px]">{name}<Input aria-label={name} type="number" value={form[key]} onChange={(event) => setForm({ ...form, [key]: Number(event.target.value) })} className={field} /></label>;
   return (
     <details className="border border-[#cbc7bd] p-4">
       <summary className="cursor-pointer font-mono text-[8px] uppercase tracking-wider text-[#5f5d56]">Risk method and appetite</summary>
-      <p className="mt-3 text-[9px] text-[#55534b]">{method.method === "nist_800_30" ? "NIST SP 800-30" : "Likelihood × impact matrix (ISO/IEC 27005 style)"} · appetite: {method.appetite} · {method.approved ? `version ${method.version}, approved on ${day(method.approvedAt)}` : "built-in defaults, not approved by your organisation"}.{needsThreat > 0 ? ` ${needsThreat} open risk(s) still need their threat description.` : ""}</p>
-      <form className="mt-3 space-y-2" onSubmit={(event) => { event.preventDefault(); act({ action: "set_method", method: form.method, thresholds: { medium: form.medium, high: form.high, critical: form.critical }, appetite: form.appetite, maxAcceptanceDays: form.maxAcceptanceDays }, "Risk method approved"); }}>
+      <p className="mt-3 text-[9px] text-[#55534b]">{method.method === "nist_800_30" ? "NIST SP 800-30" : "Likelihood × impact matrix (ISO/IEC 27005 style)"} · appetite: {method.method === "nist_800_30" && method.appetiteLevel ? NIST_LEVELS[method.appetiteLevel - 1].toLowerCase() : method.appetite} · {method.approved ? `version ${method.version}, approved on ${day(method.approvedAt)}` : "built-in defaults, not approved by your organisation"}.{needsThreat > 0 ? ` ${needsThreat} open risk(s) still need their threat description.` : ""}</p>
+      <form className="mt-3 space-y-2" onSubmit={(event) => { event.preventDefault(); act({ action: "set_method", method: form.method, thresholds: { medium: form.medium, high: form.high, critical: form.critical }, appetite: form.appetite, maxAcceptanceDays: form.maxAcceptanceDays, ...(form.method === "nist_800_30" ? { appetiteLevel: form.appetiteLevel } : {}) }, "Risk method approved"); }}>
         <div className="flex gap-2">
           <label className="flex-1 text-[8px]">Method<select aria-label="Method" value={form.method} onChange={(event) => setForm({ ...form, method: event.target.value as RiskMethod["method"] })} className={cn(select, "w-full")}><option value="iso27005">Matrix (ISO/IEC 27005)</option><option value="nist_800_30">NIST SP 800-30</option></select></label>
-          <label className="flex-1 text-[8px]">Appetite<select aria-label="Appetite" value={form.appetite} onChange={(event) => setForm({ ...form, appetite: event.target.value as RiskMethod["appetite"] })} className={cn(select, "w-full")}>{["low", "medium", "high"].map((value) => <option key={value} value={value}>{value}</option>)}</select></label>
+          {form.method === "nist_800_30" ? (
+            <label className="flex-1 text-[8px]">Appetite<select aria-label="Appetite" value={form.appetiteLevel} onChange={(event) => setForm({ ...form, appetiteLevel: Number(event.target.value) })} className={cn(select, "w-full")}>{NIST_LEVELS.slice(0, 4).map((name, index) => <option key={name} value={index + 1}>{name.toLowerCase()}</option>)}</select></label>
+          ) : (
+            <label className="flex-1 text-[8px]">Appetite<select aria-label="Appetite" value={form.appetite} onChange={(event) => setForm({ ...form, appetite: event.target.value as RiskMethod["appetite"] })} className={cn(select, "w-full")}>{["low", "medium", "high"].map((value) => <option key={value} value={value}>{value}</option>)}</select></label>
+          )}
         </div>
         <div className="flex gap-2">{number("medium", "Medium from")}{number("high", "High from")}{number("critical", "Critical from")}{number("maxAcceptanceDays", "Max acceptance (days)")}</div>
         <p className="text-[8px] text-[#63615a]">Thresholds are scores (likelihood × impact) and apply to the matrix method; SP 800-30 uses its own tables. Setting the method is a management decision: it needs an administrator and is versioned.</p>
@@ -184,8 +192,8 @@ function RiskRow({ risk, people, act, pending }: { risk: Risk; people: Person[];
       <tr className={cn("border-t border-[#d8d4ca] align-top", closed && "opacity-50")}>
         <td className="px-3 py-3 font-mono font-semibold">{risk.ref}</td>
         <td className="max-w-[300px] px-3 py-3"><span className="font-medium">{risk.title}</span><span className="block font-mono text-[8px] text-[#5f5d56]">{label(risk.category)}{owner ? ` · ${owner}` : " · no owner"}{risk.source_type === "gap" ? " · from gap" : ""}</span></td>
-        <td className="px-3 py-3"><span className={cn("px-1.5 py-0.5 font-mono text-[8px] uppercase", BAND[risk.inherent.band])}>{risk.inherent.score} {risk.inherent.band}</span></td>
-        <td className="px-3 py-3"><span className={cn("px-1.5 py-0.5 font-mono text-[8px] uppercase", BAND[risk.residual.band])}>{risk.residual.score} {risk.residual.band}</span></td>
+        <td className="px-3 py-3"><span className={cn("px-1.5 py-0.5 font-mono text-[8px] uppercase", risk.inherent.level ? LEVEL_STYLE[risk.inherent.level.level - 1] : BAND[risk.inherent.band])}>{risk.inherent.level ? risk.inherent.level.label : `${risk.inherent.score} ${risk.inherent.band}`}</span></td>
+        <td className="px-3 py-3"><span className={cn("px-1.5 py-0.5 font-mono text-[8px] uppercase", risk.residual.level ? LEVEL_STYLE[risk.residual.level.level - 1] : BAND[risk.residual.band])}>{risk.residual.level ? risk.residual.level.label : `${risk.residual.score} ${risk.residual.band}`}</span></td>
         <td className="px-3 py-3 font-mono">{risk.treatment}</td>
         <td className="px-3 py-3 font-mono">{risk.acceptanceExpired ? <span className="font-bold text-[#b8322a]">lapsed</span> : risk.treatmentOverdue ? <span className="font-bold text-[#b8322a]">overdue</span> : risk.status}{risk.status === "accepted" && !risk.acceptanceExpired ? <span className="block text-[8px] text-[#5f5d56]">until {day(risk.accepted_until)}</span> : null}</td>
         <td className="px-3 py-3 text-end"><Button type="button" variant="ghost" aria-expanded={open} onClick={() => setOpen(!open)} className="h-6 rounded-none px-1 text-[8px]">Details <ChevronDown className={cn("ms-0.5 h-2.5 w-2.5 transition-transform", open && "rotate-180")} aria-hidden="true" /></Button></td>

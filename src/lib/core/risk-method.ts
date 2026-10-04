@@ -9,8 +9,9 @@ import type { Band } from "@/lib/core/risk-rating";
  *                 conditions. Likelihood has two parts: that the event is initiated or occurs, and that it then results in adverse
  *                 impact. They combine through the assessment scale of Table G-5, and the level of risk comes from Table I-2.
  *
- * Both express a level on the same four bands so that the rest of the product (heat map, appetite, acceptance, reports) reads one
- * language. The risk appetite is the highest band the organisation accepts without a management decision.
+ * The matrix method rates on four bands. SP 800-30 rates on its own five levels, which is what is shown and decided on; a band is
+ * still derived for the method-neutral parts of the product (summary counts across methods). The risk appetite is the highest rating
+ * the organisation accepts without a management decision, stated in the scale of the method in use.
  */
 export const METHODS = ["iso27005", "nist_800_30"] as const;
 export type MethodId = (typeof METHODS)[number];
@@ -23,6 +24,11 @@ export type RiskMethod = {
   thresholds: { medium: number; high: number; critical: number };
   /** Highest band accepted without a management decision. */
   appetite: Exclude<Band, "critical">;
+  /**
+   * Under SP 800-30 the appetite is stated on NIST's own five levels (1 very low to 4 high; very high is never within appetite), so that
+   * "very low" and "low" stay distinct. Absent, it follows `appetite`.
+   */
+  appetiteLevel?: number;
   maxAcceptanceDays: number;
   likelihoodLabels: string[];
   impactLabels: string[];
@@ -83,7 +89,12 @@ export function nistRiskLevel(likelihood: number, impact: number) {
   return TABLE_I2[level(likelihood, "Likelihood")][level(impact, "Impact")];
 }
 
+/** NIST's five levels of risk, in its own words. */
+export const NIST_LEVELS = ["Very low", "Low", "Moderate", "High", "Very high"] as const;
+// The four bands exist for the parts of the product that are method-neutral (colours, cross-method summaries). Under SP 800-30 the
+// rating shown, the appetite and the decisions all use the five levels; the band never decides anything there.
 const NIST_BAND: Band[] = ["low", "low", "medium", "high", "critical"];
+const LEVEL_OF_APPETITE: Record<RiskMethod["appetite"], number> = { low: 2, medium: 3, high: 4 };
 const ORDER: Band[] = ["low", "medium", "high", "critical"];
 
 export function bandFor(method: RiskMethod, likelihood: number, impact: number): Band {
@@ -94,9 +105,26 @@ export function bandFor(method: RiskMethod, likelihood: number, impact: number):
 
 export const exceedsAppetite = (method: RiskMethod, band: Band) => ORDER.indexOf(band) > ORDER.indexOf(method.appetite);
 
+/** The level of risk on NIST's five-level scale (1 to 5) with its label, or null under the matrix method. */
+export function levelFor(method: RiskMethod, likelihood: number, impact: number) {
+  if (method.method !== "nist_800_30") return null;
+  const level = nistRiskLevel(likelihood, impact);
+  return { level, label: NIST_LEVELS[level - 1] };
+}
+
+export const appetiteLevelOf = (method: RiskMethod) => method.appetiteLevel ?? LEVEL_OF_APPETITE[method.appetite];
+
+/** Whether a rating is above the appetite: on the five NIST levels under SP 800-30, on the bands under the matrix method. */
+export function aboveAppetite(method: RiskMethod, likelihood: number, impact: number) {
+  if (method.method === "nist_800_30") return nistRiskLevel(likelihood, impact) > appetiteLevelOf(method);
+  return exceedsAppetite(method, bandFor(method, likelihood, impact));
+}
+
 /** Checks a method before it is stored: thresholds in order and inside the matrix, five labels per scale, a sane acceptance limit. */
-export function validateMethod(input: Pick<RiskMethod, "method" | "thresholds" | "appetite" | "maxAcceptanceDays" | "likelihoodLabels" | "impactLabels" | "impactCriteria">): string | null {
+export function validateMethod(input: Pick<RiskMethod, "method" | "thresholds" | "appetite" | "maxAcceptanceDays" | "likelihoodLabels" | "impactLabels" | "impactCriteria"> & { appetiteLevel?: number }): string | null {
   if (!METHODS.includes(input.method)) return "Unknown method";
+  if (input.appetiteLevel !== undefined && (!Number.isInteger(input.appetiteLevel) || input.appetiteLevel < 1 || input.appetiteLevel > 4)) return "The appetite level is between 1 (very low) and 4 (high): a very high risk is never within appetite";
+  if (input.appetiteLevel !== undefined && input.method !== "nist_800_30") return "An appetite level applies to NIST SP 800-30; the matrix method uses the appetite band";
   const { medium, high, critical } = input.thresholds;
   if (![medium, high, critical].every((value) => Number.isInteger(value) && value >= 2 && value <= 25)) return "Thresholds must be whole scores between 2 and 25";
   if (!(medium < high && high < critical)) return "Thresholds must increase: medium, then high, then critical";
