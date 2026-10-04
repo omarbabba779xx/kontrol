@@ -52,7 +52,8 @@ test("an asset is valued on three properties, and a threat cannot be assessed on
 
 test("a scenario becomes a risk with its threat, its controls and its impact per property; the impact can be lowered with a reason, never raised", async () => {
   const { createScenario, riskIdentification } = await assets();
-  const { riskSnapshot, riskTraceability } = await rr();
+  const { riskSnapshot } = await rr();
+  const { riskTraceability } = await import("../src/lib/core/risk-traceability");
   await assert.rejects(createScenario(riskOwner, { assetId: ASSET, threatId: "TH-NOPE-01", likelihood: 3 }), /Threat not found/);
   await assert.rejects(createScenario(riskOwner, { assetId: ASSET, threatId: "TH-SVC-01", likelihood: 3, impact: 4 }), /cannot exceed the value of the asset .* \(2\)/);
   await assert.rejects(createScenario(riskOwner, { assetId: ASSET, threatId: "TH-INF-01", likelihood: 3, impact: 2 }), /Explain why the impact is lower/);

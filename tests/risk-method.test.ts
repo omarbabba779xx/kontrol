@@ -119,7 +119,8 @@ test("under SP 800-30 a risk is described by its threat, its likelihood is deriv
 });
 
 test("traceability runs from asset and threat to risk, control and requirement, and names where the thread breaks", async () => {
-  const { createRisk, updateRisk, riskTraceability, treatmentPlanCsv } = await rr();
+  const { createRisk, updateRisk } = await rr();
+  const { riskTraceability, treatmentPlanCsv } = await import("../src/lib/core/risk-traceability");
   const { adoptFramework, setImplementation, exportStatement } = await engine();
   await adoptFramework(admin, { frameworkId: "iso27001", scope: "Whole organisation" });
   await adoptFramework(admin, { frameworkId: "cobit2019", scope: "IT governance" });

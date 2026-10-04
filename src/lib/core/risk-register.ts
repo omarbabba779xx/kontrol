@@ -4,12 +4,11 @@ import { randomUUID } from "node:crypto";
 import type { z } from "zod";
 import type { Actor } from "@/lib/core/auth";
 import { complianceSnapshot } from "@/lib/core/compliance-engine";
-import { csvCell } from "@/lib/core/compliance/statement";
-import { requirementsOf } from "@/lib/frameworks/scoring";
 import { UserError, userError } from "@/lib/core/errors";
 import { appendAudit } from "@/lib/core/integrity";
+import { riskMethod } from "@/lib/core/risk-method-store";
 import { simulateRisk } from "@/lib/core/risk-engine";
-import { aboveAppetite, appetiteLevelOf, bandFor, DEFAULT_METHOD, levelFor, NIST_LEVELS, overallLikelihood, THREAT_SOURCES, validateMethod, type MethodId, type RiskMethod, type ThreatSource } from "@/lib/core/risk-method";
+import { aboveAppetite, appetiteLevelOf, bandFor, levelFor, NIST_LEVELS, overallLikelihood, THREAT_SOURCES, type RiskMethod, type ThreatSource } from "@/lib/core/risk-method";
 import { heatMap, residual, scoreOf, type Band, type ControlEffect } from "@/lib/core/risk-rating";
 import type { scenarioSchema } from "@/lib/core/schemas";
 import { createTask } from "@/lib/core/tasks";
@@ -28,7 +27,7 @@ type Category = (typeof CATEGORIES)[number];
 type Treatment = (typeof TREATMENTS)[number];
 const DAY = 86_400_000;
 
-type RiskRow = {
+export type RiskRow = {
   id: string;
   ref: string;
   title: string;
@@ -88,54 +87,6 @@ async function owner(tenantId: string, ownerId: string | null | undefined) {
   if (!user || user.external === 1) throw userError("Owner not found");
   if (user.status !== "active") throw userError("Owner is disabled");
   return user.id;
-}
-
-/** The method the organisation approved, or the built-in default (which is reported as not approved). */
-export async function riskMethod(tenantId: string): Promise<RiskMethod> {
-  const row = await (
-    await db(tenantId)
-  ).get<{ method: MethodId; threshold_medium: number; threshold_high: number; threshold_critical: number; appetite: RiskMethod["appetite"]; max_acceptance_days: number; scales_json: string; version: number; approved_by: string; approved_at: string }>(
-    "SELECT * FROM risk_methods WHERE tenant_id = ?",
-    tenantId,
-  );
-  if (!row) return DEFAULT_METHOD;
-  const scales = JSON.parse(row.scales_json) as Pick<RiskMethod, "likelihoodLabels" | "impactLabels" | "impactCriteria" | "appetiteLevel" | "impactCriteriaByDimension">;
-  return {
-    method: row.method,
-    thresholds: { medium: Number(row.threshold_medium), high: Number(row.threshold_high), critical: Number(row.threshold_critical) },
-    appetite: row.appetite,
-    maxAcceptanceDays: Number(row.max_acceptance_days),
-    ...scales,
-    version: Number(row.version),
-    approvedBy: row.approved_by,
-    approvedAt: row.approved_at,
-  };
-}
-
-/**
- * Sets the risk method. It is a management decision, so only an administrator can take it, and it is recorded with its version.
- * Existing risks are re-rated by the new criteria at once (ratings are computed, not stored), and standing acceptances are kept:
- * the acceptance list shows any that now sit above the new appetite.
- */
-export async function setRiskMethod(actor: Actor, input: Pick<RiskMethod, "method" | "thresholds" | "appetite" | "maxAcceptanceDays"> & Partial<Pick<RiskMethod, "likelihoodLabels" | "impactLabels" | "impactCriteria" | "appetiteLevel" | "impactCriteriaByDimension">>) {
-  if (actor.role !== "admin") throw new UserError("Only an administrator can set the risk method: it is a management decision", 403);
-  const next = { ...input, likelihoodLabels: input.likelihoodLabels ?? DEFAULT_METHOD.likelihoodLabels, impactLabels: input.impactLabels ?? DEFAULT_METHOD.impactLabels, impactCriteria: input.impactCriteria ?? DEFAULT_METHOD.impactCriteria };
-  const problem = validateMethod(next);
-  if (problem) throw userError(problem);
-  const previous = await riskMethod(actor.tenantId);
-  const version = previous.version + 1;
-  const now = new Date().toISOString();
-  const scope = await db(actor.tenantId);
-  await scope.transaction(async (tx) => {
-    await tx.run(
-      `INSERT INTO risk_methods (tenant_id,method,threshold_medium,threshold_high,threshold_critical,appetite,max_acceptance_days,scales_json,version,approved_by,approved_at) VALUES (?,?,?,?,?,?,?,?,?,?,?)
-       ON CONFLICT(tenant_id) DO UPDATE SET method = excluded.method, threshold_medium = excluded.threshold_medium, threshold_high = excluded.threshold_high, threshold_critical = excluded.threshold_critical, appetite = excluded.appetite, max_acceptance_days = excluded.max_acceptance_days, scales_json = excluded.scales_json, version = excluded.version, approved_by = excluded.approved_by, approved_at = excluded.approved_at`,
-      actor.tenantId, next.method, next.thresholds.medium, next.thresholds.high, next.thresholds.critical, next.appetite, next.maxAcceptanceDays,
-      JSON.stringify({ likelihoodLabels: next.likelihoodLabels, impactLabels: next.impactLabels, impactCriteria: next.impactCriteria, impactCriteriaByDimension: next.impactCriteriaByDimension, appetiteLevel: next.method === "nist_800_30" ? next.appetiteLevel : undefined }), version, actor.userId, now,
-    );
-    await appendAudit({ tenantId: actor.tenantId, actorId: actor.userId, action: "risk.method_set", objectType: "risk_method", objectId: actor.tenantId, payload: { version, method: next.method, thresholds: next.thresholds, appetite: next.appetite, appetiteLevel: next.appetiteLevel ?? null, maxAcceptanceDays: next.maxAcceptanceDays, previous: { method: previous.method, thresholds: previous.thresholds, appetite: previous.appetite } } }, tx);
-  });
-  return { version, method: next.method };
 }
 
 type ThreatInput = { threatSource?: ThreatSource; threatEvent?: string; vulnerability?: string; predisposingConditions?: string; likelihoodInitiation?: number; likelihoodImpact?: number; assetId?: string | null };
@@ -543,7 +494,7 @@ export async function createTreatmentTask(actor: Actor, input: { id: string }) {
 }
 
 type Assessed = ReturnType<typeof present>;
-async function assess(tenantId: string, rows: RiskRow[]) {
+export async function assess(tenantId: string, rows: RiskRow[]) {
   const links = await (
     await db(tenantId)
   ).all<{ risk_id: string; uc_code: string }>("SELECT risk_id, uc_code FROM risk_item_controls WHERE tenant_id = ?", tenantId);
@@ -641,55 +592,4 @@ export async function riskSnapshot(tenantId: string) {
 
 export type RiskView = Assessed;
 
-/**
- * The thread an auditor pulls: from an asset and a threat to the risk, from the risk to its treatment and controls, and from each
- * control to the requirements it satisfies in the adopted frameworks. And back: which risks a control is there to treat. It also names
- * what breaks the thread, so the gaps are a list to work through rather than something to be discovered in an audit.
- */
-export async function riskTraceability(tenantId: string) {
-  const rows = await (await db(tenantId)).all<RiskRow>("SELECT * FROM risk_items WHERE tenant_id = ? AND status <> 'closed' ORDER BY ref", tenantId);
-  const risks = await assess(tenantId, rows);
-  const snapshot = await complianceSnapshot(tenantId);
-  const adopted = snapshot.adoptions.map((adoption) => adoption.frameworkId);
-  const assets = await (await db(tenantId)).all<{ id: string; name: string; type: string; criticality: string }>("SELECT id, name, type, criticality FROM assets WHERE tenant_id = ? AND valid_to IS NULL", tenantId);
-  const assetById = new Map(assets.map((asset) => [asset.id, asset]));
-  const requirementsFor = (code: string) => Object.fromEntries(adopted.map((frameworkId) => [frameworkId, requirementsOf(code, frameworkId)]).filter(([, ids]) => (ids as string[]).length > 0)) as Record<string, string[]>;
-  const chain = risks.map((risk) => ({
-    ref: risk.ref, id: risk.id, title: risk.title, category: risk.category,
-    asset: risk.asset_id && assetById.has(risk.asset_id) ? assetById.get(risk.asset_id)! : risk.asset ? { id: null, name: risk.asset, type: null, criticality: null } : null,
-    threat: risk.threat_event ? { source: risk.threat_source, event: risk.threat_event, vulnerability: risk.vulnerability, predisposingConditions: risk.predisposing_conditions } : null,
-    inherent: risk.inherent, residual: { score: risk.residual.score, band: risk.residual.band }, aboveAppetite: risk.aboveAppetite,
-    treatment: risk.treatment, treatmentPlan: risk.treatment_plan, status: risk.effectiveStatus,
-    controls: risk.controls.map((control) => ({ ...control, requirements: requirementsFor(control.code) })),
-  }));
-  const byControl = new Map<string, string[]>();
-  for (const risk of chain) for (const control of risk.controls) byControl.set(control.code, [...(byControl.get(control.code) ?? []), risk.ref]);
-  const claimed = snapshot.controls.filter((control) => control.status === "implemented" || control.status === "partial");
-  return {
-    adoptedFrameworks: adopted,
-    risks: chain,
-    controls: [...byControl.entries()].sort(([a], [b]) => a.localeCompare(b)).map(([code, refs]) => ({ code, title: UC_BY_CODE.get(code)?.title ?? code, risks: refs, requirements: requirementsFor(code) })),
-    breaks: {
-      risksWithoutControl: chain.filter((risk) => risk.controls.length === 0 && risk.treatment !== "accept" && risk.treatment !== "avoid").map((risk) => risk.ref),
-      risksWithoutAsset: chain.filter((risk) => risk.asset === null).map((risk) => risk.ref),
-      mitigationWithoutPlan: chain.filter((risk) => risk.treatment === "mitigate" && !risk.treatmentPlan.trim()).map((risk) => risk.ref),
-      untreated: chain.filter((risk) => risk.status === "identified").map((risk) => risk.ref),
-      // A control that is claimed but treats no recorded risk is not wrong, but its inclusion rests on the framework alone.
-      controlsNotLinkedToARisk: claimed.filter((control) => !byControl.has(control.code)).map((control) => control.code),
-    },
-  };
-}
-
-/** The risk treatment plan (ISO/IEC 27001 6.1.3 e) as a spreadsheet: one line per open risk, with who does what by when. */
-export async function treatmentPlanCsv(tenantId: string) {
-  const trace = await riskTraceability(tenantId);
-  const rows = await (await db(tenantId)).all<{ ref: string; owner: string | null; target_date: string | null; accepted_until: string | null }>(
-    "SELECT r.ref AS ref, u.name AS owner, r.target_date AS target_date, r.accepted_until AS accepted_until FROM risk_items r LEFT JOIN users u ON u.id = r.owner_id WHERE r.tenant_id = ? AND r.status <> 'closed'", tenantId);
-  const extra = new Map(rows.map((row) => [row.ref, row]));
-  const header = ["ref", "risk", "asset", "threat_event", "inherent", "residual", "above_appetite", "treatment", "plan", "controls", "owner", "target_date", "status", "accepted_until"];
-  const lines = trace.risks.map((risk) => [
-    risk.ref, risk.title, risk.asset?.name ?? "", risk.threat?.event ?? "", `${risk.inherent.band} (${risk.inherent.score})`, `${risk.residual.band} (${risk.residual.score})`, risk.aboveAppetite ? "yes" : "no",
-    risk.treatment, risk.treatmentPlan, risk.controls.map((control) => `${control.code}=${control.status}`).join(" "), extra.get(risk.ref)?.owner ?? "", extra.get(risk.ref)?.target_date?.slice(0, 10) ?? "", risk.status, extra.get(risk.ref)?.accepted_until?.slice(0, 10) ?? "",
-  ]);
-  return [header, ...lines].map((row) => row.map(csvCell).join(",")).join("\n");
-}
+export { riskMethod, setRiskMethod } from "@/lib/core/risk-method-store";

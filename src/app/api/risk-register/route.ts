@@ -10,13 +10,12 @@ import {
   createTreatmentTask,
   quantifyRisk,
   riskSnapshot,
-  riskTraceability,
   setRiskMethod,
-  treatmentPlanCsv,
   TREATMENTS,
   updateRisk,
 } from "@/lib/core/risk-register";
 import { createScenario, riskIdentification, valueAsset } from "@/lib/core/risk-assets";
+import { riskTraceability, treatmentPlanCsv } from "@/lib/core/risk-traceability";
 import { METHODS, THREAT_SOURCES } from "@/lib/core/risk-method";
 import { scenarioSchema } from "@/lib/core/schemas";
 
