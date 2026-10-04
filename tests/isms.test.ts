@@ -15,10 +15,11 @@ const clause = async (id: string) => (await (await isms()).ismsSnapshot(admin.te
 test("an empty management system says what is missing, clause by clause, and what to do next", async () => {
   const { ismsSnapshot } = await isms();
   const snapshot = await ismsSnapshot(admin.tenantId);
-  assert.deepEqual(snapshot.clauses.map((item) => item.clause), ["4.1", "4.2", "4.3", "5.2", "5.3", "6.1.2", "6.1.3", "6.2", "9.1", "9.2", "9.3", "10.2"]);
+  assert.deepEqual(snapshot.clauses.map((item) => item.clause), ["4.1", "4.2", "4.3", "5.2", "5.3", "6.1.2", "6.1.3", "6.2", "6.3", "7.1", "7.2", "7.3", "7.4", "7.5", "8.1", "8.2", "9.1", "9.2", "9.3", "10.2", "A5.24"]);
   for (const id of ["4.1", "4.2", "4.3", "6.2", "9.3", "10.2"]) assert.equal(snapshot.clauses.find((item) => item.clause === id)?.status, "missing", id);
   assert.ok(snapshot.clauses.every((item) => item.status === "met" || item.next), "every clause that is not met names the next step");
-  assert.equal(snapshot.summary.total, 12);
+  assert.equal(snapshot.summary.total, 21);
+  assert.equal(snapshot.clauses.find((item) => item.clause === "6.3")?.status, "met", "nothing has been changed yet, so there is no unplanned change");
   assert.ok(snapshot.summary.next.length > 0);
 });
 
@@ -95,7 +96,8 @@ test("a management review freezes its inputs, is approved by management, and its
   assert.equal(prepared.inputs.previousReview, null);
   assert.equal(prepared.inputs.risk.open, 1);
   assert.equal(prepared.inputs.risk.appetite, "medium");
-  assert.ok(prepared.inputs.objectives.length === 1 && prepared.inputs.monitoring.length === 1 && prepared.inputs.clauses.length === 12);
+  assert.ok(prepared.inputs.objectives.length === 1 && prepared.inputs.monitoring.length === 1 && prepared.inputs.clauses.length === 21);
+  assert.deepEqual(prepared.inputs.incidents, { sinceLastReview: 0, open: 0, seriousOpen: 0 });
   assert.ok(prepared.inputs.contextChanges.length >= 2, "with no earlier review, every context item is a change to consider");
   assert.equal((await clause("9.3")).status, "partial", "drafted, not approved");
 
@@ -153,6 +155,8 @@ test("records that exist, are approved and are current back the governance contr
 
   const sys = (await db()).system();
   await sys.run("INSERT INTO audit_engagements (id,tenant_id,name,framework_id,kind,scope,period_start,period_end,auditor_org,status,created_by,created_at,closed_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)", "eng_internal", admin.tenantId, "Internal audit 2026", "iso27001", "internal", "ISMS", iso(-60), iso(-30), "Internal", "closed", admin.userId, iso(-60), iso(-20));
+  assert.equal((await clause("9.2")).status, "partial", "one audit is not a programme: nothing is planned next");
+  await sys.run("INSERT INTO audit_engagements (id,tenant_id,name,framework_id,kind,scope,period_start,period_end,auditor_org,status,created_by,created_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?)", "eng_next", admin.tenantId, "Internal audit 2027", "iso27001", "internal", "ISMS", iso(200), iso(230), "Internal", "planning", admin.userId, iso(0));
   assert.equal((await clause("9.2")).status, "met");
   assert.equal(await verification("UC-GOV-06"), "documented");
 

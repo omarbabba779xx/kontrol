@@ -130,11 +130,13 @@ async function reviewInputs(tenantId: string) {
   const ncs = await scope.all<{ status: string; severity: string; source: string }>("SELECT status, severity, source FROM isms_nonconformities WHERE tenant_id = ?", tenantId);
   const objectives = await scope.all<{ title: string; target: string; current_value: string; status: string }>("SELECT title, target, current_value, status FROM isms_objectives WHERE tenant_id = ? ORDER BY due_at", tenantId);
   const audits = await scope.all<{ name: string; status: string; closed_at: string | null }>("SELECT name, status, closed_at FROM audit_engagements WHERE tenant_id = ? AND kind = 'internal' ORDER BY period_end DESC LIMIT 5", tenantId);
+  const incidents = await scope.all<{ status: string; severity: string; detected_at: string }>("SELECT status, severity, detected_at FROM isms_incidents WHERE tenant_id = ?", tenantId);
   const context = await scope.all<{ kind: string; title: string; updated_at: string }>("SELECT kind, title, updated_at FROM isms_context WHERE tenant_id = ? ORDER BY updated_at DESC LIMIT 50", tenantId);
   return {
     preparedAt: new Date().toISOString(),
     previousReview: previous ? { heldAt: previous.held_at, actions: actions.length, actionsDone: actions.filter((item) => item.status === "done").length } : null,
     contextChanges: context.filter((item) => !previous || item.updated_at > previous.held_at).map((item) => ({ kind: item.kind, title: item.title })),
+    incidents: { sinceLastReview: incidents.filter((item) => !previous || item.detected_at > previous.held_at).length, open: incidents.filter((item) => item.status !== "closed").length, seriousOpen: incidents.filter((item) => item.status !== "closed" && ["high", "critical"].includes(item.severity)).length },
     nonconformities: { total: ncs.length, open: ncs.filter((item) => item.status !== "closed").length, majorOpen: ncs.filter((item) => item.status !== "closed" && item.severity === "major").length },
     monitoring: compliance.scores.map((score) => ({ frameworkId: score.frameworkId, score: score.score, readiness: score.readiness, backed: score.assessment.dimensions.backed, blockers: score.assessment.blockers })),
     internalAudits: audits,
