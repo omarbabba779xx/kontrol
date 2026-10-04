@@ -1,6 +1,7 @@
 import "server-only";
 
 import type { Actor } from "@/lib/core/auth";
+import { capabilityGap, capabilityTargetsOf } from "@/lib/core/capability-targets";
 import { userError } from "@/lib/core/errors";
 import { listImports, loadCustomRequirements, loadLicensedText } from "@/lib/core/licensed-content";
 import type { Executor } from "@/lib/db";
@@ -266,6 +267,7 @@ export async function frameworkDetail(tenantId: string, frameworkId: FrameworkId
     custom.get(frameworkId)?.find((item) => item.id === requirementId)?.controls ?? baseControls(frameworkId, requirementId);
   const score = scoreFramework(frameworkId, states, scopes.get(frameworkId), overrides);
   const assessment = assess(score, states, await readinessContext(tenantId, documents, scopes), overrides);
+  const targets = await capabilityTargetsOf(tenantId, frameworkId);
   const decisions = new Map(
     reviews.filter((row) => row.framework_id === frameworkId).map((row) => [`${row.requirement_id}|${row.uc_code}`, row]),
   );
@@ -276,8 +278,10 @@ export async function frameworkDetail(tenantId: string, frameworkId: FrameworkId
     assessment,
     framework: FRAMEWORK_BY_ID.get(frameworkId),
     mapping: mappingStats(frameworkId, reviews),
+    capabilityGap: capabilityGap(score.requirements, targets),
     requirements: score.requirements.map((requirement) => ({
       ...requirement,
+      capabilityTarget: targets.get(requirement.id)?.target ?? null,
       related: crosswalk(frameworkId, requirement.id, overrides).related.map((entry) => ({
         frameworkId: entry.frameworkId,
         ids: entry.requirements.map((item) => item.id),

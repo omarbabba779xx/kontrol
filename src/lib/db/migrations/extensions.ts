@@ -17,9 +17,10 @@ import { riskMethod } from "@/lib/db/migrations/m0017-risk-method";
 import { isms } from "@/lib/db/migrations/m0018-isms";
 import { assetValuation } from "@/lib/db/migrations/m0019-asset-valuation";
 import { ismsOperations } from "@/lib/db/migrations/m0020-isms-operations";
+import { capabilityTargets } from "@/lib/db/migrations/m0021-capability-targets";
 import type { Migration } from "@/lib/db/migrations/runner";
 
 /**
  * Migrations after the baseline, in order. Add new ones at the end with the next id; never edit or reorder one that has shipped.
  */
-export const extensions: Migration[] = [identity, scheduling, tasksNotifications, auditWorkspace, thirdParty, riskRegister, aiGovernance, sessionRevocation, workflowExecution, evidenceGaps, scoreHistory, auditAnchors, oidcBinding, rateLimits, anchorPublication, riskMethod, isms, assetValuation, ismsOperations];
+export const extensions: Migration[] = [identity, scheduling, tasksNotifications, auditWorkspace, thirdParty, riskRegister, aiGovernance, sessionRevocation, workflowExecution, evidenceGaps, scoreHistory, auditAnchors, oidcBinding, rateLimits, anchorPublication, riskMethod, isms, assetValuation, ismsOperations, capabilityTargets];

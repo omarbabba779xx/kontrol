@@ -1,3 +1,4 @@
+import { setCapabilityTargets } from "@/lib/core/capability-targets";
 import { z } from "zod";
 import { requireActor, type Permission } from "@/lib/core/auth";
 import { apiError } from "@/lib/core/api";
@@ -79,6 +80,7 @@ const actionSchema = z.discriminatedUnion("action", [
   z.object({ action: z.literal("reattest"), ucCode, note: z.string().min(10).max(2000) }),
   z.object({ action: z.literal("countersign"), ucCode, note: z.string().min(10).max(2000) }),
   z.object({ action: z.literal("review_evidence"), id: z.string().min(3), accept: z.boolean(), note: z.string().min(10).max(2000) }),
+  z.object({ action: z.literal("set_capability_targets"), frameworkId: framework, targets: z.array(z.object({ requirementId: z.string().min(1).max(40), target: z.number().int().min(0).max(5) })).min(1).max(400), rationale: z.string().min(10).max(2000) }),
   z.object({ action: z.literal("install_pack") }),
   z.object({ action: z.literal("link_evidence") }),
   z.object({ action: z.literal("snapshot") }),
@@ -127,6 +129,8 @@ export async function POST(request: Request) {
         return Response.json(await countersign(actor, input));
       case "review_evidence":
         return Response.json(await reviewEvidence(actor, input));
+      case "set_capability_targets":
+        return Response.json(await setCapabilityTargets(actor, input));
       case "install_pack":
         return Response.json(await installControlPack(actor));
       case "link_evidence":
