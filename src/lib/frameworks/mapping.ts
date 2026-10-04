@@ -1,5 +1,6 @@
 import { FRAMEWORKS, FRAMEWORK_BY_ID } from "@/lib/frameworks/catalog";
 import { CSF_SUBCATEGORIES } from "@/lib/frameworks/data/csf-data";
+import { COBIT_MAPPING } from "@/lib/frameworks/data/cobit";
 import { ENISA_POINTS } from "@/lib/frameworks/data/enisa-data";
 import { UNIFIED_CONTROLS } from "@/lib/frameworks/unified";
 import type { FrameworkId } from "@/lib/frameworks/types";
@@ -18,6 +19,7 @@ export const linkKey = (frameworkId: string, requirementId: string, ucCode: stri
 
 /** Hand-refined mappings below the group level ("id: controls"). They replace the inherited group mapping. */
 const REFINEMENTS: Partial<Record<FrameworkId, string>> = {
+  cobit2019: COBIT_MAPPING,
   pci_dss: `
 Req.3.1: UC-DAT-02 UC-DAT-01
 Req.3.2: UC-DAT-02

@@ -26,6 +26,7 @@ function summary(score: ReturnType<typeof scoreFramework>, assessment: ReturnTyp
     gaps: score.gaps,
     notApplicable: score.notApplicable,
     declaredBand: score.declaredBand,
+    capability: score.capability,
     readiness: assessment.label,
     readinessLevel: assessment.level,
     assessment,

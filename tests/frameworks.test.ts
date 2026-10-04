@@ -35,8 +35,9 @@ test("every unified control reference points at a real requirement or group", ()
   }
 });
 
-test("every requirement of every framework is covered by at least one unified control", () => {
-  for (const framework of FRAMEWORKS) {
+test("every requirement of every security framework is covered by at least one unified control", () => {
+  // A framework that reaches beyond security (COBIT) says so and leaves those objectives unmapped; see cobit-capability.test.ts.
+  for (const framework of FRAMEWORKS.filter((item) => !item.beyondSecurity)) {
     const orphans = framework.requirements.filter((requirement) => baseControls(framework.id, requirement.id).length === 0).map((requirement) => requirement.id);
     assert.deepEqual(orphans, [], `${framework.id} has unmapped requirements`);
   }
@@ -75,7 +76,7 @@ test("scores scale with implementation and an empty posture scores zero", () => 
   assert.equal(full.declaredBand, "Strong", "a declared score says how far people claim to be; audit readiness is assessed from the evidence");
   const half = scoreFramework("iso27001", new Map(UNIFIED_CONTROLS.map((control) => [control.code, state({ status: "partial" })])));
   assert.equal(half.score, 50);
-  for (const framework of FRAMEWORKS) assert.equal(scoreFramework(framework.id, all).score, 100, `${framework.id} fully implemented`);
+  for (const framework of FRAMEWORKS.filter((item) => !item.beyondSecurity)) assert.equal(scoreFramework(framework.id, all).score, 100, `${framework.id} fully implemented`);
 });
 
 test("failing live evidence caps an attested implementation", () => {

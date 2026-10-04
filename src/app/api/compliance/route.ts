@@ -20,7 +20,7 @@ import {
   upsertPolicy,
 } from "@/lib/core/compliance-engine";
 
-const framework = z.enum(["iso27001", "nist_csf", "soc2", "gdpr", "nis2", "dora", "eu_ai_act", "iso42001", "pci_dss", "cis_v8"]);
+const framework = z.enum(["iso27001", "nist_csf", "soc2", "gdpr", "nis2", "dora", "eu_ai_act", "iso42001", "pci_dss", "cis_v8", "cobit2019"]);
 const ucCode = z.string().regex(/^UC-[A-Z]+-\d{2}$/);
 
 const actionSchema = z.discriminatedUnion("action", [

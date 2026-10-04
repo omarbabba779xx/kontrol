@@ -1,6 +1,7 @@
 import { CSF_CATEGORIES, CSF_FUNCTIONS, CSF_SUBCATEGORIES } from "@/lib/frameworks/data/csf-data";
 import { CIS_GROUPS, CIS_REQUIREMENTS, ISO42001_GROUPS, ISO42001_REQUIREMENTS, PCI_GROUPS, PCI_REQUIREMENTS } from "@/lib/frameworks/data/standards";
 import { dora, euAiAct, gdpr, nis2 } from "@/lib/frameworks/data/regulations";
+import { COBIT_REQUIREMENTS } from "@/lib/frameworks/data/cobit";
 import { group } from "@/lib/frameworks/data/helpers";
 import type { Framework, Requirement } from "@/lib/frameworks/types";
 
@@ -212,6 +213,7 @@ export const FRAMEWORKS: Framework[] = [
   { id: "iso42001", name: "ISO/IEC 42001", version: "2023", authority: "ISO/IEC", kind: "standard", granularity: "Complete: clauses 4-10 and all 38 Annex A controls", sourceUrl: "https://www.iso.org/standard/81230.html", groups: ISO42001_GROUPS, requirements: ISO42001_REQUIREMENTS },
   { id: "pci_dss", name: "PCI DSS", version: "4.0.1", authority: "PCI SSC", kind: "standard", granularity: "12 requirements and 63 sections (x.y). Testing procedures are licensed content and are not reproduced", sourceUrl: "https://www.pcisecuritystandards.org/", groups: PCI_GROUPS, requirements: PCI_REQUIREMENTS },
   { id: "cis_v8", name: "CIS Critical Security Controls", version: "8", authority: "Center for Internet Security", kind: "framework", granularity: "Complete: all 18 controls and 153 safeguards", sourceUrl: "https://www.cisecurity.org/controls", groups: CIS_GROUPS, requirements: CIS_REQUIREMENTS },
+  { id: "cobit2019", name: "COBIT", version: "2019", authority: "ISACA", kind: "framework", granularity: "All 40 governance and management objectives (identifiers and names). Objectives outside information security have no built-in control mapping; practices and activities are licensed content and are not reproduced", sourceUrl: "https://www.isaca.org/resources/cobit", beyondSecurity: true, requirements: COBIT_REQUIREMENTS },
 ];
 
 export const FRAMEWORK_BY_ID = new Map(FRAMEWORKS.map((framework) => [framework.id, framework]));

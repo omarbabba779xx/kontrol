@@ -1,3 +1,4 @@
+import { capabilityProfile, requirementCapability } from "@/lib/frameworks/capability";
 import { FRAMEWORKS, FRAMEWORK_BY_ID } from "@/lib/frameworks/catalog";
 import { baseControls, baseRequirements, linkKey } from "@/lib/frameworks/mapping";
 import { UNIFIED_CONTROLS, effortOf } from "@/lib/frameworks/unified";
@@ -88,6 +89,8 @@ export type RequirementResult = {
   status: RequirementStatus;
   verified: boolean;
   controls: string[];
+  /** Capability level 0-5 (see capability.ts); absent when the requirement is out of scope or has no control. */
+  capability?: number | null;
 };
 
 export type FrameworkScore = {
@@ -101,6 +104,8 @@ export type FrameworkScore = {
   notApplicable: number;
   /** How far the declared score has come. It says nothing about evidence: audit readiness is assessed separately (audit-readiness.ts). */
   declaredBand: "Strong" | "Advancing" | "Early" | "Not started";
+  /** Capability levels across the scored requirements: how many at each level 0-5, the average and the lowest. */
+  capability: { assessed: number; distribution: number[]; average: number; lowest: number };
   groups: Array<{ group: string; score: number; applicable: number }>;
   requirements: RequirementResult[];
 };
@@ -139,7 +144,7 @@ export function scoreFramework(frameworkId: FrameworkId, states: Map<string, Con
     // Every mapped control being out of scope takes the requirement out of scope with it.
     if (weights.length === 0) return { ...requirement, applicable: controls.length > 0, justification: null, score: controls.length > 0 ? null : 0, status: controls.length > 0 ? "not_applicable" : "gap", verified: false, controls };
     const score = weights.reduce((sum, weight) => sum + weight, 0) / weights.length;
-    return { ...requirement, applicable: true, justification: null, score, status: requirementStatus(score), verified: verified && score > 0, controls };
+    return { ...requirement, applicable: true, justification: null, score, status: requirementStatus(score), verified: verified && score > 0, controls, capability: requirementCapability(controls, states, DEFAULT_STATE) };
   });
 
   const scored = requirements.filter((requirement) => requirement.score !== null);
@@ -162,6 +167,7 @@ export function scoreFramework(frameworkId: FrameworkId, states: Map<string, Con
     gaps: scored.filter((requirement) => requirement.status === "gap").length,
     notApplicable: requirements.length - scored.length,
     declaredBand: declaredBand(score),
+    capability: capabilityProfile(scored.map((requirement) => requirement.capability)),
     groups: [...groups.entries()].map(([group, entry]) => ({ group, score: Math.round((entry.sum / entry.count) * 1000) / 10, applicable: entry.count })),
     requirements,
   };
