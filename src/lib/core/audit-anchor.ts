@@ -52,15 +52,15 @@ export async function createAnchor(actor: Actor) {
     actor.tenantId,
     chain.checked,
   );
-  if (existing) return { anchor: rowToAnchor(existing), created: false, publicKey: publicSigningKey() };
+  if (existing) return { anchor: rowToAnchor(existing), created: false, publicKey: await publicSigningKey() };
   const base = {
     tenantId: actor.tenantId,
     entries: chain.checked,
     headHash: chain.rootHash,
-    keyFingerprint: publicSigningKey().fingerprint,
+    keyFingerprint: (await publicSigningKey()).fingerprint,
     createdAt: new Date().toISOString(),
   };
-  const anchor: Anchor = { id: `anchor_${randomUUID()}`, ...base, signature: signDecision(payloadOf(base)) };
+  const anchor: Anchor = { id: `anchor_${randomUUID()}`, ...base, signature: await signDecision(payloadOf(base)) };
   await db.transaction(async (tx) => {
     await tx.run(
       "INSERT INTO audit_anchors (id,tenant_id,entries,head_hash,key_fingerprint,signature,created_at) VALUES (?,?,?,?,?,?,?)",
@@ -84,7 +84,7 @@ export async function createAnchor(actor: Actor) {
       tx,
     );
   });
-  return { anchor, created: true, publicKey: publicSigningKey() };
+  return { anchor, created: true, publicKey: await publicSigningKey() };
 }
 
 export async function listAnchors(tenantId: string, limit = 100) {
@@ -126,7 +126,7 @@ export async function verifyAgainstAnchors(tenantId: string, external: Anchor[] 
       createdAt: anchor.createdAt,
     };
     let status: AnchorCheck["status"] = "intact";
-    if (!verifySignature(payloadOf(base), anchor.signature, publicKeyPem)) status = "bad_signature";
+    if (!(await verifySignature(payloadOf(base), anchor.signature, publicKeyPem))) status = "bad_signature";
     else if (chain.checked < anchor.entries) status = "chain_shorter";
     else {
       const at = await db.get<{ entry_hash: string }>(

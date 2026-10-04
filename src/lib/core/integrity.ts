@@ -1,7 +1,7 @@
 import "server-only";
 
 import { createHash, randomUUID, timingSafeEqual } from "node:crypto";
-import { legacyHmac, signBytes, verifyBytes } from "@/lib/core/signing";
+import { isAsymmetric, legacyHmac, signBytes, verifyBytes } from "@/lib/core/signing";
 import { getDb, type Executor } from "@/lib/db";
 
 export function canonicalJson(value: unknown): string {
@@ -20,15 +20,15 @@ export function sha256(value: string | Buffer) {
   return createHash("sha256").update(value).digest("hex");
 }
 
-/** Signs the canonical form of a payload with the Ed25519 key. Third parties verify it with the public key alone. */
-export function signDecision(payload: unknown) {
+/** Signs the canonical form of a payload. Third parties verify it with the public key alone. */
+export async function signDecision(payload: unknown) {
   return signBytes(canonicalJson(payload));
 }
 
 /** Verifies a signature made by `signDecision`, or by the earlier HMAC form. Pass a public key (PEM) to verify as a third party would. */
-export function verifySignature(payload: unknown, signature: string, publicKeyPem?: string) {
+export async function verifySignature(payload: unknown, signature: string, publicKeyPem?: string) {
   const message = canonicalJson(payload);
-  if (signature.startsWith("ed25519:")) return verifyBytes(message, signature, publicKeyPem);
+  if (isAsymmetric(signature)) return verifyBytes(message, signature, publicKeyPem);
   if (publicKeyPem) return false;
   const expected = Buffer.from(legacyHmac(message)),
     given = Buffer.from(signature);

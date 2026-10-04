@@ -30,7 +30,7 @@ export async function GET(request: Request) {
     return Response.json({
       anchors: await listAnchors(actor.tenantId),
       verification: await verifyAgainstAnchors(actor.tenantId),
-      publicKey: publicSigningKey(),
+      publicKey: await publicSigningKey(),
       publication: await anchorStatus(actor.tenantId),
     });
   } catch (error) {

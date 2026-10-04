@@ -273,7 +273,7 @@ export async function buildEvidencePack(actor: Actor, engagementId: string) {
     notes,
   };
   const manifestFingerprint = sha256(canonicalJson(body));
-  const manifest = { ...body, manifestFingerprint, signature: signDecision({ manifestFingerprint, tenant: actor.tenantId, generatedAt }) };
+  const manifest = { ...body, manifestFingerprint, signature: await signDecision({ manifestFingerprint, tenant: actor.tenantId, generatedAt }) };
   add("manifest.json", JSON.stringify(manifest, null, 2));
 
   await recordDownload(actor, engagement.id, manifestFingerprint);

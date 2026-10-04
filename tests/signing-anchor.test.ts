@@ -34,18 +34,18 @@ test("decisions and reports are signed with Ed25519 and verify with the public k
   const { publicSigningKey, legacyHmac } = await import("../src/lib/core/signing");
   const { canonicalJson } = await import("../src/lib/core/integrity");
   const payload = { fingerprint: "abc", tenant: admin.tenantId };
-  const signature = signDecision(payload);
+  const signature = await signDecision(payload);
   assert.match(signature, /^ed25519:/);
-  assert.equal(signDecision(payload), signature, "Ed25519 is deterministic");
-  const key = publicSigningKey();
-  assert.equal(verifySignature(payload, signature, key.publicKeyPem), true, "a third party needs only the public key");
-  assert.equal(verifySignature({ ...payload, tenant: "other" }, signature, key.publicKeyPem), false);
-  assert.equal(verifySignature(payload, signature.slice(0, -4) + "AAAA", key.publicKeyPem), false);
+  assert.equal(await signDecision(payload), signature, "Ed25519 is deterministic");
+  const key = await publicSigningKey();
+  assert.equal(await verifySignature(payload, signature, key.publicKeyPem), true, "a third party needs only the public key");
+  assert.equal(await verifySignature({ ...payload, tenant: "other" }, signature, key.publicKeyPem), false);
+  assert.equal(await verifySignature(payload, signature.slice(0, -4) + "AAAA", key.publicKeyPem), false);
   const stranger = generateKeyPairSync("ed25519").publicKey.export({ type: "spki", format: "pem" }).toString();
-  assert.equal(verifySignature(payload, signature, stranger), false, "another key does not verify it");
+  assert.equal(await verifySignature(payload, signature, stranger), false, "another key does not verify it");
   const legacy = legacyHmac(canonicalJson(payload));
-  assert.equal(verifySignature(payload, legacy), true, "history signed before this change stays verifiable");
-  assert.equal(verifySignature(payload, legacy, key.publicKeyPem), false, "an HMAC cannot be checked by a third party");
+  assert.equal(await verifySignature(payload, legacy), true, "history signed before this change stays verifiable");
+  assert.equal(await verifySignature(payload, legacy, key.publicKeyPem), false, "an HMAC cannot be checked by a third party");
 });
 
 test("an anchor shows that the audit chain was cut back, even though the shorter chain still verifies", { skip: process.env.KONTROL_TEST_DB === "postgres" ? "on PostgreSQL the application role cannot remove the triggers; only the owner can, which is what the anchor guards against" : false }, async () => {
@@ -98,4 +98,50 @@ test("the signing key is public and the anchor API needs the right permissions",
   const viewer = await issueSessionToken({ ...admin, role: "viewer" });
   assert.equal((await call(GET, viewer)).status, 200);
   assert.equal((await call(POST, viewer, "POST")).status, 403, "a viewer cannot create anchors");
+});
+
+test("with a KMS key the private key never enters the process, and signatures verify with the exported public key alone", async () => {
+  const { createHash, createSign, generateKeyPairSync: generate } = await import("node:crypto");
+  const { setKmsClient, publicSigningKey, signingKeyMode } = await import("../src/lib/core/signing");
+  const { signDecision, verifySignature } = await import("../src/lib/core/integrity");
+  // Stands in for AWS KMS: it holds a P-256 key, signs digests, and exports only the public half.
+  const held = generate("ec", { namedCurve: "P-256" });
+  const calls: string[] = [];
+  const messages = new Map<string, string>();
+  const fake = (spec = "ECC_NIST_P256") => ({
+    send: async (command: unknown) => {
+      const { constructor, input } = command as { constructor: { name: string }; input: { Message?: Uint8Array; MessageType?: string; SigningAlgorithm?: string; KeyId: string } };
+      calls.push(constructor.name);
+      if (constructor.name === "GetPublicKeyCommand") return { PublicKey: held.publicKey.export({ type: "spki", format: "der" }), KeySpec: spec, KeyUsage: "SIGN_VERIFY" };
+      assert.deepEqual([input.MessageType, input.SigningAlgorithm, input.KeyId], ["DIGEST", "ECDSA_SHA_256", "alias/kontrol-signing"]);
+      const message = messages.get(Buffer.from(input.Message!).toString("hex"))!;
+      return { Signature: createSign("sha256").update(message).sign({ key: held.privateKey, dsaEncoding: "der" }) };
+    },
+  });
+  const remember = (payload: unknown) => { const text = (canonical as (value: unknown) => string)(payload); messages.set(createHash("sha256").update(text).digest("hex"), text); };
+  const { canonicalJson: canonical } = await import("../src/lib/core/integrity");
+  process.env.KONTROL_SIGNING_KMS_KEY_ID = "alias/kontrol-signing";
+  try {
+    setKmsClient(fake());
+    assert.equal(signingKeyMode(), "kms");
+    const key = await publicSigningKey();
+    assert.deepEqual([key.algorithm, key.custody], ["ECDSA P-256 with SHA-256", "kms"]);
+    assert.doesNotMatch(JSON.stringify(key), /PRIVATE/);
+    const payload = { fingerprint: "abc", tenant: admin.tenantId };
+    remember(payload);
+    const signature = await signDecision(payload);
+    assert.match(signature, /^kms-ecdsa-p256:/);
+    assert.equal(await verifySignature(payload, signature, key.publicKeyPem), true, "a third party verifies with the public key, without calling the KMS");
+    assert.equal(await verifySignature(payload, signature), true);
+    assert.equal(await verifySignature({ ...payload, tenant: "other" }, signature, key.publicKeyPem), false);
+    const stranger = generate("ec", { namedCurve: "P-256" }).publicKey.export({ type: "spki", format: "pem" }).toString();
+    assert.equal(await verifySignature(payload, signature, stranger), false);
+    const signs = calls.filter((name) => name === "SignCommand").length;
+    await verifySignature(payload, signature, key.publicKeyPem);
+    assert.equal(calls.filter((name) => name === "SignCommand").length, signs, "verification never asks the KMS to do anything");
+
+    setKmsClient(fake("RSA_2048"));
+    await assert.rejects(signDecision(payload), /ECC_NIST_P256 key with usage SIGN_VERIFY/, "a key of the wrong kind is refused before anything is signed");
+  } finally { setKmsClient(null); delete process.env.KONTROL_SIGNING_KMS_KEY_ID; }
+  assert.equal(signingKeyMode(), "development-derived");
 });

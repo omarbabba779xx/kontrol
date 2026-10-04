@@ -228,7 +228,7 @@ export async function buildReadinessReport(
     audit: chain.valid ? { entries: chain.checked, rootHash: chain.rootHash } : { broken: true },
   };
   const fingerprint = sha256(canonicalJson(body));
-  const signature = signDecision({ fingerprint, tenant: actor.tenantId, generatedAt });
+  const signature = await signDecision({ fingerprint, tenant: actor.tenantId, generatedAt });
 
   const pdf = await PDFDocument.create();
   pdf.setTitle("Audit readiness report");

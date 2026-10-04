@@ -186,7 +186,7 @@ test("the evidence pack is self-verifying: hashes, signature, the full audit cha
 
   const { signature, manifestFingerprint, ...body } = manifest;
   assert.equal(sha256(canonicalJson(body)), manifestFingerprint);
-  assert.equal(signature, signDecision({ manifestFingerprint, tenant: admin.tenantId, generatedAt: manifest.generatedAt }));
+  assert.equal(signature, await signDecision({ manifestFingerprint, tenant: admin.tenantId, generatedAt: manifest.generatedAt }));
 
   const rows = JSON.parse(strFromU8(files["audit-log.json"])) as Array<Record<string, unknown>>;
   const verdict = verifyAuditChainRows(rows);

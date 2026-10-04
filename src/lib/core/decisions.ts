@@ -22,7 +22,7 @@ export async function recordDecision(
   const id = `decision_${randomUUID()}`;
   const manifest = { generatedAt: decidedAt, count: evidence.length, evidence, rootHash: sha256(canonicalJson(evidence)) };
   const decisionPayload = { id, tenantId: actor.tenantId, ...input, evidenceManifest: manifest, decidedBy: actor.userId, decidedAt };
-  const signature = signDecision(decisionPayload);
+  const signature = await signDecision(decisionPayload);
   const audit = await db.transaction(async (tx) => {
     await tx.run(
       `INSERT INTO decisions (id,tenant_id,subject_type,subject_id,outcome,conditions_json,rationale,evidence_manifest_json,decided_by,decided_at,signature) VALUES (?,?,?,?,?,?,?,?,?,?,?)`,
@@ -73,5 +73,5 @@ export async function verifyDecision(tenantId: string, decisionId: string) {
     decidedBy: row.decided_by,
     decidedAt: row.decided_at,
   };
-  return { valid: verifySignature(payload, String(row.signature)), signature: row.signature, decision: row };
+  return { valid: await verifySignature(payload, String(row.signature)), signature: row.signature, decision: row };
 }

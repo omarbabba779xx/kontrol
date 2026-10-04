@@ -236,7 +236,7 @@ export async function storeVaultDocument(actor: Actor, file: File, documentType:
     .split(/\r?\n/)
     .filter((line) => /exception|qualified|adverse|non[- ]conform/i.test(line))
     .slice(0, 50);
-  const signature = signDecision({ id, hash, name: file.name, uploadedAt: new Date().toISOString() });
+  const signature = await signDecision({ id, hash, name: file.name, uploadedAt: new Date().toISOString() });
   const now = new Date().toISOString();
   await db.run(
     "INSERT INTO vault_documents (id,tenant_id,name,document_type,storage_uri,content_hash,previous_version_id,version,content_type,size_bytes,extracted_text,exceptions_json,signature,retention_until,status,uploaded_by,uploaded_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",

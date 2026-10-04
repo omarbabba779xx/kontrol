@@ -20,7 +20,7 @@ test("the readiness report is a valid, signed PDF whose fingerprint is anchored 
   assert.ok(meta.pages >= 4, `a six-framework report spans several pages, got ${meta.pages}`);
   assert.equal(pdf.getTitle(), "Audit readiness report");
   assert.equal(meta.fingerprint.length, 64);
-  assert.equal(meta.signature, signDecision({ fingerprint: meta.fingerprint, tenant: admin.tenantId, generatedAt: meta.generatedAt }));
+  assert.equal(meta.signature, await signDecision({ fingerprint: meta.fingerprint, tenant: admin.tenantId, generatedAt: meta.generatedAt }));
   assert.equal(meta.frameworks.length, 6);
 
   const anchored = await (await getDb()).scope(admin.tenantId).get<{ object_id: string }>("SELECT object_id FROM audit_log WHERE tenant_id = ? AND action = 'compliance.report_generated' ORDER BY sequence DESC LIMIT 1", admin.tenantId);

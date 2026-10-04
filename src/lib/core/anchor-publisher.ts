@@ -78,7 +78,7 @@ type Row = { id: string; tenant_id: string; entries: number; head_hash: string; 
 /** Writes one anchor to the sink. Returns null on success, or the reason it failed. */
 export async function publishAnchor(anchor: Anchor, sink = anchorSink()): Promise<string | null> {
   if (!sink) return "no sink configured";
-  const body = JSON.stringify({ kind: "kontrol.audit-anchor", anchor, publicKey: publicSigningKey() });
+  const body = JSON.stringify({ kind: "kontrol.audit-anchor", anchor, publicKey: await publicSigningKey() });
   if (sink.kind === "s3") return putToS3(sink, anchor, body);
   try {
     const response = await safeFetch(`${sink.url}/${encodeURIComponent(anchor.tenantId)}/${anchor.entries}.json`, {
