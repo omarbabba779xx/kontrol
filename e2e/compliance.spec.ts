@@ -88,7 +88,7 @@ test("an attester cannot countersign their own claim, and evidence goes through 
   await page.getByLabel("Evidence title for UC-GOV-01").fill("Information security policy v3.1, signed");
   await page.getByLabel("Evidence valid until for UC-GOV-01").fill(new Date(Date.now() + 200 * 86_400_000).toISOString().slice(0, 10));
   await page.getByLabel("Evidence file for UC-GOV-01").setInputFiles({ name: "policy.pdf", mimeType: "application/pdf", buffer: Buffer.from("%PDF-1.4 signed policy v3.1") });
-  await page.getByRole("button", { name: "File" }).click();
+  await page.getByRole("button", { name: "File document" }).click();
   await expect(page.getByText(/awaiting review by another person/)).toBeVisible();
   await expect(page.getByText("Information security policy v3.1, signed")).toBeVisible();
 
@@ -141,7 +141,7 @@ test("an organisation can import its licensed PCI DSS sub-requirements and remov
   await expect(page.getByRole("row", { name: /Req\.8\.3 / }).first()).toContainText(/Refined into 2 imported/);
 
   page.once("dialog", (dialog) => dialog.accept());
-  const remove = page.getByRole("button", { name: /Remove/ });
+  const remove = page.getByRole("button", { name: "Remove", exact: true });
   if (!(await remove.isVisible())) await page.getByText(/Licensed content/).click();
   await remove.click();
   await expect(page.getByText("Imported content removed")).toBeVisible();

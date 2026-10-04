@@ -10,7 +10,7 @@ test("the ISMS page shows the clause checklist and records context, scope, an ob
   await page.goto("/isms");
   await expect(page.getByRole("heading", { name: "ISMS" })).toBeVisible();
   const clauses = page.getByRole("table", { name: /clauses 4 to 10/ });
-  await expect(clauses.getByRole("row")).toHaveCount(13);
+  await expect(clauses.getByRole("row")).toHaveCount(22);
   await expect(clauses.getByRole("row", { name: /4\.3/ })).toContainText("missing");
   expect(await serious(page)).toEqual([]);
 
@@ -67,5 +67,46 @@ test("the risk register shows the method and lets an administrator approve it", 
   await expect(page.getByText("Risk method approved")).toBeVisible();
   await expect(page.getByText(/appetite: low · version 1, approved on/)).toBeVisible();
   await expect(page.getByRole("link", { name: /Risk treatment plan/ })).toBeVisible();
+  expect(await serious(page)).toEqual([]);
+});
+
+test("an incident is reported and moved forward, and a competence record is kept", async ({ page }) => {
+  await page.goto("/isms");
+  await page.getByRole("tab", { name: "Incidents" }).click();
+  await page.getByLabel("Incident", { exact: true }).fill("Phishing email reported by staff");
+  await page.getByLabel("Detected on").fill("2026-09-01");
+  await page.getByRole("button", { name: "Report" }).click();
+  await expect(page.getByText("Incident reported")).toBeVisible();
+  await expect(page.getByText("INC-001")).toBeVisible();
+  await page.getByRole("button", { name: "Mark contained" }).click();
+  await expect(page.getByText("Incident contained")).toBeVisible();
+  expect(await serious(page)).toEqual([]);
+
+  await page.getByRole("tab", { name: "Records" }).click();
+  await page.getByLabel("Record kind").selectOption("competence");
+  await page.getByLabel("Record title").fill("Security lead");
+  await page.getByLabel("Competence needed").fill("ISO 27001 lead implementer");
+  await page.getByLabel("Evidence it is met").fill("Certificate 2025");
+  await page.getByRole("button", { name: "Record", exact: true }).click();
+  await expect(page.getByText("Security lead")).toBeVisible();
+  await page.getByRole("tab", { name: "Internal audits" }).click();
+  await expect(page.getByText(/An auditor does not audit controls they own/)).toBeVisible();
+  expect(await serious(page)).toEqual([]);
+});
+
+test("an asset is valued, a threat is assessed on it, and the scenario shows in the traceability view", async ({ page }) => {
+  await page.goto("/risk-register");
+  await page.getByRole("tab", { name: "Identification" }).click();
+  const asset = page.getByRole("listitem").filter({ hasText: "lending-decision-service" });
+  await asset.getByLabel("confidentiality of lending-decision-service").selectOption("5");
+  await asset.getByRole("button", { name: "Save valuation" }).click();
+  await expect(page.getByText("Asset valued")).toBeVisible();
+  await expect(page.getByText(/valued C5 I3 A3/)).toBeVisible();
+  await asset.getByRole("button", { name: "Assess scenario" }).click();
+  await expect(page.getByText("Scenario recorded as a risk")).toBeVisible();
+  expect(await serious(page)).toEqual([]);
+  await page.getByRole("tab", { name: "Traceability" }).click();
+  const table = page.getByRole("table", { name: "Risk traceability" });
+  await expect(table.getByRole("row", { name: /lending-decision-service/ }).first()).toBeVisible();
   expect(await serious(page)).toEqual([]);
 });

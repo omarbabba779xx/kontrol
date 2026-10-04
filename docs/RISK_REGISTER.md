@@ -65,3 +65,23 @@ breaks: risks with no control or no asset, mitigations with no plan, untreated r
 
 The statement of applicability carries two more columns, `risks_treated` and `inclusion_reason` (ISO/IEC 27001 6.1.3 d), and
 `GET /api/risk-register?format=treatment-plan` exports the risk treatment plan (6.1.3 e) as CSV.
+
+## Asset-based identification (ISO/IEC 27005)
+
+The *Identification* tab of `/risk-register` works from the asset inventory:
+
+1. **Value each asset** on confidentiality, integrity and availability (1 to 5), with a reason.
+2. **Pick the threats that apply.** A library of 30 threats in eight families (physical, natural, loss of essential services,
+   technical failure, compromise of information, compromise of functions, human error, organisational) names for each the security
+   properties it damages, the weaknesses that usually let it happen and the unified controls that usually treat it. The wording and the
+   selection are this product's own; it is a prompt for the assessor, not an assessment.
+3. **Assess the scenario.** The impact follows the asset: each property the threat affects takes the asset's value for it, and the
+   scenario's impact is the highest of them. The assessor judges the likelihood, and may lower the impact with a reason (never raise
+   it above the value of the asset). The scenario becomes a risk with its asset, its threat, its impact per property and its suggested
+   controls. A threat is assessed once per asset.
+
+Impact criteria can be stated per property in the risk method (`impactCriteriaByDimension`): what each level means for
+confidentiality, for integrity and for availability.
+
+The *Traceability* tab shows, for each open risk, its asset, its threat, its treatment, its controls and the requirements they satisfy,
+with the count of breaks in the thread.

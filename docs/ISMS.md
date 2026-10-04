@@ -61,3 +61,44 @@ at approval becomes a task; the next review reports how many were done.
 `GET /api/isms` returns the checklist and the records. `POST /api/isms` takes an `action`: `save_context`, `remove_context`,
 `approve_scope`, `save_objective`, `measure_objective`, `prepare_review`, `approve_review`, `raise_nonconformity`,
 `plan_corrective_action`, `mark_implemented`, `verify_and_close`. Every change is written to the audit chain.
+
+## Operating records
+
+Beyond the records above, `/isms` keeps what the system produces while it runs:
+
+| Clause | Record | Rule |
+| --- | --- | --- |
+| 6.3 | Planned changes: purpose, what the change could affect, resources, who is responsible, when | Every revision of the scope or of the risk method after the first must have a planned change behind it |
+| 7.1 | Nothing new: every open risk, task and corrective action has someone assigned | |
+| 7.2 | Competence per role: the competence needed, the evidence it is met, or the action that closes the gap | Reviewed at least yearly; a gap with an action is a managed gap |
+| 7.3 | Awareness: the learning system's report (`CTL-HR-001`) or a reviewed record on `UC-HR-02` | |
+| 7.4 | Communication plan: what, to whom, when, by whom, how | Both internal and external communications |
+| 7.5 | Documented information: the policy register | No approved document past its review date |
+| 8.1 | Operational control: every mitigation has a plan and a date, none is late | |
+| 8.2 | Risk assessment at planned intervals | The register was updated within the year and after the last change of method |
+| A.5.24 to A.5.27 | Security incidents | Recorded; none open for more than 30 days; no personal-data incident past its 72-hour notification deadline |
+
+### Incidents
+
+An incident moves forward only (reported, contained, resolved, closed). One that involves personal data starts the 72-hour clock of
+GDPR Article 33 from its detection, and cannot be closed until the notification decision is recorded. Closing is the post-incident
+review: the cause and what was learned, and for a high or critical incident either a nonconformity that carries the corrective action
+(it is linked to the incident) or the stated reason why none is needed.
+
+### Internal audit programme
+
+An internal audit has objectives, criteria, a period, the controls in scope and an auditor. **An auditor does not audit controls they
+own**: planning one that does is refused. Only the auditor records findings and states the conclusion; each finding becomes a
+nonconformity linked to the audit. One completed audit is not a programme: clause 9.2 is met when an audit was completed in the last
+twelve months, its conclusion is recorded, and the next one is planned.
+
+### More records that back controls
+
+| Unified control | Checks that must be met |
+| --- | --- |
+| `UC-GOV-04` Risk assessment and treatment | 6.1.2, 6.1.3, 8.2 |
+| `UC-GOV-08` Communication and external contacts | 7.4 |
+| `UC-HR-02` Awareness, training and competence | 7.2, 7.3 |
+| `UC-INC-01` Incident management and response | A.5.24 |
+
+A process that has never run is `missing`, not `met`: no incident ever recorded does not show that incident management works.

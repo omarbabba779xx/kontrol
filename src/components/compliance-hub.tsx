@@ -368,7 +368,7 @@ function Library({ controls, evidence, requireCountersign, save, act, upload, pe
                         <select aria-label="Evidence kind" value={form.kind} onChange={(event) => setForm({ ...form, kind: event.target.value })} className={select}>{["document", "record", "report", "certificate"].map((value) => <option key={value}>{value}</option>)}</select>
                         <label className="text-[8px] text-[#55534b]">Valid until <Input type="date" aria-label={`Evidence valid until for ${control.code}`} required value={form.validUntil} onChange={(event) => setForm({ ...form, validUntil: event.target.value })} className={cn(field, "mt-0.5 w-36")} /></label>
                         <Input type="file" name="file" aria-label={`Evidence file for ${control.code}`} required className={cn(field, "w-52 pt-1")} />
-                        <Button type="submit" disabled={pending || form.title.trim().length < 3 || !form.validUntil} className="h-8 rounded-none bg-[#171713] text-[9px] text-white">File</Button>
+                        <Button type="submit" disabled={pending || form.title.trim().length < 3 || !form.validUntil} className="h-8 rounded-none bg-[#171713] text-[9px] text-white">File document</Button>
                       </form>
                     </div>
                   </div>

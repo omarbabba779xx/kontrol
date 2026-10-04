@@ -7,6 +7,7 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { cn } from "@/lib/utils";
 import { errorMessage, fetchJson, isAbort } from "@/components/api-client";
+import { AuditsTab, IncidentsTab, RecordsTab, type Incident, type InternalAudit, type IsmsRecord } from "@/components/isms-operations";
 
 type ClauseStatus = "met" | "partial" | "missing";
 type Clause = { clause: string; title: string; status: ClauseStatus; detail: string; next: string | null };
@@ -22,7 +23,9 @@ type Snapshot = {
   objectives: Objective[];
   reviews: Review[];
   nonconformities: Nonconformity[];
-  internalAudits: Array<{ id: string; name: string; status: string; period_end: string; closed_at: string | null }>;
+  internalAudits: InternalAudit[];
+  incidents: Incident[];
+  records: IsmsRecord[];
 };
 type Person = { id: string; name: string; role: string };
 
@@ -32,7 +35,7 @@ const field = "h-8 rounded-none border-[#cbc7bd] bg-transparent text-[10px] shad
 const select = "h-8 border border-[#cbc7bd] bg-transparent px-2 text-[10px] focus-visible:outline-2 focus-visible:outline-[#171713]";
 const area = "min-h-16 rounded-none border-[#cbc7bd] bg-transparent text-[10px] shadow-none placeholder:text-[#63615a]";
 const button = "h-8 rounded-none border-[#171713] bg-transparent text-[9px]";
-const tabs = ["Clauses", "Context", "Scope", "Objectives", "Reviews", "Nonconformities"] as const;
+const tabs = ["Clauses", "Context", "Scope", "Objectives", "Records", "Incidents", "Internal audits", "Reviews", "Nonconformities"] as const;
 type Tab = (typeof tabs)[number];
 const day = (value: string | null) => (value ? value.slice(0, 10) : "no date");
 const toIso = (date: string) => new Date(`${date}T12:00:00Z`).toISOString();
@@ -40,6 +43,7 @@ const toIso = (date: string) => new Date(`${date}T12:00:00Z`).toISOString();
 export function IsmsWorkspace() {
   const [data, setData] = useState<Snapshot | null>(null);
   const [people, setPeople] = useState<Person[]>([]);
+  const [me, setMe] = useState("");
   const [tab, setTab] = useState<Tab>("Clauses");
   const [status, setStatus] = useState("Loading…");
   const [failed, setFailed] = useState(false);
@@ -55,9 +59,10 @@ export function IsmsWorkspace() {
 
   const load = useCallback(
     (signal?: AbortSignal) =>
-      Promise.all([fetchJson<Snapshot>("/api/isms", { signal }), fetchJson<{ users: Person[] }>("/api/users", { signal })]).then(([snapshot, users]) => {
+      Promise.all([fetchJson<Snapshot>("/api/isms", { signal }), fetchJson<{ users: Person[]; me?: string }>("/api/users", { signal })]).then(([snapshot, users]) => {
         setData(snapshot);
         setPeople(users.users);
+        setMe(users.me ?? "");
         if (snapshot.scope) setScope((current) => (current.statement ? current : { statement: snapshot.scope!.statement, boundaries: snapshot.scope!.boundaries, exclusions: snapshot.scope!.exclusions }));
       }),
     [],
@@ -235,6 +240,10 @@ export function IsmsWorkspace() {
                 </ul>
               </div>
             ) : null}
+
+            {tab === "Records" ? <RecordsTab records={data.records} users={people} act={act} pending={isPending} /> : null}
+            {tab === "Incidents" ? <IncidentsTab incidents={data.incidents} act={act} pending={isPending} /> : null}
+            {tab === "Internal audits" ? <AuditsTab audits={data.internalAudits} users={people} me={me} act={act} pending={isPending} /> : null}
 
             {tab === "Nonconformities" ? (
               <div className="space-y-4">

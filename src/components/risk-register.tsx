@@ -8,6 +8,7 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { cn } from "@/lib/utils";
 import { errorMessage, fetchJson, isAbort } from "@/components/api-client";
+import { RiskIdentification, RiskTraceability } from "@/components/risk-identification";
 import { bandFor, levelFor, NIST_LEVELS, THREAT_SOURCES, type RiskMethod } from "@/lib/core/risk-method";
 
 type Band = "low" | "medium" | "high" | "critical";
@@ -44,6 +45,8 @@ export function RiskRegister() {
   const [status, setStatus] = useState("Loading…");
   const [failed, setFailed] = useState(false);
   const [showClosed, setShowClosed] = useState(false);
+  const [section, setSection] = useState<"Register" | "Identification" | "Traceability">("Register");
+  const [version, setVersion] = useState(0);
   const [isPending, startTransition] = useTransition();
 
   const load = useCallback((signal?: AbortSignal) => fetchJson<Snapshot>("/api/risk-register", { signal }).then((data) => { setSnapshot(data); setFailed(false); }), []);
@@ -59,7 +62,7 @@ export function RiskRegister() {
       let result: Record<string, unknown> = {};
       try { setStatus("Saving…"); result = await fetchJson<Record<string, unknown>>("/api/risk-register", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) }); }
       catch (error) { setStatus(errorMessage(error, "Action failed")); return; }
-      try { await load(); setStatus(success); after?.(result); } catch (error) { setStatus(`Done, but refresh failed: ${errorMessage(error, "unknown error")}`); }
+      try { await load(); setVersion((current) => current + 1); setStatus(success); after?.(result); } catch (error) { setStatus(`Done, but refresh failed: ${errorMessage(error, "unknown error")}`); }
     });
   };
 
@@ -72,6 +75,10 @@ export function RiskRegister() {
         {failed ? <div role="alert" className="mb-4 border border-[#b8322a] bg-[#f5e5e1] p-3 text-[9px] text-[#9f2923]">{status}</div> : null}
         {snapshot && s ? (
           <div className="space-y-6">
+            <div role="tablist" aria-label="Risk sections" className="flex flex-wrap gap-1">{(["Register", "Identification", "Traceability"] as const).map((name) => <button key={name} type="button" role="tab" aria-selected={section === name} onClick={() => setSection(name)} className={cn("border px-3 py-1.5 text-[9px] font-semibold", section === name ? "border-[#171713] bg-[#171713] text-white" : "border-[#cbc7bd] hover:border-[#171713]")}>{name}</button>)}</div>
+            {section === "Identification" ? <RiskIdentification act={act} pending={isPending} nist={snapshot.method.method === "nist_800_30"} version={version} /> : null}
+            {section === "Traceability" ? <RiskTraceability version={version} /> : null}
+            {section === "Register" ? <>
             <div className="grid gap-px border border-[#cbc7bd] bg-[#cbc7bd] sm:grid-cols-4 lg:grid-cols-7">
               {([["Open risks", s.open], ["Critical residual", s.critical], ["High residual", s.high], ["Untreated", s.untreated], ["Above appetite", s.aboveAppetite], ["Acceptance lapsed", s.acceptanceExpired], ["Quantified", s.quantified]] as const).map(([name, value]) => <div key={name} className="bg-[#f4f1e9] p-4"><MicroLabel>{name}</MicroLabel><p className={cn("mt-1 font-mono text-[22px] font-semibold", (name === "Critical residual" || name === "Acceptance lapsed") && value > 0 && "text-[#b8322a]")}>{value}</p></div>)}
             </div>
@@ -96,6 +103,7 @@ export function RiskRegister() {
                   {risks.length === 0 ? <p className="p-8 text-center text-[10px] text-[#5f5d56]">No risks yet. Add one, or create them from your control gaps.</p> : null}</div>
               </div>
             </div>
+            </> : null}
           </div>
         ) : null}
       </section>

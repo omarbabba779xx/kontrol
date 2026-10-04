@@ -12,6 +12,13 @@ import { errorMessage, fetchJson, isAbort } from "@/components/api-client";
 type Row = Record<string, unknown>;
 type EnterpriseSnapshot = { runtime: Array<{ service: string; status: string; detail: string }>; feeds: Row[]; policies: Row[]; vault: Row[]; cases: Row[]; grants: Row[]; attackPaths: Row[]; workflowDefinitions: Row[]; benchmarks: Row[]; cockpit: { exposure: { p50: number; p90: number }; controls: { total: number; effective: number }; cases: { open: number; overdue: number }; decisions: { total: number; conditional: number }; audit: { valid: boolean; checked: number } } };
 
+/**
+ * Attack paths and benchmarking work on modelled or synthetic data. They are labs: hidden unless NEXT_PUBLIC_KONTROL_LABS=true, so the
+ * product a team sees by default is the part that rests on its own records.
+ */
+const LABS = process.env.NEXT_PUBLIC_KONTROL_LABS === "true";
+const LAB_MODULES = new Set(["Attack-path GRC", "Confidential benchmarking"]);
+
 const modules = [
   ["01", "Real production", CloudCog], ["02", "Regulatory Intelligence", BookOpen], ["03", "Policy Compiler", Code2], ["04", "Evidence Vault", FileLock2], ["05", "Case Management", BriefcaseBusiness],
   ["06", "Continuous Authorization", ShieldCheck], ["07", "Attack-path GRC", Route], ["08", "Workflow Designer", GitBranch], ["09", "Executive Risk Cockpit", BarChart3], ["10", "Confidential benchmarking", Boxes],
@@ -38,7 +45,7 @@ export function EnterprisePlatform() {
   }
   const ActiveIcon = modules[active][2];
   return <div><PageHeading index="11" title="Enterprise platform" description="Ten operational capabilities that make Kontrol a deployable, measurable and continuously authorised governance system." meta={status} action={<Button type="button" onClick={() => startTransition(async () => { try { await refresh(); setStatus("State refreshed"); } catch (error) { setStatus(errorMessage(error, "Actualisation impossible")); } })} disabled={pending} variant="outline" className="h-8 rounded-none border-[#171713] bg-transparent text-[9px]"><RefreshCw className={cn("me-1.5 h-3 w-3", pending && "animate-spin")} />Refresh</Button>} />
-    <div className="grid xl:grid-cols-[290px_1fr]"><nav className="border-e border-b border-[#cbc7bd] bg-[#ede9df] p-4" aria-label="Enterprise capabilities">{modules.map(([number, name, Icon], index) => <button key={number} type="button" aria-current={active === index ? "true" : undefined} onClick={() => setActive(index)} className={cn("grid w-full grid-cols-[28px_1fr_18px] items-center border-b border-[#cecac0] px-2 py-3 text-left text-[9px]", active === index && "bg-[#171713] text-white")}><span className={cn("font-mono text-[7px]", active === index ? "text-[#f05a32]" : "text-[#97948c]")}>{number}</span><span>{name}</span><Icon className="h-3.5 w-3.5" /></button>)}</nav><div className="min-w-0"><div className="flex items-center gap-3 border-b border-[#cbc7bd] p-6"><span className="grid h-9 w-9 place-items-center bg-[#171713] text-white"><ActiveIcon className="h-4 w-4" /></span><div><MicroLabel>Capability {modules[active][0]}</MicroLabel><h2 className="mt-1 text-xl font-medium tracking-[-.04em]">{modules[active][1]}</h2></div></div><ModuleBody index={active} data={data} pending={pending} act={act} refresh={refresh} setStatus={setStatus} /></div></div>
+    <div className="grid xl:grid-cols-[290px_1fr]"><nav className="border-e border-b border-[#cbc7bd] bg-[#ede9df] p-4" aria-label="Enterprise capabilities">{modules.map(([number, name, Icon], index) => !LABS && LAB_MODULES.has(name as string) ? null : <button key={number} type="button" aria-current={active === index ? "true" : undefined} onClick={() => setActive(index)} className={cn("grid w-full grid-cols-[28px_1fr_18px] items-center border-b border-[#cecac0] px-2 py-3 text-left text-[9px]", active === index && "bg-[#171713] text-white")}><span className={cn("font-mono text-[7px]", active === index ? "text-[#f05a32]" : "text-[#97948c]")}>{number}</span><span>{name}</span><Icon className="h-3.5 w-3.5" /></button>)}</nav><div className="min-w-0"><div className="flex items-center gap-3 border-b border-[#cbc7bd] p-6"><span className="grid h-9 w-9 place-items-center bg-[#171713] text-white"><ActiveIcon className="h-4 w-4" /></span><div><MicroLabel>Capability {modules[active][0]}</MicroLabel><h2 className="mt-1 text-xl font-medium tracking-[-.04em]">{modules[active][1]}</h2></div></div><ModuleBody index={active} data={data} pending={pending} act={act} refresh={refresh} setStatus={setStatus} /></div></div>
   </div>;
 }
 

@@ -18,7 +18,10 @@ type AuditorRequest = { id: string; requester_name: string; subject: string; que
 type Snapshot = { evidence: Evidence[]; drift: Drift[]; contradictions: Contradiction[]; vendors: Vendor[]; twins: Twin[]; auditorRequests: AuditorRequest[]; controls: unknown[]; risks: unknown[]; models: unknown[]; decisions: unknown[] };
 type Graph = { nodes: { assets: Array<{ id: string; name: string; type: string }>; obligations: Array<{ id: string; title: string; framework: string }>; controls: Array<{ id: string; code: string; title: string }> }; edges: Array<{ id: string; source_id: string; target_id: string; relation: string }> };
 
-const tabs = ["Signal room", "Knowledge graph", "Digital twin", "Third parties", "Auditor portal", "GRC copilot"] as const;
+// The digital twin simulates on modelled data. It is a lab: hidden unless NEXT_PUBLIC_KONTROL_LABS=true.
+const LABS = process.env.NEXT_PUBLIC_KONTROL_LABS === "true";
+const allTabs = ["Signal room", "Knowledge graph", "Digital twin", "Third parties", "Auditor portal", "GRC copilot"] as const;
+const tabs = allTabs.filter((name) => LABS || name !== "Digital twin");
 type Tab = (typeof tabs)[number];
 
 function parseJson<T>(text: string | null | undefined, fallback: T): T {
