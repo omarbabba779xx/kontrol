@@ -239,6 +239,9 @@ async function supersedeSampleFindings(actor: Actor, connector: ConnectorKind, a
 
 // ---------------------------------------------------------------- GitHub ------------------------------------------------
 
+/** Exported for tests of the transport itself (quota handling). */
+export const githubApiFor = (token: string) => githubApi(token);
+
 function githubApi(token: string): GitHubApi {
   return async (path) => {
     const response = await fetch(`https://api.github.com${path}`, {
@@ -246,6 +249,12 @@ function githubApi(token: string): GitHubApi {
       cache: "no-store",
       signal: AbortSignal.timeout(15_000),
     });
+    // An exhausted quota is not "the setting is unreadable": stop the collection and say when it can run again, so nothing is
+    // recorded as unknown or failing because of it.
+    if ((response.status === 403 || response.status === 429) && response.headers.get("x-ratelimit-remaining") === "0") {
+      const reset = Number(response.headers.get("x-ratelimit-reset"));
+      throw new Error(`GitHub API rate limit reached${Number.isFinite(reset) && reset > 0 ? `; it resets at ${new Date(reset * 1000).toISOString()}` : ""}`);
+    }
     const body = response.status === 204 ? null : await response.json().catch(() => null);
     return { status: response.status, body };
   };

@@ -35,6 +35,9 @@ flowchart LR
 - **Human accountability.** Workflows pause for approval; the requester cannot approve their own request and an approval can only happen once. Agents are read-only and advisory.
 - **Standards.** OSCAL 1.1.3 assessment-results export, OIDC with PKCE, FAIR-inspired Monte Carlo risk quantification with reproducible seeds.
 - **Multi-framework compliance hub.** ISO/IEC 27001:2022 (clauses 4-10 and all 93 Annex A controls), NIST CSF 2.0 (all 106 subcategories), SOC 2, GDPR (42 articles), NIS2, DORA, EU AI Act, ISO/IEC 42001 (clauses and all 38 controls), PCI DSS 4.0 and CIS Controls v8 (all 153 safeguards), mapped through 56 framework-neutral *unified controls*: implement once, score everywhere. Scores are capped when live evidence contradicts an attested control.
+- **A management system, not only controls.** `/isms` keeps the records of ISO/IEC 27001 clauses 4 to 10 (context, interested parties, approved scope, objectives and their measurements, management reviews with frozen inputs, nonconformities with a second-person effectiveness review) and checks them clause by clause. Records that exist, are approved and are current back the governance controls they stand for ([docs/ISMS.md](docs/ISMS.md)).
+- **A risk method the organisation owns.** A likelihood x impact matrix with your own thresholds, or NIST SP 800-30 Rev. 1 (threat source, threat event, vulnerability, two-part likelihood, Tables G-5 and I-2). A risk appetite decides what needs a management decision. Each risk traces to its asset, its controls and the requirements they satisfy; the statement of applicability justifies each control by the risks it treats, and the risk treatment plan exports as a spreadsheet.
+- **COBIT 2019 and capability levels.** The 40 governance and management objectives are in the catalogue, and every requirement of every framework shows a capability level from 0 to 5 that is held back by what the evidence supports.
 - **Evidence that is actually collected.** 16 executable controls (GitHub, AWS, Okta, and signed HR and learning-system reports) verify what people attest. A fact that cannot be read is skipped, never failed. Organisational claims expire, need a second person to countersign, and can be backed by documents that someone other than the uploader has reviewed.
 - **Two policy engines that must agree.** Control policies run in TypeScript and are cross-checked by Open Policy Agent; a parity suite compares both on thousands of cases and a disagreement in production raises a drift event.
 - **Honest about what is real.** Unconfigured services show as *standby*, demo-sourced evidence is tagged and scored lower, benchmark cohorts are labelled synthetic.
@@ -51,7 +54,9 @@ flowchart LR
 | Evidence trust, drift, contradictions, digital twin, third-party concentration | Implemented | Assurance Studio at `/assurance` |
 | Regulatory feeds and diff, policy compiler (NL → Rego + tests) | Implemented | HTTPS-only, SSRF-guarded; mappings require human review |
 | Evidence vault, case management, continuous authorization, attack paths, benchmarks | Implemented | Enterprise workspace at `/enterprise`; S3 Object Lock when configured |
-| **Compliance hub** (`/compliance`) | **Implemented** | 10 complete catalogues, 56 unified controls, crosswalk with a published basis for NIST CSF and per-tenant review (validate, reject, add), scoring, Statement of Applicability export, signed PDF audit-readiness report, gap roadmap, risk-acceptance exceptions with separation of duties, policy register, score trend |
+| **Compliance hub** (`/compliance`) | **Implemented** | 11 catalogues (COBIT 2019 by identifier and name), 56 unified controls, crosswalk with a published basis for NIST CSF and per-tenant review (validate, reject, add), scoring, Statement of Applicability export, signed PDF audit-readiness report, gap roadmap, risk-acceptance exceptions with separation of duties, policy register, score trend |
+| **ISMS** (`/isms`) | **Implemented** | Clauses 4-10 records and checklist; internal audits come from the audit workspace |
+| **Risk method and traceability** (`/risk-register`) | **Implemented** | Matrix or NIST SP 800-30, appetite, asset to requirement traceability, treatment plan export |
 | **PostgreSQL with forced RLS** | **Implemented** | `KONTROL_DB_DRIVER=postgres`; migration tool from SQLite included |
 | OPA cross-check, S3 Object Lock | Optional | OPA evaluates the same policies via `infra/opa/policy.rego`; reported as standby unless reachable |
 | Specialist agents | Deterministic by default | Optional model gateway; read-only tools |
@@ -186,12 +191,14 @@ Collectors are written against injected clients and tested at three levels: resp
 
 ## Known limits
 
-- The rate limiter and workflow scheduler are per process; run a shared limiter at the edge and a single scheduler (or an external cron hitting `/api/jobs/run`) when scaling out.
+- Per-user rate limits are per process; limits on sign-in, public endpoints and authentication failures are shared through the database and fall back to per-process if it is unreachable. Schedules are claimed with a database lease, so several instances can run the scheduler; that has not been load-tested.
+- **COBIT.** Only identifiers and names are carried. Objectives outside information security (portfolio, budget, innovation, programmes) have no built-in control: map them yourself or exclude them with a justification. The mapping of the others is editorial.
+- **NIST SP 800-30.** The assessment scales are transcribed from Rev. 1 (Tables G-5 and I-2). Check them against your copy before relying on a rating in an assessment report.
 - Evidence objects go to S3 with Object Lock when configured; otherwise a local folder is used and flagged as a fallback.
 - Benchmarking uses a disclosed synthetic cohort; connect an approved aggregation service before making peer claims.
 - **Catalogue depth.** Without an import, PCI DSS is at section level and SOC 2 at criterion level. Importing your licensed copy takes both further; the EU regulations cover the articles that bind the entity, not the whole text.
 - **Crosswalk.** Sourced and measured, but a judgement. Published sources corroborate part of it, an independent comparison corroborates 85.7%, and per-tenant review makes the rest visible. It supports, and never replaces, an expert or certification body ([docs/CROSSWALK.md](docs/CROSSWALK.md)).
-- **Live accounts.** The AWS collectors run against a protocol-faithful server and the others against recorded and documented responses, but they have not been run against *your* tenants until you run `npm run test:live`.
+- **Live accounts.** The GitHub collector has been run against a real private repository of a personal account (`npm run test:live`), which is how the Dependabot fallback was found and fixed. It has not been run against a GitHub organisation. The AWS collectors run against a protocol-faithful server and Okta against recorded and documented responses; neither has been run against a real account. Run `npm run test:live` against yours before relying on them.
 - **Organisational controls** cannot be machine-verified. They are attestations that expire, optionally countersigned, optionally backed by reviewed documents, or fed by your HR and learning systems.
 
 > Kontrol supports governance work; it does not provide legal advice or issue certification opinions.

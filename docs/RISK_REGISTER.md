@@ -39,3 +39,28 @@ Closing a risk is final and requires a note.
 ## Quantification
 
 "Quantify" runs the existing FAIR-inspired Monte Carlo simulation with a scenario derived from the risk and stores the annualised loss as a range (P50, mean, P90, P95). The simulation is seeded from the scenario, so the same inputs give the same result. It is a model under stated assumptions, not a forecast. The register sums the means and P90s of quantified risks for an indication only: separate simulations summed are not a portfolio simulation, because risks are not independent.
+
+## Method, criteria and appetite
+
+The method is the organisation's decision, set by an administrator and versioned (`set_method`). Until one is approved the built-in
+defaults apply and are reported as not approved, which the ISMS checklist counts against clause 6.1.2.
+
+- **Matrix (ISO/IEC 27005 style).** Likelihood x impact, 1 to 5 each. You choose the score at which medium, high and critical start.
+- **NIST SP 800-30 Rev. 1.** A risk is described by a threat source (adversarial, accidental, structural, environmental), a threat
+  event, a vulnerability and predisposing conditions. Likelihood has two parts, initiation or occurrence and resulting adverse impact,
+  combined by Table G-5; the level of risk comes from Table I-2 and is shown on the same four bands (very low and low as *low*, moderate
+  as *medium*, high as *high*, very high as *critical*). A risk raised automatically from a gap has no threat description yet and is
+  listed as needing one.
+- **Appetite.** The highest band accepted without a management decision. Above it, a risk can only be accepted by an administrator, with
+  a note of at least 40 characters, and stays counted as "accepted above appetite". A critical residual risk cannot be accepted at all.
+
+Changing the criteria re-rates every risk at once, because ratings are computed and not stored.
+
+## Traceability
+
+`GET /api/risk-register?view=traceability` returns, for each open risk, its asset, its threat, its treatment, its controls and the
+requirements those controls satisfy in the adopted frameworks, and for each control the risks it treats. It also lists where the thread
+breaks: risks with no control or no asset, mitigations with no plan, untreated risks, and claimed controls that treat no recorded risk.
+
+The statement of applicability carries two more columns, `risks_treated` and `inclusion_reason` (ISO/IEC 27001 6.1.3 d), and
+`GET /api/risk-register?format=treatment-plan` exports the risk treatment plan (6.1.3 e) as CSV.

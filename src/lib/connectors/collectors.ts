@@ -89,6 +89,17 @@ export async function collectGitHub(api: GitHubApi, owner: string, repository: s
         ? false
         : null;
 
+  // Dependabot security updates are reported in `security_and_analysis` only on some plans (it is null on a private repository of a
+  // personal account, for instance). The dedicated endpoint answers everywhere the caller administers the repository.
+  let dependabotSecurityUpdates = status("dependabot_security_updates");
+  if (dependabotSecurityUpdates === null) {
+    const fixes = await api(`${base}/automated-security-fixes`);
+    const body = record(fixes.body);
+    if (fixes.status === 200 && typeof body.enabled === "boolean") dependabotSecurityUpdates = body.enabled && body.paused !== true ? "enabled" : "disabled";
+    // GitHub answers 404 here when the feature is off for the repository: that is a readable "disabled", not an unknown.
+    else if (fixes.status === 404 && vulnerabilityAlertsEnabled === false) dependabotSecurityUpdates = "disabled";
+  }
+
   let twoFactorRequired: boolean | null = null;
   const isOrganization = record(data.owner).type === "Organization";
   if (isOrganization) {
@@ -107,7 +118,7 @@ export async function collectGitHub(api: GitHubApi, owner: string, repository: s
     security: {
       secretScanning: status("secret_scanning"),
       pushProtection: status("secret_scanning_push_protection"),
-      dependabotSecurityUpdates: status("dependabot_security_updates"),
+      dependabotSecurityUpdates,
     },
     vulnerabilityAlertsEnabled,
     org: { isOrganization, twoFactorRequired },
