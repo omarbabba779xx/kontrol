@@ -1,3 +1,5 @@
+import { runInNewContext } from "node:vm";
+
 export const MAX_PATTERN = 120;
 export const MAX_SUBJECT = 2_000;
 const MAX_UNBOUNDED_QUANTIFIERS = 2;
@@ -53,5 +55,22 @@ export function safeRegex(pattern: unknown): RegExp | null {
     return new RegExp(pattern);
   } catch {
     return null;
+  }
+}
+
+const MATCH_BUDGET_MS = 25;
+
+/**
+ * Runs a match under a time budget. The structural checks above keep ordinary patterns fast; this is the bound that does not depend
+ * on having thought of every shape of pattern: whatever the expression, a match that runs past the budget is stopped and counts as
+ * no match (a control that cannot be evaluated in time fails closed). The pattern runs in its own context so the interruption
+ * cannot leave shared state half-updated.
+ */
+export function matchWithin(pattern: RegExp, subject: string, budgetMs = MATCH_BUDGET_MS): boolean {
+  if (subject.length > MAX_SUBJECT) return false;
+  try {
+    return runInNewContext("pattern.test(subject)", { pattern: new RegExp(pattern.source, pattern.flags), subject }, { timeout: budgetMs }) === true;
+  } catch {
+    return false;
   }
 }

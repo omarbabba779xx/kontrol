@@ -87,3 +87,16 @@ test("patterns that backtrack badly are refused, including sequential quantifier
   assert.equal(run("^\\*+$", "***"), true, "an escaped character is not a quantifier");
   assert.equal(run("^a+$", "a".repeat(2001)), false, "an over-long subject is not matched");
 });
+
+test("a match that runs past its time budget is stopped, whatever the pattern, and counts as no match", async () => {
+  const { matchWithin } = await import("../src/lib/core/regex-guard");
+  // Patterns the structural checks would refuse, run directly: the budget is the guarantee that does not depend on those checks.
+  const started = Date.now();
+  assert.equal(matchWithin(/^(a+)+$/, `${"a".repeat(40)}!`), false);
+  assert.equal(matchWithin(/^(a|aa)+$/, `${"a".repeat(60)}!`), false);
+  assert.ok(Date.now() - started < 1500, `both were interrupted (took ${Date.now() - started} ms)`);
+  assert.equal(matchWithin(/^prod-/, "prod-eu-1"), true);
+  assert.equal(matchWithin(/^prod-/i, "PROD-eu-1"), true, "flags are kept");
+  assert.equal(matchWithin(/x/, "y"), false);
+  assert.equal(matchWithin(/a/, "a".repeat(2001)), false, "over-long subjects are not matched");
+});

@@ -1,4 +1,4 @@
-import { MAX_SUBJECT, safeRegex } from "@/lib/core/regex-guard";
+import { matchWithin, safeRegex } from "@/lib/core/regex-guard";
 import "server-only";
 
 import { randomUUID } from "node:crypto";
@@ -105,7 +105,7 @@ export function testCondition(facts: Record<string, unknown>, condition: Conditi
       return (Array.isArray(actual) || typeof actual === "string") && isNumber(expected) && actual.length <= expected;
     case "matches": {
       const pattern = safeRegex(expected);
-      return pattern !== null && typeof actual === "string" && actual.length <= MAX_SUBJECT && pattern.test(actual);
+      return pattern !== null && typeof actual === "string" && matchWithin(pattern, actual);
     }
     case "within_days": {
       const at = timestamp(actual);
