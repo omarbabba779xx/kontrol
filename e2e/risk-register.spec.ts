@@ -42,7 +42,7 @@ test("a risk is added, rated, quantified, planned and shown on the heat map", as
 
 test("risks are created from control gaps", async ({ page }) => {
   await page.goto("/compliance");
-  const load = page.getByRole("button", { name: /Charger la posture d.exemple/ });
+  const load = page.getByRole("button", { name: /Load the sample posture/ });
   const loadedSample = await load.isVisible();
   if (loadedSample) { await load.click(); await expect(page.getByText("Sample posture").first()).toBeVisible(); }
   await page.goto("/risk-register");
@@ -52,7 +52,7 @@ test("risks are created from control gaps", async ({ page }) => {
   if (loadedSample) {
     await page.goto("/compliance");
     page.once("dialog", (dialog) => dialog.accept());
-    await page.getByRole("button", { name: /Purger l.exemple/ }).click();
-    await expect(page.getByText(/Données d.exemple supprimées/)).toBeVisible();
+    await page.getByRole("button", { name: /Remove the sample/ }).click();
+    await expect(page.getByText(/Sample data removed/)).toBeVisible();
   }
 });

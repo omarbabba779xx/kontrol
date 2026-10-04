@@ -41,7 +41,7 @@ test("a task is created, assigned, discussed and completed", async ({ page }) =>
 test("tasks can be generated from the compliance roadmap", async ({ page }) => {
   await page.goto("/compliance");
   // Earlier specs may already have adopted frameworks: the roadmap exists either way.
-  const load = page.getByRole("button", { name: /Charger la posture d.exemple/ });
+  const load = page.getByRole("button", { name: /Load the sample posture/ });
   const loadedSample = await load.isVisible();
   if (loadedSample) {
     await load.click();
@@ -57,8 +57,8 @@ test("tasks can be generated from the compliance roadmap", async ({ page }) => {
   if (loadedSample) {
     await page.goto("/compliance");
     page.once("dialog", (dialog) => dialog.accept());
-    await page.getByRole("button", { name: /Purger l.exemple/ }).click();
-    await expect(page.getByText(/Données d.exemple supprimées/)).toBeVisible();
+    await page.getByRole("button", { name: /Remove the sample/ }).click();
+    await expect(page.getByText(/Sample data removed/)).toBeVisible();
   }
 });
 

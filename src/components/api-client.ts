@@ -6,10 +6,10 @@ export class ApiError extends Error {
 }
 
 function describeStatus(status: number) {
-  if (status === 401) return "Session expirée ou non authentifiée (401)";
-  if (status === 403) return "Accès refusé pour ce rôle (403)";
+  if (status === 401) return "Session expired or not signed in (401)";
+  if (status === 403) return "Access denied for this role (403)";
   if (status >= 500) return `Erreur serveur (${status})`;
-  return `Requête refusée (${status})`;
+  return `Request refused (${status})`;
 }
 
 export async function fetchJson<T>(url: string, init?: RequestInit): Promise<T> {
@@ -19,7 +19,7 @@ export async function fetchJson<T>(url: string, init?: RequestInit): Promise<T> 
     const apiMessage = body && typeof body.error === "string" ? body.error : null;
     throw new ApiError(apiMessage ?? describeStatus(response.status), response.status);
   }
-  if (body === null) throw new ApiError("Réponse invalide du serveur", response.status);
+  if (body === null) throw new ApiError("Invalid response from the server", response.status);
   return body;
 }
 
