@@ -8,6 +8,7 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { cn } from "@/lib/utils";
 import { errorMessage, fetchJson, isAbort } from "@/components/api-client";
+import { bandFor, THREAT_SOURCES, type RiskMethod } from "@/lib/core/risk-method";
 
 type Band = "low" | "medium" | "high" | "critical";
 type Risk = {
@@ -15,9 +16,10 @@ type Risk = {
   treatment: string; treatment_plan: string; target_date: string | null; status: string; accepted_by: string | null; accepted_until: string | null; acceptance_note: string | null; source_type: string;
   fair: { mean: number | null; p90: number; p50?: number; p95?: number; currency?: string } | null;
   inherent: { score: number; band: Band }; residual: { likelihood: number; impact: number; score: number; band: Band; reduction: number; controlsConsidered: number };
-  controls: Array<{ code: string; title: string; status: string; verification: string }>; acceptanceExpired: boolean; treatmentOverdue: boolean; effectiveStatus: string;
+  controls: Array<{ code: string; title: string; status: string; verification: string }>; acceptanceExpired: boolean; treatmentOverdue: boolean; effectiveStatus: string; aboveAppetite: boolean; needsThreatDescription: boolean; threat_event: string | null;
 };
-type Snapshot = { risks: Risk[]; heat: { inherent: number[][]; residual: number[][] }; summary: { open: number; critical: number; high: number; untreated: number; acceptanceExpired: number; quantified: number; annualLossMean: number; annualLossP90Indicative: number } };
+type Method = RiskMethod & { approved: boolean };
+type Snapshot = { risks: Risk[]; method: Method; heat: { inherent: number[][]; residual: number[][] }; summary: { open: number; critical: number; high: number; untreated: number; acceptanceExpired: number; quantified: number; aboveAppetite: number; needsThreatDescription: number; annualLossMean: number; annualLossP90Indicative: number } };
 type Person = { id: string; name: string; role: string; external: boolean };
 
 const CATEGORIES = ["cyber", "privacy", "third_party", "ai", "resilience", "compliance", "operational"];
@@ -25,7 +27,6 @@ const BAND: Record<Band, string> = { low: "bg-[#dcebe1] text-[#245c3f]", medium:
 const CELL: Record<Band, string> = { low: "bg-[#dcebe1]", medium: "bg-[#f1e7cc]", high: "bg-[#f0cdb0]", critical: "bg-[#e9b4ab]" };
 const field = "h-8 rounded-none border-[#cbc7bd] bg-transparent text-[10px] shadow-none placeholder:text-[#63615a]";
 const select = "h-8 border border-[#cbc7bd] bg-transparent px-2 text-[10px] focus-visible:outline-2 focus-visible:outline-[#171713]";
-const bandOf = (score: number): Band => (score >= 17 ? "critical" : score >= 10 ? "high" : score >= 5 ? "medium" : "low");
 const euro = (value: number | null | undefined) => (value === null || value === undefined ? "—" : new Intl.NumberFormat("en", { style: "currency", currency: "EUR", maximumFractionDigits: 0 }).format(value));
 const day = (value: string | null) => (value ? value.slice(0, 10) : "—");
 const label = (value: string) => value.replace(/_/g, " ");
@@ -62,23 +63,25 @@ export function RiskRegister() {
   const s = snapshot?.summary;
   return (
     <div>
-      <PageHeading index="17" title="Risk register" description="Risks rated on a 5×5 matrix, linked to the controls that treat them. Residual risk follows the live compliance posture; acceptance needs another person and expires." meta={status} />
+      <PageHeading index="17" title="Risk register" description="Risks rated by the method your organisation approved (a 5×5 matrix or NIST SP 800-30), linked to the controls that treat them. Residual risk follows the live compliance posture; acceptance needs another person, expires, and above the appetite needs an administrator." meta={status} />
       <section className="p-5 sm:p-7 lg:p-9" aria-busy={snapshot === null && !failed}>
         {failed ? <div role="alert" className="mb-4 border border-[#b8322a] bg-[#f5e5e1] p-3 text-[9px] text-[#9f2923]">{status}</div> : null}
         {snapshot && s ? (
           <div className="space-y-6">
-            <div className="grid gap-px border border-[#cbc7bd] bg-[#cbc7bd] sm:grid-cols-3 lg:grid-cols-6">
-              {([["Open risks", s.open], ["Critical residual", s.critical], ["High residual", s.high], ["Untreated", s.untreated], ["Acceptance lapsed", s.acceptanceExpired], ["Quantified", s.quantified]] as const).map(([name, value]) => <div key={name} className="bg-[#f4f1e9] p-4"><MicroLabel>{name}</MicroLabel><p className={cn("mt-1 font-mono text-[22px] font-semibold", (name === "Critical residual" || name === "Acceptance lapsed") && value > 0 && "text-[#b8322a]")}>{value}</p></div>)}
+            <div className="grid gap-px border border-[#cbc7bd] bg-[#cbc7bd] sm:grid-cols-4 lg:grid-cols-7">
+              {([["Open risks", s.open], ["Critical residual", s.critical], ["High residual", s.high], ["Untreated", s.untreated], ["Above appetite", s.aboveAppetite], ["Acceptance lapsed", s.acceptanceExpired], ["Quantified", s.quantified]] as const).map(([name, value]) => <div key={name} className="bg-[#f4f1e9] p-4"><MicroLabel>{name}</MicroLabel><p className={cn("mt-1 font-mono text-[22px] font-semibold", (name === "Critical residual" || name === "Acceptance lapsed") && value > 0 && "text-[#b8322a]")}>{value}</p></div>)}
             </div>
             <div className="grid gap-8 xl:grid-cols-[360px_1fr]">
               <div className="space-y-4">
                 <div className="border border-[#cbc7bd] p-4">
                   <div className="flex items-center justify-between"><MicroLabel>Heat map</MicroLabel>
                     <div role="group" aria-label="Heat map view" className="flex text-[9px]">{(["residual", "inherent"] as const).map((name) => <button key={name} type="button" aria-pressed={view === name} onClick={() => setView(name)} className={cn("border border-[#cbc7bd] px-2 py-1 capitalize", view === name && "bg-[#171713] text-white")}>{name}</button>)}</div></div>
-                  <HeatMap grid={snapshot.heat[view]} />
+                  <HeatMap grid={snapshot.heat[view]} method={snapshot.method} />
                   {s.quantified > 0 ? <p className="mt-3 text-[9px] text-[#55534b]">Quantified: mean {euro(s.annualLossMean)} a year, P90 {euro(s.annualLossP90Indicative)} (indicative: the sum of separate simulations is not a portfolio simulation, because risks are not independent).</p> : null}
                 </div>
-                <NewRisk people={people} act={act} pending={isPending} />
+                <MethodPanel method={snapshot.method} needsThreat={s.needsThreatDescription} act={act} pending={isPending} />
+                <NewRisk people={people} act={act} pending={isPending} nist={snapshot.method.method === "nist_800_30"} />
+                <a href="/api/risk-register?format=treatment-plan" download className="flex h-8 items-center justify-center border border-[#171713] text-[9px] font-semibold hover:bg-[#171713] hover:text-white">Risk treatment plan (CSV)</a>
                 <Button type="button" variant="outline" disabled={isPending} onClick={() => act({ action: "from_gaps", limit: 10 }, "Risks created from control gaps")} className="h-8 w-full rounded-none border-[#171713] bg-transparent text-[9px]"><Wand2 className="me-1.5 h-3 w-3" aria-hidden="true" />Create risks from control gaps</Button>
               </div>
               <div className="space-y-3">
@@ -96,36 +99,72 @@ export function RiskRegister() {
   );
 }
 
-function HeatMap({ grid }: { grid: number[][] }) {
+function HeatMap({ grid, method }: { grid: number[][]; method: RiskMethod }) {
   const row = "grid grid-cols-[28px_repeat(5,1fr)] gap-0.5 text-center font-mono text-[8px]";
   return (
     <div className="mt-3 space-y-0.5" role="table" aria-label="Likelihood by impact">
       {[5, 4, 3, 2, 1].map((likelihood) => (
         <div key={likelihood} role="row" className={row}>
           <span role="rowheader" className="grid place-items-center text-[#5f5d56]">L{likelihood}</span>
-          {[1, 2, 3, 4, 5].map((impact) => { const count = grid[likelihood - 1][impact - 1]; return <span key={impact} role="cell" aria-label={`Likelihood ${likelihood}, impact ${impact}: ${count} risk${count === 1 ? "" : "s"}`} className={cn("grid h-9 place-items-center", CELL[bandOf(likelihood * impact)], count > 0 && "font-bold ring-1 ring-[#171713]")}>{count || ""}</span>; })}
+          {[1, 2, 3, 4, 5].map((impact) => { const count = grid[likelihood - 1][impact - 1]; return <span key={impact} role="cell" aria-label={`Likelihood ${likelihood}, impact ${impact}: ${count} risk${count === 1 ? "" : "s"}`} className={cn("grid h-9 place-items-center", CELL[bandFor(method, likelihood, impact)], count > 0 && "font-bold ring-1 ring-[#171713]")}>{count || ""}</span>; })}
         </div>))}
       <div role="row" className={row}><span role="columnheader"><span className="sr-only">Likelihood</span></span>{[1, 2, 3, 4, 5].map((impact) => <span key={impact} role="columnheader" className="pt-1 text-[#5f5d56]">I{impact}</span>)}</div>
     </div>
   );
 }
 
-function NewRisk({ people, act, pending }: { people: Person[]; act: Act; pending: boolean }) {
-  const [form, setForm] = useState({ title: "", category: "cyber", likelihood: 3, impact: 3, ownerId: "", controls: "" });
+function MethodPanel({ method, needsThreat, act, pending }: { method: Method; needsThreat: number; act: Act; pending: boolean }) {
+  const [form, setForm] = useState({ method: method.method, medium: method.thresholds.medium, high: method.thresholds.high, critical: method.thresholds.critical, appetite: method.appetite, maxAcceptanceDays: method.maxAcceptanceDays });
+  const number = (key: "medium" | "high" | "critical" | "maxAcceptanceDays", name: string) => <label className="flex-1 text-[8px]">{name}<Input aria-label={name} type="number" value={form[key]} onChange={(event) => setForm({ ...form, [key]: Number(event.target.value) })} className={field} /></label>;
+  return (
+    <details className="border border-[#cbc7bd] p-4">
+      <summary className="cursor-pointer font-mono text-[8px] uppercase tracking-wider text-[#5f5d56]">Risk method and appetite</summary>
+      <p className="mt-3 text-[9px] text-[#55534b]">{method.method === "nist_800_30" ? "NIST SP 800-30" : "Likelihood × impact matrix (ISO/IEC 27005 style)"} · appetite: {method.appetite} · {method.approved ? `version ${method.version}, approved on ${day(method.approvedAt)}` : "built-in defaults, not approved by your organisation"}.{needsThreat > 0 ? ` ${needsThreat} open risk(s) still need their threat description.` : ""}</p>
+      <form className="mt-3 space-y-2" onSubmit={(event) => { event.preventDefault(); act({ action: "set_method", method: form.method, thresholds: { medium: form.medium, high: form.high, critical: form.critical }, appetite: form.appetite, maxAcceptanceDays: form.maxAcceptanceDays }, "Risk method approved"); }}>
+        <div className="flex gap-2">
+          <label className="flex-1 text-[8px]">Method<select aria-label="Method" value={form.method} onChange={(event) => setForm({ ...form, method: event.target.value as RiskMethod["method"] })} className={cn(select, "w-full")}><option value="iso27005">Matrix (ISO/IEC 27005)</option><option value="nist_800_30">NIST SP 800-30</option></select></label>
+          <label className="flex-1 text-[8px]">Appetite<select aria-label="Appetite" value={form.appetite} onChange={(event) => setForm({ ...form, appetite: event.target.value as RiskMethod["appetite"] })} className={cn(select, "w-full")}>{["low", "medium", "high"].map((value) => <option key={value} value={value}>{value}</option>)}</select></label>
+        </div>
+        <div className="flex gap-2">{number("medium", "Medium from")}{number("high", "High from")}{number("critical", "Critical from")}{number("maxAcceptanceDays", "Max acceptance (days)")}</div>
+        <p className="text-[8px] text-[#63615a]">Thresholds are scores (likelihood × impact) and apply to the matrix method; SP 800-30 uses its own tables. Setting the method is a management decision: it needs an administrator and is versioned.</p>
+        <Button type="submit" variant="outline" disabled={pending} className="h-8 w-full rounded-none border-[#171713] bg-transparent text-[9px]">Approve method</Button>
+      </form>
+    </details>
+  );
+}
+
+function NewRisk({ people, act, pending, nist }: { people: Person[]; act: Act; pending: boolean; nist: boolean }) {
+  const [form, setForm] = useState({ title: "", category: "cyber", likelihood: 3, impact: 3, ownerId: "", controls: "", threatSource: "adversarial", threatEvent: "", vulnerability: "", likelihoodInitiation: 3, likelihoodImpact: 3 });
   const codes = form.controls.split(/[\s,]+/).map((item) => item.trim().toUpperCase()).filter(Boolean);
   return (
     <details className="border border-[#cbc7bd] p-4">
       <summary className="cursor-pointer font-mono text-[8px] uppercase tracking-wider text-[#5f5d56]">Add a risk</summary>
-      <form className="mt-3 space-y-2" onSubmit={(event) => { event.preventDefault(); act({ action: "create", title: form.title, category: form.category, likelihood: form.likelihood, impact: form.impact, ownerId: form.ownerId || undefined, controls: codes }, "Risk added", () => setForm({ title: "", category: "cyber", likelihood: 3, impact: 3, ownerId: "", controls: "" })); }}>
+      <form className="mt-3 space-y-2" onSubmit={(event) => { event.preventDefault(); act({ action: "create", title: form.title, category: form.category, impact: form.impact, ownerId: form.ownerId || undefined, controls: codes, ...(nist ? { threatSource: form.threatSource, threatEvent: form.threatEvent, vulnerability: form.vulnerability || undefined, likelihoodInitiation: form.likelihoodInitiation, likelihoodImpact: form.likelihoodImpact } : { likelihood: form.likelihood }) }, "Risk added", () => setForm({ ...form, title: "", controls: "", threatEvent: "", vulnerability: "" })); }}>
         <Input aria-label="Risk title" placeholder="Risk (cause, event, consequence)" value={form.title} onChange={(event) => setForm({ ...form, title: event.target.value })} className={field} />
         <div className="flex gap-2">
           <select aria-label="Category" value={form.category} onChange={(event) => setForm({ ...form, category: event.target.value })} className={cn(select, "flex-1")}>{CATEGORIES.map((value) => <option key={value} value={value}>{label(value)}</option>)}</select>
           <select aria-label="Owner" value={form.ownerId} onChange={(event) => setForm({ ...form, ownerId: event.target.value })} className={cn(select, "flex-1")}><option value="">No owner</option>{people.map((person) => <option key={person.id} value={person.id}>{person.name}</option>)}</select>
         </div>
         <div className="flex gap-2">
-          <label className="flex-1 text-[8px]">Likelihood (1-5)<select aria-label="Likelihood" value={form.likelihood} onChange={(event) => setForm({ ...form, likelihood: Number(event.target.value) })} className={cn(select, "w-full")}>{[1, 2, 3, 4, 5].map((value) => <option key={value} value={value}>{value}</option>)}</select></label>
+          {nist ? (
+            <>
+              <label className="flex-1 text-[8px]">Initiation (1-5)<select aria-label="Likelihood of initiation" value={form.likelihoodInitiation} onChange={(event) => setForm({ ...form, likelihoodInitiation: Number(event.target.value) })} className={cn(select, "w-full")}>{[1, 2, 3, 4, 5].map((value) => <option key={value} value={value}>{value}</option>)}</select></label>
+              <label className="flex-1 text-[8px]">Adverse impact (1-5)<select aria-label="Likelihood of adverse impact" value={form.likelihoodImpact} onChange={(event) => setForm({ ...form, likelihoodImpact: Number(event.target.value) })} className={cn(select, "w-full")}>{[1, 2, 3, 4, 5].map((value) => <option key={value} value={value}>{value}</option>)}</select></label>
+            </>
+          ) : (
+            <label className="flex-1 text-[8px]">Likelihood (1-5)<select aria-label="Likelihood" value={form.likelihood} onChange={(event) => setForm({ ...form, likelihood: Number(event.target.value) })} className={cn(select, "w-full")}>{[1, 2, 3, 4, 5].map((value) => <option key={value} value={value}>{value}</option>)}</select></label>
+          )}
           <label className="flex-1 text-[8px]">Impact (1-5)<select aria-label="Impact" value={form.impact} onChange={(event) => setForm({ ...form, impact: Number(event.target.value) })} className={cn(select, "w-full")}>{[1, 2, 3, 4, 5].map((value) => <option key={value} value={value}>{value}</option>)}</select></label>
         </div>
+        {nist ? (
+          <>
+            <div className="flex gap-2">
+              <select aria-label="Threat source" value={form.threatSource} onChange={(event) => setForm({ ...form, threatSource: event.target.value })} className={cn(select, "w-36")}>{THREAT_SOURCES.map((value) => <option key={value} value={value}>{value}</option>)}</select>
+              <Input aria-label="Threat event" required placeholder="Threat event" value={form.threatEvent} onChange={(event) => setForm({ ...form, threatEvent: event.target.value })} className={cn(field, "flex-1")} />
+            </div>
+            <Input aria-label="Vulnerability" placeholder="Vulnerability or predisposing condition" value={form.vulnerability} onChange={(event) => setForm({ ...form, vulnerability: event.target.value })} className={field} />
+          </>
+        ) : null}
         <Input aria-label="Linked controls" placeholder="Controls: UC-OPS-02, UC-DAT-05" value={form.controls} onChange={(event) => setForm({ ...form, controls: event.target.value })} className={cn(field, "font-mono")} />
         <Button type="submit" disabled={pending || form.title.trim().length < 3} className="h-8 w-full rounded-none bg-[#171713] text-[10px] text-white"><Plus className="me-1.5 h-3 w-3" aria-hidden="true" />Add risk</Button>
       </form>
