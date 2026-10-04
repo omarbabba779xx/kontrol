@@ -34,6 +34,9 @@ import { Sheet, SheetContent, SheetTitle, SheetTrigger } from "@/components/ui/s
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
 
+/** The management-system modules come first; the rest of the platform follows in its own section. */
+const GOVERNANCE = ["/", "/isms", "/compliance", "/risk-register", "/audit", "/tasks", "/third-party", "/evidence", "/admin"];
+
 const navigation = [
   { name: "Decision room", code: "01", href: "/", icon: CircleDot },
   { name: "Scenario lab", code: "02", href: "/risks", icon: FlaskConical },
@@ -135,8 +138,13 @@ function Navigation({ onNavigate }: { onNavigate?: () => void }) {
       <div className="mb-3 flex items-center justify-between px-2 font-mono text-[8px] uppercase tracking-[.16em] text-[#63615a]">
         <span>Workspace</span><span>Demo / EU</span>
       </div>
-      <div className="border-t border-[#d7d3c9]">
-        {pages.map((item) => {
+      {[
+        { title: "Governance", items: GOVERNANCE.map((href) => pages.find((item) => item.href === href)).filter((item): item is (typeof pages)[number] => item !== undefined) },
+        { title: "Other modules", items: pages.filter((item) => !GOVERNANCE.includes(item.href)) },
+      ].filter((section) => section.items.length > 0).map((section, index) => (
+      <div key={section.title} className={cn("border-t border-[#d7d3c9]", index > 0 && "mt-6")}>
+        {index > 0 ? <p className="px-2 py-2 font-mono text-[8px] uppercase tracking-[.16em] text-[#63615a]">{section.title}</p> : null}
+        {section.items.map((item) => {
           const active = item.href === "/" ? pathname === "/" : pathname.startsWith(item.href);
           return (
             <Link
@@ -156,6 +164,7 @@ function Navigation({ onNavigate }: { onNavigate?: () => void }) {
           );
         })}
       </div>
+      ))}
     </nav>
   );
 }
