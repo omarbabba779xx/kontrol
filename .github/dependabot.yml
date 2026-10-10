@@ -11,6 +11,15 @@ updates:
     directory: /
     patterns: ["*"]
     multi-ecosystem-group: dependencies
+    # Major versions of the toolchain are taken by hand: typescript-eslint has to support the
+    # TypeScript release first, and the Node types follow the Node version in .nvmrc.
+    ignore:
+      - dependency-name: typescript
+        update-types: ["version-update:semver-major"]
+      - dependency-name: eslint
+        update-types: ["version-update:semver-major"]
+      - dependency-name: "@types/node"
+        update-types: ["version-update:semver-major"]
   - package-ecosystem: github-actions
     directory: /
     patterns: ["*"]
