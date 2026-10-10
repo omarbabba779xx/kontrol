@@ -32,7 +32,7 @@
     "@aws-sdk/client-iam": "^3.1143.0",
     "@aws-sdk/client-kms": "^3.1146.0",
     "@aws-sdk/client-s3": "^3.1144.0",
-    "@aws-sdk/client-sts": "^3.1145.0",
+    "@aws-sdk/client-sts": "^3.1147.0",
     "@base-ui/react": "^1.8.0",
     "ai": "^7.0.124",
     "better-sqlite3": "^13.0.3",
