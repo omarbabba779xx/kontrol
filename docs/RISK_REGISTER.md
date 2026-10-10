@@ -70,6 +70,10 @@ The statement of applicability carries two more columns, `risks_treated` and `in
 
 The *Identification* tab of `/risk-register` works from the asset inventory:
 
+Connectors register the assets they collect from. Anything else the organisation depends on is entered by hand:
+`POST /api/risk-register {"action":"register_asset", "name", "type", "criticality", "ownerId"}`, and `retire_asset` takes an asset
+out of the current inventory (refused while a risk is still open on it). Both are written to the audit chain.
+
 1. **Value each asset** on confidentiality, integrity and availability (1 to 5), with a reason.
 2. **Pick the threats that apply.** A library of 30 threats in eight families (physical, natural, loss of essential services,
    technical failure, compromise of information, compromise of functions, human error, organisational) names for each the security

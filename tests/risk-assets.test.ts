@@ -107,3 +107,23 @@ test("the API exposes identification, valuation and scenarios to those who manag
   assert.equal((await post(admin, { action: "value_asset", assetId: ASSET, confidentiality: 5, integrity: 4, availability: 3 })).status, 200);
   assert.equal((await post(admin, { action: "scenario", assetId: ASSET, threatId: "not-a-threat", likelihood: 3 })).status, 400);
 });
+
+test("an asset is registered by hand, valued and assessed like a collected one, and cannot be retired while a risk is open on it", async () => {
+  const { registerAsset, retireAsset, valueAsset, createScenario, riskIdentification } = await assets();
+  const created = await registerAsset(admin, { name: "  Customer information system ", type: "application", criticality: "critical", ownerId: riskOwner.userId, description: "Billing and customer records" });
+  assert.equal(created.name, "Customer information system");
+  await assert.rejects(registerAsset(admin, { name: "Customer information system", type: "application", criticality: "high" }), /already exists/);
+  await assert.rejects(registerAsset(admin, { name: "Orphan", type: "data", criticality: "low", ownerId: "usr_missing" }), /Owner not found/);
+
+  await valueAsset(admin, { assetId: created.id, confidentiality: 5, integrity: 4, availability: 4, rationale: "Personal and payment data" });
+  const listed = (await riskIdentification(admin.tenantId)).assets.find((asset) => asset.id === created.id);
+  assert.ok(listed, "the asset is in the inventory used for identification");
+
+  await createScenario(admin, { assetId: created.id, threatId: "TH-INF-05", likelihood: 3, likelihoodInitiation: 3, likelihoodImpact: 3, ownerId: riskOwner.userId });
+  await assert.rejects(retireAsset(admin, { assetId: created.id, reason: "Replaced by the new billing platform" }), /open risk/);
+
+  const spare = await registerAsset(admin, { name: "Decommissioned file server", type: "infrastructure", criticality: "low" });
+  assert.deepEqual(await retireAsset(admin, { assetId: spare.id, reason: "Switched off and wiped in September" }), { id: spare.id, retired: true });
+  assert.ok(!(await riskIdentification(admin.tenantId)).assets.some((asset) => asset.id === spare.id), "a retired asset leaves the inventory");
+  await assert.rejects(retireAsset(admin, { assetId: spare.id, reason: "Retiring it a second time" }), /Asset not found/);
+});
