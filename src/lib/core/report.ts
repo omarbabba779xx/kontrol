@@ -385,7 +385,8 @@ export async function buildReadinessReport(
   );
 
   // Exceptions & policies -------------------------------------------------------------------------------------------
-  layout.heading("5. Risk acceptances and policies");
+  // Exceptions are deviations from a control. Risks accepted in the register are a separate record and are not listed here.
+  layout.heading("5. Control exceptions and policies");
   layout.table(
     ["Exception", "Control", "Risk", "Status", "Expires"],
     [200, 70, 45, 60, 70],
@@ -437,7 +438,7 @@ export async function buildReadinessReport(
   // Report integrity ------------------------------------------------------------------------------------------------
   layout.heading("7. Report integrity");
   layout.text(
-    "The fingerprint is the SHA-256 of the canonical report data; the signature is an HMAC-SHA-256 over it with the platform signing key. The fingerprint is also appended to the tenant's tamper-evident audit log, so this document can be verified later.",
+    `The fingerprint is the SHA-256 of the canonical report data; the signature is ${signature.startsWith("ed25519:") ? "an Ed25519 signature over it, which anyone can check with the public key at /api/signing-key" : "an HMAC-SHA-256 over it with the platform signing key"}. The fingerprint is also appended to the tenant's tamper-evident audit log, so this document can be verified later.`,
     { size: 8.5, color: MUTED },
   );
   layout.text(`Fingerprint  ${fingerprint}`, { font: layout.mono, size: 8 });
