@@ -106,6 +106,20 @@ export async function inviteUser(actor: Actor, input: { email: string; name: str
   return { id, email, role: input.role };
 }
 
+/** A person's name is what approvals and records display; correcting it is audited, and it does not change who they are. */
+export async function renameUser(actor: Actor, input: { userId: string; name: string }) {
+  const name = input.name.trim();
+  if (name.length < 2) throw userError("The person needs a name");
+  const db = (await getDb()).scope(actor.tenantId);
+  const before = await db.get<{ id: string; name: string }>("SELECT id, name FROM users WHERE tenant_id = ? AND id = ?", actor.tenantId, input.userId);
+  if (!before) throw userError("User not found");
+  await db.transaction(async (tx) => {
+    await tx.run("UPDATE users SET name = ? WHERE tenant_id = ? AND id = ?", name, actor.tenantId, before.id);
+    await appendAudit({ tenantId: actor.tenantId, actorId: actor.userId, action: "admin.user_renamed", objectType: "user", objectId: before.id, payload: { from: before.name, to: name } }, tx);
+  });
+  return { id: before.id, name };
+}
+
 /** The organisation's name appears on reports and exports, so changing it is recorded like any other administrative act. */
 export async function renameOrganisation(actor: Actor, input: { name: string; region?: string }) {
   const name = input.name.trim();
