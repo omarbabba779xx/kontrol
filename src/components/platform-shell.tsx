@@ -213,8 +213,7 @@ function Sidebar() {
     <aside className="fixed inset-y-0 start-0 z-30 hidden w-[256px] border-e border-[#cbc7bd] bg-[#efebe2] lg:flex lg:flex-col">
       <div className="px-5 pt-5"><Mark /><Navigation /></div>
       <div className="mt-auto border-t border-[#cbc7bd] p-4">
-        <div className="mb-4 flex items-center justify-between font-mono text-[10px] uppercase tracking-wider text-[#5f5d56]"><span>Data state</span><span className="flex items-center gap-1.5 text-[#7a5a1a]"><span className="h-1.5 w-1.5 rounded-full bg-[#7a5a1a]" aria-hidden="true" />Sample data</span></div>
-        <button type="button" className="flex w-full items-center gap-3 border-t border-[#d7d3c9] pt-3 text-start">
+        <button type="button" className="flex w-full items-center gap-3 text-start">
           <span className="grid h-7 w-7 place-items-center rounded-full bg-[#d9d4c8] font-mono text-[11px] text-[#34332e]">{initials}</span>
           <span className="min-w-0"><span className="block truncate text-[12px] font-semibold text-[#34332e]">{name || "Signed out"}</span><span className="block truncate text-[10px] text-[#63615a]">{me?.role ? (ROLE_LABELS[me.role] ?? me.role) : ""}</span></span>
           <ChevronDown className="ms-auto h-3 w-3 text-[#63615a]" />
