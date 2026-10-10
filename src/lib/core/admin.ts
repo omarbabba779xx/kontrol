@@ -106,6 +106,31 @@ export async function inviteUser(actor: Actor, input: { email: string; name: str
   return { id, email, role: input.role };
 }
 
+/** The organisation's name appears on reports and exports, so changing it is recorded like any other administrative act. */
+export async function renameOrganisation(actor: Actor, input: { name: string; region?: string }) {
+  const name = input.name.trim();
+  if (name.length < 2) throw userError("The organisation needs a name");
+  const db = (await getDb()).scope(actor.tenantId);
+  const before = await db.get<{ name: string; region: string }>("SELECT name, region FROM tenants WHERE id = ?", actor.tenantId);
+  if (!before) throw userError("Organisation not found");
+  const region = input.region?.trim() || before.region;
+  await db.transaction(async (tx) => {
+    await tx.run("UPDATE tenants SET name = ?, region = ? WHERE id = ?", name, region, actor.tenantId);
+    await appendAudit(
+      {
+        tenantId: actor.tenantId,
+        actorId: actor.userId,
+        action: "admin.organisation_renamed",
+        objectType: "tenant",
+        objectId: actor.tenantId,
+        payload: { from: before.name, to: name, region },
+      },
+      tx,
+    );
+  });
+  return { id: actor.tenantId, name, region };
+}
+
 async function target(actor: Actor, userId: string) {
   const row = await (
     await getDb()

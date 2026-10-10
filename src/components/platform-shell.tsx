@@ -64,15 +64,26 @@ function owns(href: string, pathname: string) {
   return href === "/" ? pathname === "/" : pathname === href || pathname.startsWith(`${href}/`);
 }
 
+type Me = { name?: string; role?: string; external?: boolean; organisation?: string | null };
+const ROLE_LABELS: Record<string, string> = { admin: "Administrator", risk_owner: "Risk owner", control_owner: "Control owner", auditor: "Auditor", viewer: "Viewer" };
+
+/** Who is signed in and for which organisation. Asked once per page load and shared by the parts of the shell that need it. */
+let mePromise: Promise<Me | null> | null = null;
+function useMe() {
+  const [me, setMe] = useState<Me | null>(null);
+  useEffect(() => {
+    let alive = true;
+    mePromise ??= fetch("/api/me").then((response) => (response.ok ? (response.json() as Promise<Me>) : null)).catch(() => null);
+    void mePromise.then((value) => { if (alive) setMe(value); });
+    return () => { alive = false; };
+  }, []);
+  return me;
+}
+
 /** External auditors only see the audit workspace; everyone else sees the full navigation. */
 function useVisibleNavigation() {
-  const [external, setExternal] = useState(false);
-  useEffect(() => {
-    const controller = new AbortController();
-    fetch("/api/me", { signal: controller.signal }).then((response) => (response.ok ? response.json() : null)).then((me: { external?: boolean } | null) => setExternal(me?.external === true)).catch(() => undefined);
-    return () => controller.abort();
-  }, []);
-  return external ? navigation.filter((item) => item.href === "/audit") : navigation;
+  const me = useMe();
+  return me?.external === true ? navigation.filter((item) => item.href === "/audit") : navigation;
 }
 
 function Mark() {
@@ -161,7 +172,7 @@ function Navigation({ onNavigate }: { onNavigate?: () => void }) {
     <nav ref={navRef} aria-label="Primary navigation" className="nav-rail relative mt-10">
       <span ref={markerRef} aria-hidden="true" className="nav-marker" />
       <div className="mb-3 flex items-center justify-between px-2 font-mono text-[10px] uppercase tracking-[.16em] text-[#63615a]">
-        <span>Workspace</span><span>Demo / EU</span>
+        <span>Workspace</span>
       </div>
       {[
         { title: "Governance", items: GOVERNANCE.map((href) => pages.find((item) => item.href === href)).filter((item): item is (typeof pages)[number] => item !== undefined) },
@@ -195,14 +206,17 @@ function Navigation({ onNavigate }: { onNavigate?: () => void }) {
 }
 
 function Sidebar() {
+  const me = useMe();
+  const name = me?.name ?? "";
+  const initials = name.replace(/\(.*?\)/g, "").trim().split(/\s+/).filter(Boolean).slice(0, 2).map((part) => part[0]?.toUpperCase()).join("") || "–";
   return (
     <aside className="fixed inset-y-0 start-0 z-30 hidden w-[256px] border-e border-[#cbc7bd] bg-[#efebe2] lg:flex lg:flex-col">
       <div className="px-5 pt-5"><Mark /><Navigation /></div>
       <div className="mt-auto border-t border-[#cbc7bd] p-4">
         <div className="mb-4 flex items-center justify-between font-mono text-[10px] uppercase tracking-wider text-[#5f5d56]"><span>Data state</span><span className="flex items-center gap-1.5 text-[#7a5a1a]"><span className="h-1.5 w-1.5 rounded-full bg-[#7a5a1a]" aria-hidden="true" />Sample data</span></div>
         <button type="button" className="flex w-full items-center gap-3 border-t border-[#d7d3c9] pt-3 text-start">
-          <span className="grid h-7 w-7 place-items-center rounded-full bg-[#d9d4c8] font-mono text-[11px] text-[#34332e]">LM</span>
-          <span className="min-w-0"><span className="block truncate text-[12px] font-semibold text-[#34332e]">Leila Mansour</span><span className="block truncate text-[10px] text-[#63615a]">AI Risk Owner</span></span>
+          <span className="grid h-7 w-7 place-items-center rounded-full bg-[#d9d4c8] font-mono text-[11px] text-[#34332e]">{initials}</span>
+          <span className="min-w-0"><span className="block truncate text-[12px] font-semibold text-[#34332e]">{name || "Signed out"}</span><span className="block truncate text-[10px] text-[#63615a]">{me?.role ? (ROLE_LABELS[me.role] ?? me.role) : ""}</span></span>
           <ChevronDown className="ms-auto h-3 w-3 text-[#63615a]" />
         </button>
       </div>
@@ -212,6 +226,7 @@ function Sidebar() {
 
 export function PlatformShell({ children }: { children: React.ReactNode }) {
   const [menuOpen, setMenuOpen] = useState(false);
+  const me = useMe();
   const pathname = usePathname();
   return (
     <TooltipProvider>
@@ -225,10 +240,8 @@ export function PlatformShell({ children }: { children: React.ReactNode }) {
               <SheetContent side="left" className="w-[278px] border-[#cbc7bd] bg-[#efebe2] p-5 text-[#171713]"><SheetTitle className="sr-only">Navigation</SheetTitle><Mark /><Navigation onNavigate={() => setMenuOpen(false)} /></SheetContent>
             </Sheet>
             <div className="hidden items-center gap-3 sm:flex">
-              <span className="font-mono text-[10px] uppercase tracking-[.16em] text-[#63615a]">Portfolio</span>
-              <span className="text-[12px] font-medium text-[#2d2c28]">EU Consumer Lending</span>
-              <span className="h-3 w-px bg-[#cbc7bd]" />
-              <span className="font-mono text-[10px] text-[#63615a]">SAMPLE PORTFOLIO · ILLUSTRATIVE DATA</span>
+              <span className="font-mono text-[10px] uppercase tracking-[.16em] text-[#63615a]">Organisation</span>
+              <span className="text-[12px] font-medium text-[#2d2c28]">{me?.organisation ?? "…"}</span>
             </div>
             <div className="ms-auto flex items-center gap-2">
               <PageJump />
