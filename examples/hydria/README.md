@@ -37,7 +37,7 @@ are already there. Run from an empty database, the three steps end with 20 of th
 | Step | Clauses | Records |
 | --- | --- | --- |
 | `load-foundation.mjs` | 4.1, 4.2, 4.3, 5.2, 6.2, 7.2, 7.4 | Five people, 8 issues, 7 interested parties with their requirements, the approved scope with its exclusions, the security policy, 5 objectives, 3 competence and 4 communication records, two adopted frameworks |
-| `load-risk.mjs` | 5.3, 6.1.2, 6.1.3, 7.1, 8.1, 8.2 | The approved risk method with impact criteria per property, 8 valued assets, the state and the owner of 42 controls, 15 risk scenarios with their treatment plans and tasks, one acceptance by a second person |
+| `load-risk.mjs` | 5.3, 6.1.2, 6.1.3, 7.1, 8.1, 8.2 | The approved risk method with impact criteria per property, 8 valued assets, the state and the owner of 44 controls, 15 risk scenarios with their treatment plans and tasks, one acceptance by a second person |
 | `load-operation.mjs` | 7.3, 9.1, 9.3, 10.2, A.5.24 | Signed reports from the learning and HR systems, a first measurement of each objective, one incident handled to its lessons, two nonconformities, the audit programme, the first management review |
 
 `exports/` holds what Kontrol produces from these records: the statement of applicability for ISO/IEC 27001 and ISO/IEC 42001, the
@@ -61,8 +61,6 @@ The dossier is meant to look like a young management system, not a finished one.
 
 - **The calendar is compressed.** Every record is created the day the scripts run. A real management system takes months to produce
   measurements, an incident, corrective actions and a review.
-- **The administrator keeps the name of the built-in demonstration account.** The organisation is renamed Hydria and its five people
-  own the records and act in their own name, but approvals reserved to an administrator are signed by that account.
 - **Kontrol has no catalogue for Moroccan law.** Law 05-20 and Law 09-08 are recorded as requirements of interested parties, and which
   obligations bind an operator like Hydria is marked as to be confirmed with Legal. No deadline or duty is asserted from them.
 - **The ratings are an example.** Likelihoods, asset values and control states were chosen to be plausible for such an operator; they

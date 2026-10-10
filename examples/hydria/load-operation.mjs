@@ -149,6 +149,12 @@ await admin({
   ],
 });
 
+// ---------------------------------------------------------------- the claims follow what was done
+for (const [ucCode, status, maturity, owner, notes] of [
+  ["UC-GOV-05", "implemented", 2, "ciso", "Objectives measured for the first time and a management review held and approved; one cycle only so far."],
+  ["UC-GOV-07", "implemented", 2, "ciso", "Two nonconformities handled: one closed after verification by a second person, one open with a corrective action on time."],
+]) await call("/api/compliance", { action: "set_implementation", ucCode, status, maturity, ownerId: people[owner], notes });
+
 const after = await call("/api/isms");
 console.log(`Clause checklist: ${JSON.stringify(after.summary)}`.slice(0, 160));
 for (const clause of after.clauses) console.log(`  ${clause.status.padEnd(8)} ${clause.clause.padEnd(8)} ${clause.title}${clause.status === "met" ? "" : ` -> ${clause.detail}`}`);

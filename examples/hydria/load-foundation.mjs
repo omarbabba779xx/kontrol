@@ -24,6 +24,10 @@ if (before.context?.length) {
 }
 
 // ---------------------------------------------------------------- people
+// The built-in administrator stands for Hydria's managing director, who approves the scope, the method and the review.
+const { me } = await call("/api/users");
+await call("/api/admin", { action: "rename_user", userId: me, name: "Rachid Alaoui (Managing director)" });
+await call("/api/admin", { action: "rename_organisation", name: "Hydria", region: "MA" });
 const people = {};
 for (const [key, name, role] of [
   ["ciso", "Salma Idrissi (CISO)", "risk_owner"],
