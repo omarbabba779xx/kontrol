@@ -40,6 +40,9 @@ type Tab = (typeof tabs)[number];
 const day = (value: string | null) => (value ? value.slice(0, 10) : "no date");
 const toIso = (date: string) => new Date(`${date}T12:00:00Z`).toISOString();
 
+/** Ends a recorded text with a full stop unless its author already did. */
+const sentence = (text: string | null) => { const trimmed = (text ?? "").trim(); return /[.!?]$/.test(trimmed) ? trimmed : `${trimmed}.`; };
+
 export function IsmsWorkspace() {
   const [data, setData] = useState<Snapshot | null>(null);
   const [people, setPeople] = useState<Person[]>([]);
@@ -261,7 +264,7 @@ export function IsmsWorkspace() {
                       <li key={item.id} className="border border-[#cbc7bd] p-3 text-[12px]">
                         <p><span className="font-mono font-semibold">{item.ref}</span> {item.title} <span className={cn("ms-1 px-1 font-mono text-[10px] uppercase", item.status === "closed" ? STATUS_STYLE.met : item.overdue ? STATUS_STYLE.missing : STATUS_STYLE.partial)}>{item.overdue ? "overdue" : item.status.replace("_", " ")}</span></p>
                         <p className="mt-1 text-[11px] text-[#55534b]">{item.severity} · {item.source.replace("_", " ")}{item.requirement ? ` · ${item.requirement}` : ""}{item.due_at ? ` · due ${day(item.due_at)}` : ""}</p>
-                        {item.root_cause ? <p className="mt-1 text-[11px]">Cause: {item.root_cause}. Action: {item.corrective_action}.</p> : null}
+                        {item.root_cause ? <p className="mt-1 text-[11px]">Cause: {sentence(item.root_cause)} Action: {sentence(item.corrective_action)}</p> : null}
                         {item.effectiveness_note ? <p className="mt-1 text-[11px] text-[#55534b]">Effectiveness review: {item.effectiveness_note}</p> : null}
                         {item.status === "open" ? (
                           <form className="mt-2 grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-[1fr_1fr_140px_140px_auto]" onSubmit={(event) => { event.preventDefault(); act({ action: "plan_corrective_action", id: item.id, rootCause: entry.rootCause, correctiveAction: entry.correctiveAction, ownerId: entry.ownerId, dueAt: toIso(entry.dueAt) }, "Corrective action planned"); }}>
