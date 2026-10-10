@@ -19,7 +19,8 @@ const level = (value: number, label: string) => {
   if (!Number.isInteger(value) || value < 1 || value > 5) throw userError(`${label} must be between 1 and 5`);
 };
 
-export const ASSET_TYPES = ["service", "application", "data", "infrastructure", "ai_system", "repository", "supplier", "people", "site"] as const;
+/** The threat library suggests threats by asset type, so these names are the ones it uses ("ai_model", "vendor"). */
+export const ASSET_TYPES = ["service", "application", "data", "infrastructure", "ai_model", "repository", "vendor", "people", "site"] as const;
 export const ASSET_CRITICALITIES = ["low", "medium", "high", "critical"] as const;
 
 /**
