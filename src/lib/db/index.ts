@@ -1,7 +1,7 @@
 import "server-only";
 
 import { join } from "node:path";
-import { bootstrapTenant, shouldSeed } from "@/lib/db/bootstrap";
+import { bootstrapTenant, seedMode } from "@/lib/db/bootstrap";
 import { createPostgresDb } from "@/lib/db/postgres";
 import { seedDatabase } from "@/lib/db/seed";
 import { createSqliteDb } from "@/lib/db/sqlite";
@@ -40,7 +40,8 @@ async function open(): Promise<Db> {
   } else {
     db = createSqliteDb(process.env.KONTROL_DATABASE_PATH ?? join(process.cwd(), ".data", "kontrol.db"));
   }
-  if (shouldSeed()) await seedDatabase(db);
+  const seed = seedMode();
+  if (seed !== "none") await seedDatabase(db, seed);
   else await bootstrapTenant(db, process.env, DEFAULT_TENANT_ID);
   await assertIsolation(db);
   return db;

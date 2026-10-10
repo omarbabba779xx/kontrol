@@ -1,14 +1,22 @@
 import { randomUUID } from "node:crypto";
 import type { Db } from "@/lib/db/types";
 
-/** Seeds the demonstration tenant once. Safe to call repeatedly. */
-export async function seedDatabase(db: Db) {
+/**
+ * Seeds the demonstration tenant once. Safe to call repeatedly. With `mode` "empty" only the organisation and its administrator
+ * are created, under neutral names, so that a case can be worked from a clean slate.
+ */
+export async function seedDatabase(db: Db, mode: "sample" | "empty" = "sample") {
   const system = db.system();
   const existing = await system.get<{ count: number }>("SELECT COUNT(*) AS count FROM tenants");
   if (Number(existing?.count ?? 0) > 0) return;
 
   await system.transaction(async (tx) => {
     const now = new Date().toISOString();
+    if (mode === "empty") {
+      await tx.run("INSERT INTO tenants (id,name,region,created_at) VALUES (?,?,?,?)", "tenant_acme", "Organisation", "EU", now);
+      await tx.run("INSERT INTO users (id,tenant_id,email,name,role,created_at) VALUES (?,?,?,?,?,?)", "usr_leila", "tenant_acme", "administrator@organisation.example", "Administrator", "admin", now);
+      return;
+    }
     await tx.run("INSERT INTO tenants (id,name,region,created_at) VALUES (?,?,?,?)", "tenant_acme", "Acme Financial Europe", "EU", now);
     await tx.run("INSERT INTO users (id,tenant_id,email,name,role,created_at) VALUES (?,?,?,?,?,?)", "usr_leila", "tenant_acme", "leila@acme.example", "Leila Mansour", "admin", now);
     await tx.run("INSERT INTO users (id,tenant_id,email,name,role,created_at) VALUES (?,?,?,?,?,?)", "usr_maya", "tenant_acme", "maya@acme.example", "Maya Chen", "risk_owner", now);
