@@ -81,7 +81,7 @@ const day = (value: string | null) => (value ? value.slice(0, 10) : "never");
 function Users({ snapshot, act, pending }: { snapshot: Snapshot; act: Act; pending: boolean }) {
   const [form, setForm] = useState({ email: "", name: "", role: "viewer" as Role, external: false });
   return (
-    <div className="grid gap-8 xl:grid-cols-[320px_1fr]">
+    <div className="grid grid-cols-1 gap-8 xl:grid-cols-[320px_minmax(0,1fr)]">
       <form className="space-y-2 border border-[#cbc7bd] p-4" onSubmit={(event) => { event.preventDefault(); act({ action: "invite_user", ...form }, "User created", () => setForm({ email: "", name: "", role: "viewer", external: false })); }}>
         <MicroLabel>Add a user</MicroLabel>
         <Input aria-label="Full name" placeholder="Full name" value={form.name} onChange={(event) => setForm({ ...form, name: event.target.value })} className={field} />
@@ -111,7 +111,7 @@ function Keys({ snapshot, act, pending, newKey, setNewKey }: { snapshot: Snapsho
   return (
     <div className="space-y-6">
       {newKey ? <div role="status" className="border border-[#245c3f] bg-[#dcebe1] p-4 text-[12px] text-[#173d2a]"><p className="font-semibold">Copy this key now. It is shown once and cannot be recovered.</p><div className="mt-2 flex flex-wrap items-center gap-2"><code className="break-all bg-white px-2 py-1 font-mono text-[12px]">{newKey}</code><Button type="button" variant="outline" onClick={() => void navigator.clipboard?.writeText(newKey)} className="h-7 rounded-none border-[#245c3f] bg-transparent text-[11px] text-[#245c3f]"><Copy className="me-1 h-3 w-3" aria-hidden="true" />Copy</Button><Button type="button" variant="ghost" onClick={() => setNewKey(null)} className="h-7 rounded-none text-[11px]">I have saved it</Button></div><p className="mt-2 text-[11px]">Use it as <code className="font-mono">Authorization: Bearer …</code>. It acts as you, with the role below, and stops working when it expires, is revoked, or you are disabled.</p></div> : null}
-      <div className="grid gap-8 xl:grid-cols-[320px_1fr]">
+      <div className="grid grid-cols-1 gap-8 xl:grid-cols-[320px_minmax(0,1fr)]">
         <form className="space-y-2 border border-[#cbc7bd] p-4" onSubmit={(event) => { event.preventDefault(); act({ action: "create_api_key", ...form }, "API key created", (result) => setNewKey(String(result.token ?? ""))); }}>
           <MicroLabel>Create an API key</MicroLabel>
           <Input aria-label="Key name" placeholder="Name (for example CI pipeline)" value={form.name} onChange={(event) => setForm({ ...form, name: event.target.value })} className={field} />
@@ -284,7 +284,7 @@ function Notifications({ pending }: { pending: boolean }) {
       <p className="max-w-3xl text-[12px] text-[#55534b]">Channels receive the events you choose: tasks assigned or overdue, new high-severity findings, risk acceptances awaiting a decision, attestations and policies falling due, failing connectors. Destinations are encrypted and never shown again; deliveries retry with back-off and never follow redirects or reach private networks.</p>
       {message ? <p role="status" className="text-[11px] font-medium text-[#34332e]">{message}</p> : null}
       {secret ? <div role="status" className="border border-[#245c3f] bg-[#dcebe1] p-4 text-[12px] text-[#173d2a]"><p className="font-semibold">Signing secret. Shown once: store it in the receiving system.</p><code className="mt-2 block break-all bg-white px-2 py-1 font-mono text-[12px]">{secret}</code><p className="mt-2 text-[11px]">Each request carries <code className="font-mono">X-Kontrol-Timestamp</code> and <code className="font-mono">X-Kontrol-Signature: sha256=HMAC(secret, timestamp.body)</code>.</p><Button type="button" variant="ghost" onClick={() => setSecret(null)} className="mt-1 h-7 rounded-none text-[11px]">I have stored it</Button></div> : null}
-      <div className="grid gap-8 xl:grid-cols-[360px_1fr]">
+      <div className="grid grid-cols-1 gap-8 xl:grid-cols-[360px_minmax(0,1fr)]">
         <form className="h-fit space-y-2 border border-[#cbc7bd] p-4" onSubmit={(event) => { event.preventDefault(); create(); }}>
           <MicroLabel>Add a channel</MicroLabel>
           <select aria-label="Channel type" value={kind} onChange={(event) => { setKind(event.target.value); setValues({}); }} className={cn(select, "w-full")}>{Object.entries(CHANNEL_KINDS).map(([key, item]) => <option key={key} value={key}>{item.title}</option>)}</select>

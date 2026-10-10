@@ -59,7 +59,7 @@ export function TasksBoard() {
         {failed ? <div role="alert" className="mb-4 border border-[#b8322a] bg-[#f5e5e1] p-3 text-[11px] text-[#9f2923]">{status}</div> : null}
         <div className="mb-6 grid grid-cols-3 border border-[#cbc7bd]">{[["Open", counts.open], ["Overdue", counts.overdue], ["Done", counts.done]].map(([label, value]) => <div key={label} className="border-e border-[#cbc7bd] p-4 last:border-e-0"><MicroLabel>{label}</MicroLabel><p className={cn("mt-1 text-2xl font-semibold", label === "Overdue" && Number(value) > 0 && "text-[#b8322a]")}>{value}</p></div>)}</div>
 
-        <div className="grid gap-8 xl:grid-cols-[320px_1fr]">
+        <div className="grid grid-cols-1 gap-8 xl:grid-cols-[320px_minmax(0,1fr)]">
           <form className="h-fit space-y-2 border border-[#cbc7bd] p-4" onSubmit={(event) => { event.preventDefault(); act({ action: "create", title: form.title, description: form.description || undefined, priority: form.priority, dueAt: form.dueAt ? `${form.dueAt}T12:00:00.000Z` : undefined, assigneeId: form.assigneeId || undefined }, "Task created", () => setForm({ title: "", description: "", priority: "medium", dueAt: "", assigneeId: "" })); }}>
             <MicroLabel>New task</MicroLabel>
             <Input aria-label="Task title" placeholder="What needs to be done" value={form.title} onChange={(event) => setForm({ ...form, title: event.target.value })} className={field} />

@@ -83,7 +83,7 @@ function Register({ snapshot, act, pending }: { snapshot: Snapshot; act: Act; pe
   const needsDate = (value: string) => `${value}T00:00:00.000Z`;
   const subs = form.subcontractors.split(",").map((item) => item.trim()).filter(Boolean).map((item) => { const [subName, country] = item.split(":").map((part) => part.trim()); return country ? { name: subName, country: country.toUpperCase() } : { name: subName }; });
   return (
-    <div className="grid gap-8 xl:grid-cols-[340px_1fr]">
+    <div className="grid grid-cols-1 gap-8 xl:grid-cols-[340px_minmax(0,1fr)]">
       <div className="space-y-4">
         <form className="space-y-2 border border-[#cbc7bd] p-4" onSubmit={(event) => { event.preventDefault(); act({ action: "create_provider", name: provider.name, lei: provider.lei || undefined, country: provider.country.toUpperCase(), providerType: provider.providerType }, "Provider added", () => setProvider({ name: "", lei: "", country: "", providerType: "third_party" })); }}>
           <MicroLabel>Add an ICT provider</MicroLabel>
@@ -131,7 +131,7 @@ function Register({ snapshot, act, pending }: { snapshot: Snapshot; act: Act; pe
 function Findings({ snapshot }: { snapshot: Snapshot }) {
   const c = snapshot.concentration;
   return (
-    <div className="grid gap-8 xl:grid-cols-[360px_1fr]">
+    <div className="grid grid-cols-1 gap-8 xl:grid-cols-[360px_minmax(0,1fr)]">
       <div className="space-y-3 border border-[#cbc7bd] p-4">
         <MicroLabel>ICT concentration</MicroLabel>
         <p className="text-[12px] text-[#55534b]">Herfindahl index over critical or important arrangements by provider (0 to 10,000; 1,500 moderate, 2,500 high). Not meaningful below three critical arrangements.</p>

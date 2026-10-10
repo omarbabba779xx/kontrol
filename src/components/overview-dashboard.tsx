@@ -73,7 +73,7 @@ export function OverviewDashboard() {
         <Stat label="Evidence integrity" value="19 / 22 current" note="3 broken chains · 1 material" urgent />
       </section>
 
-      <section className="grid border-b border-[#cbc7bd] xl:grid-cols-[1fr_330px]">
+      <section className="grid grid-cols-1 border-b border-[#cbc7bd] xl:grid-cols-[1fr_330px]">
         <div className="min-w-0 border-b border-[#cbc7bd] xl:border-b-0 xl:border-e">
           <div className="flex items-center justify-between border-b border-[#cbc7bd] px-5 py-3 sm:px-7">
             <div><MicroLabel>Impact trace / shortest material path</MicroLabel><p className="mt-1 text-[12px] text-[#5f5c55]">Select an object to inspect the assertion and its basis.</p></div>
@@ -94,7 +94,7 @@ export function OverviewDashboard() {
               ))}
             </div>
           </div>
-          <div className="grid border-t border-[#cbc7bd] md:grid-cols-[170px_1fr]">
+          <div className="grid grid-cols-1 border-t border-[#cbc7bd] md:grid-cols-[170px_minmax(0,1fr)]">
             <div className="border-b border-[#cbc7bd] bg-[#ece8de] p-5 md:border-b-0 md:border-e"><MicroLabel>Why this path matters</MicroLabel><div className="mt-4 flex items-center gap-2"><GitCommitHorizontal className="h-4 w-4 text-[#e4582f]" /><span className="font-mono text-[11px] text-[#5e5b54]">6 hops · 2 exceptions</span></div></div>
             <p className="p-5 text-[13px] leading-5 text-[#4f4d47]">The new oversight obligation is not the finding by itself. Material exposure appears only when it is connected to a critical credit process, a high automation-bias risk, a partially operating override control and stale operating evidence.</p>
           </div>
@@ -108,10 +108,10 @@ export function OverviewDashboard() {
         </aside>
       </section>
 
-      <section className="grid border-b border-[#cbc7bd] xl:grid-cols-[1fr_1fr]">
+      <section className="grid grid-cols-1 border-b border-[#cbc7bd] xl:grid-cols-[1fr_1fr]">
         <div className="border-b border-[#cbc7bd] xl:border-b-0 xl:border-e">
           <div className="border-b border-[#cbc7bd] px-5 py-3 sm:px-7"><MicroLabel>Decision calculus</MicroLabel></div>
-          <div className="grid sm:grid-cols-[1fr_190px]">
+          <div className="grid grid-cols-1 sm:grid-cols-[1fr_190px]">
             <div className="p-5 sm:p-7">
               <div className="flex items-start gap-3"><span className="grid h-8 w-8 shrink-0 place-items-center border border-[#e4582f] text-[#b9401e]"><Scale className="h-4 w-4" /></span><div><h3 className="text-[16px] font-medium tracking-[-.025em]">Approve with two pre-conditions</h3><p className="mt-2 max-w-xl text-[12px] leading-5 text-[#68655e]">The control design supports human intervention, but current evidence cannot prove that overrides operate consistently. Expansion is acceptable only after the missing log is restored and second-line sampling is activated.</p></div></div>
               <div className="mt-6 space-y-2">{["Restore Aug–Sep override evidence and validate completeness", "Activate weekly 10% override-quality sampling", "Limit rollout to existing product bands until closure"].map((item, index) => <div key={item} className="grid grid-cols-[24px_1fr_auto] items-center border-t border-[#d7d3c9] py-2.5 text-[11px]"><span className="font-mono text-[#e4582f]">0{index + 1}</span><span className="text-[#45433e]">{item}</span><span className="font-mono text-[10px] uppercase text-[#89867e]">Mandatory</span></div>)}</div>
@@ -124,11 +124,11 @@ export function OverviewDashboard() {
           <div className="divide-y divide-[#cbc7bd]">{[
             { icon: TriangleAlert, code: "C-01", title: "Policy says every override is justified", body: "Production telemetry shows 18.4% of overrides without a reason code.", source: "Policy v4.2 ↔ Snowflake extract" },
             { icon: CircleAlert, code: "C-02", title: "Control marked effective", body: "The last operating sample is 60 days old and misses two reporting periods.", source: "CTL-014 ↔ EVD-2029" },
-          ].map((item) => <div key={item.code} className="grid grid-cols-[34px_1fr] gap-3 p-5"><span className="grid h-8 w-8 place-items-center border border-[#b8322a] text-[#b8322a]"><item.icon className="h-4 w-4" /></span><div><div className="flex items-center justify-between"><h3 className="text-[13px] font-semibold text-[#2b2a26]">{item.title}</h3><span className="font-mono text-[10px] text-[#a09d95]">{item.code}</span></div><p className="mt-1.5 text-[11px] leading-4 text-[#716e66]">{item.body}</p><p className="mt-2 font-mono text-[10px] uppercase tracking-wider text-[#9c3f35]">{item.source}</p></div></div>)}</div>
+          ].map((item) => <div key={item.code} className="grid grid-cols-[34px_minmax(0,1fr)] gap-3 p-5"><span className="grid h-8 w-8 place-items-center border border-[#b8322a] text-[#b8322a]"><item.icon className="h-4 w-4" /></span><div><div className="flex items-center justify-between"><h3 className="text-[13px] font-semibold text-[#2b2a26]">{item.title}</h3><span className="font-mono text-[10px] text-[#a09d95]">{item.code}</span></div><p className="mt-1.5 text-[11px] leading-4 text-[#716e66]">{item.body}</p><p className="mt-2 font-mono text-[10px] uppercase tracking-wider text-[#9c3f35]">{item.source}</p></div></div>)}</div>
         </div>
       </section>
 
-      <section className="grid lg:grid-cols-[1fr_330px]">
+      <section className="grid grid-cols-1 lg:grid-cols-[1fr_330px]">
         <div className="border-b border-[#cbc7bd] lg:border-b-0 lg:border-e">
           <div className="flex items-center justify-between border-b border-[#cbc7bd] px-5 py-3 sm:px-7"><MicroLabel>Evidence chain</MicroLabel><span className="font-mono text-[10px] text-[#85827a]">IMMUTABLE LOG · 7 EVENTS</span></div>
           <div className="overflow-x-auto p-5 sm:p-7"><div className="flex min-w-[680px] items-start">{[

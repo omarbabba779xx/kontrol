@@ -82,7 +82,7 @@ export function RiskRegister() {
             <div className="grid gap-px border border-[#cbc7bd] bg-[#cbc7bd] sm:grid-cols-4 lg:grid-cols-7">
               {([["Open risks", s.open], ["Critical residual", s.critical], ["High residual", s.high], ["Untreated", s.untreated], ["Above appetite", s.aboveAppetite], ["Acceptance lapsed", s.acceptanceExpired], ["Quantified", s.quantified]] as const).map(([name, value]) => <div key={name} className="bg-[#f4f1e9] p-4"><MicroLabel>{name}</MicroLabel><p className={cn("mt-1 font-mono text-[22px] font-semibold", (name === "Critical residual" || name === "Acceptance lapsed") && value > 0 && "text-[#b8322a]")}>{value}</p></div>)}
             </div>
-            <div className="grid gap-8 xl:grid-cols-[360px_1fr]">
+            <div className="grid grid-cols-1 gap-8 xl:grid-cols-[360px_minmax(0,1fr)]">
               <div className="space-y-4">
                 <div className="border border-[#cbc7bd] p-4">
                   <div className="flex items-center justify-between"><MicroLabel>Heat map</MicroLabel>

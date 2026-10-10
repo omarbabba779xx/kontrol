@@ -59,6 +59,11 @@ const navigation = [
   { name: "AI governance", code: "19", href: "/ai-governance", icon: Bot },
 ];
 
+/** A page owns its own path and anything below it: "/audit" must not claim "/audits". */
+function owns(href: string, pathname: string) {
+  return href === "/" ? pathname === "/" : pathname === href || pathname.startsWith(`${href}/`);
+}
+
 /** External auditors only see the audit workspace; everyone else sees the full navigation. */
 function useVisibleNavigation() {
   const [external, setExternal] = useState(false);
@@ -165,7 +170,7 @@ function Navigation({ onNavigate }: { onNavigate?: () => void }) {
       <div key={section.title} className={cn("border-t border-[#d7d3c9]", index > 0 && "mt-6")}>
         {index > 0 ? <p className="px-2 py-2 font-mono text-[10px] uppercase tracking-[.16em] text-[#63615a]">{section.title}</p> : null}
         {section.items.map((item) => {
-          const active = item.href === "/" ? pathname === "/" : pathname.startsWith(item.href);
+          const active = owns(item.href, pathname);
           return (
             <Link
               key={item.href}
@@ -245,13 +250,13 @@ export function PlatformShell({ children }: { children: React.ReactNode }) {
 
 export function PageHeading({ index, title, description, meta, action }: { index: string; title: string; description: string; meta?: string; action?: React.ReactNode }) {
   const pathname = usePathname();
-  const page = navigation.find((item) => (item.href === "/" ? pathname === "/" : pathname.startsWith(item.href)));
+  const page = navigation.find((item) => owns(item.href, pathname));
   const code = page ? `${page.code} / ${navigation.length}` : index;
   return (
-    <div className="grid gap-5 border-b border-[#cbc7bd] px-5 py-7 sm:px-7 lg:grid-cols-[1fr_auto] lg:px-9">
+    <div className="grid grid-cols-1 gap-5 border-b border-[#cbc7bd] px-5 py-7 sm:px-7 lg:grid-cols-[1fr_auto] lg:px-9">
       <div className="flex gap-4">
         <span className="mt-2 whitespace-nowrap font-mono text-[11px] text-[#a8391a]">{code}</span>
-        <div><h1 className="font-display text-[40px] leading-[.95] tracking-[-.02em] text-[#171713] sm:text-[54px]">{title}</h1><p className="mt-4 max-w-2xl text-[14px] leading-6 text-[#5f5c55]">{description}</p></div>
+        <div><h1 className="font-display pb-1 text-[40px] leading-[1.08] tracking-[-.02em] text-[#171713] sm:text-[54px]">{title}</h1><p className="mt-4 max-w-2xl text-[14px] leading-6 text-[#5f5c55]">{description}</p></div>
       </div>
       <div className="flex items-end gap-3">{meta ? <span role="status" aria-live="polite" className="font-mono text-[10px] uppercase tracking-[.13em] text-[#63615a]">{meta}</span> : null}{action}</div>
     </div>

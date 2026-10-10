@@ -147,7 +147,7 @@ export function IsmsWorkspace() {
 
             {tab === "Context" ? (
               <div className="space-y-4">
-                <form className="grid gap-2 border border-[#cbc7bd] bg-[#f8f6f0] p-4 sm:grid-cols-[160px_1fr_1fr_auto]" onSubmit={(event) => { event.preventDefault(); act({ action: "save_context", ...context, requirement: context.requirement || undefined }, "Recorded", () => setContext({ ...context, title: "", detail: "", requirement: "" })); }}>
+                <form className="grid grid-cols-1 gap-2 border border-[#cbc7bd] bg-[#f8f6f0] p-4 sm:grid-cols-[160px_1fr_1fr_auto]" onSubmit={(event) => { event.preventDefault(); act({ action: "save_context", ...context, requirement: context.requirement || undefined }, "Recorded", () => setContext({ ...context, title: "", detail: "", requirement: "" })); }}>
                   <select aria-label="Kind" value={context.kind} onChange={(event) => setContext({ ...context, kind: event.target.value as ContextItem["kind"] })} className={select}>{Object.entries(KIND_LABEL).map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select>
                   <Input aria-label="Title" required minLength={3} value={context.title} onChange={(event) => setContext({ ...context, title: event.target.value })} placeholder={context.kind === "interested_party" ? "Who (customers, regulator, staff…)" : "The issue"} className={field} />
                   <Input aria-label={context.kind === "interested_party" ? "Requirement" : "Detail"} required={context.kind === "interested_party"} value={context.kind === "interested_party" ? context.requirement : context.detail} onChange={(event) => setContext(context.kind === "interested_party" ? { ...context, requirement: event.target.value } : { ...context, detail: event.target.value })} placeholder={context.kind === "interested_party" ? "What they require" : "Why it matters to security"} className={field} />
@@ -185,7 +185,7 @@ export function IsmsWorkspace() {
 
             {tab === "Objectives" ? (
               <div className="space-y-4">
-                <form className="grid gap-2 border border-[#cbc7bd] bg-[#f8f6f0] p-4 sm:grid-cols-2 lg:grid-cols-[1.2fr_1.2fr_0.8fr_0.8fr_0.7fr_auto]" onSubmit={(event) => { event.preventDefault(); act({ action: "save_objective", title: objective.title, measure: objective.measure, target: objective.target, ownerId: objective.ownerId || undefined, dueAt: toIso(objective.dueAt) }, "Objective set", () => setObjective({ title: "", measure: "", target: "", ownerId: "", dueAt: "" })); }}>
+                <form className="grid grid-cols-1 gap-2 border border-[#cbc7bd] bg-[#f8f6f0] p-4 sm:grid-cols-2 lg:grid-cols-[1.2fr_1.2fr_0.8fr_0.8fr_0.7fr_auto]" onSubmit={(event) => { event.preventDefault(); act({ action: "save_objective", title: objective.title, measure: objective.measure, target: objective.target, ownerId: objective.ownerId || undefined, dueAt: toIso(objective.dueAt) }, "Objective set", () => setObjective({ title: "", measure: "", target: "", ownerId: "", dueAt: "" })); }}>
                   <Input aria-label="Objective" required minLength={3} value={objective.title} onChange={(event) => setObjective({ ...objective, title: event.target.value })} placeholder="Objective" className={field} />
                   <Input aria-label="Measure" required minLength={3} value={objective.measure} onChange={(event) => setObjective({ ...objective, measure: event.target.value })} placeholder="How it is measured" className={field} />
                   <Input aria-label="Target" required value={objective.target} onChange={(event) => setObjective({ ...objective, target: event.target.value })} placeholder="Target" className={field} />
@@ -197,7 +197,7 @@ export function IsmsWorkspace() {
                   {data.objectives.map((item) => {
                     const entry = measure[item.id] ?? { value: "", status: "on_track" };
                     return (
-                      <li key={item.id} className="grid gap-2 p-3 text-[12px] lg:grid-cols-[1fr_auto]">
+                      <li key={item.id} className="grid grid-cols-1 gap-2 p-3 text-[12px] lg:grid-cols-[1fr_auto]">
                         <span>
                           <span className="font-semibold">{item.title}</span> <span className={cn("ms-1 px-1 font-mono text-[10px] uppercase", item.overdue ? STATUS_STYLE.missing : item.status === "achieved" ? STATUS_STYLE.met : STATUS_STYLE.partial)}>{item.overdue ? "overdue" : item.status.replace("_", " ")}</span>
                           <span className="block text-[11px] text-[#55534b]">{item.measure} · target {item.target} · latest {item.current_value || "not measured"}{item.measured_at ? ` (${day(item.measured_at)})` : ""} · due {day(item.due_at)}</span>
@@ -217,7 +217,7 @@ export function IsmsWorkspace() {
 
             {tab === "Reviews" ? (
               <div className="space-y-4">
-                <form className="grid gap-2 border border-[#cbc7bd] bg-[#f8f6f0] p-4 sm:grid-cols-[160px_1fr_auto]" onSubmit={(event) => { event.preventDefault(); act({ action: "prepare_review", heldAt: toIso(review.heldAt), attendees: review.attendees }, "Review prepared with today's inputs", () => setReview({ heldAt: "", attendees: "" })); }}>
+                <form className="grid grid-cols-1 gap-2 border border-[#cbc7bd] bg-[#f8f6f0] p-4 sm:grid-cols-[160px_1fr_auto]" onSubmit={(event) => { event.preventDefault(); act({ action: "prepare_review", heldAt: toIso(review.heldAt), attendees: review.attendees }, "Review prepared with today's inputs", () => setReview({ heldAt: "", attendees: "" })); }}>
                   <Input aria-label="Review date" type="date" required value={review.heldAt} onChange={(event) => setReview({ ...review, heldAt: event.target.value })} className={field} />
                   <Input aria-label="Attendees" required minLength={3} value={review.attendees} onChange={(event) => setReview({ ...review, attendees: event.target.value })} placeholder="Attendees" className={field} />
                   <Button type="submit" variant="outline" disabled={isPending} className={button}>Prepare review</Button>
@@ -247,7 +247,7 @@ export function IsmsWorkspace() {
 
             {tab === "Nonconformities" ? (
               <div className="space-y-4">
-                <form className="grid gap-2 border border-[#cbc7bd] bg-[#f8f6f0] p-4 sm:grid-cols-2 lg:grid-cols-[150px_120px_1fr_180px_auto]" onSubmit={(event) => { event.preventDefault(); act({ action: "raise_nonconformity", source: nc.source, severity: nc.severity, title: nc.title, requirement: nc.requirement || undefined }, "Nonconformity raised", () => setNc({ ...nc, title: "", requirement: "" })); }}>
+                <form className="grid grid-cols-1 gap-2 border border-[#cbc7bd] bg-[#f8f6f0] p-4 sm:grid-cols-2 lg:grid-cols-[150px_120px_1fr_180px_auto]" onSubmit={(event) => { event.preventDefault(); act({ action: "raise_nonconformity", source: nc.source, severity: nc.severity, title: nc.title, requirement: nc.requirement || undefined }, "Nonconformity raised", () => setNc({ ...nc, title: "", requirement: "" })); }}>
                   <select aria-label="Source" value={nc.source} onChange={(event) => setNc({ ...nc, source: event.target.value })} className={select}>{["internal_audit", "external_audit", "incident", "monitoring", "management_review", "other"].map((value) => <option key={value} value={value}>{value.replace("_", " ")}</option>)}</select>
                   <select aria-label="Severity" value={nc.severity} onChange={(event) => setNc({ ...nc, severity: event.target.value })} className={select}>{["major", "minor", "observation"].map((value) => <option key={value} value={value}>{value}</option>)}</select>
                   <Input aria-label="Finding" required minLength={3} value={nc.title} onChange={(event) => setNc({ ...nc, title: event.target.value })} placeholder="What was found" className={field} />
@@ -264,7 +264,7 @@ export function IsmsWorkspace() {
                         {item.root_cause ? <p className="mt-1 text-[11px]">Cause: {item.root_cause}. Action: {item.corrective_action}.</p> : null}
                         {item.effectiveness_note ? <p className="mt-1 text-[11px] text-[#55534b]">Effectiveness review: {item.effectiveness_note}</p> : null}
                         {item.status === "open" ? (
-                          <form className="mt-2 grid gap-2 sm:grid-cols-2 lg:grid-cols-[1fr_1fr_140px_140px_auto]" onSubmit={(event) => { event.preventDefault(); act({ action: "plan_corrective_action", id: item.id, rootCause: entry.rootCause, correctiveAction: entry.correctiveAction, ownerId: entry.ownerId, dueAt: toIso(entry.dueAt) }, "Corrective action planned"); }}>
+                          <form className="mt-2 grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-[1fr_1fr_140px_140px_auto]" onSubmit={(event) => { event.preventDefault(); act({ action: "plan_corrective_action", id: item.id, rootCause: entry.rootCause, correctiveAction: entry.correctiveAction, ownerId: entry.ownerId, dueAt: toIso(entry.dueAt) }, "Corrective action planned"); }}>
                             <Input aria-label="Root cause" required minLength={10} value={entry.rootCause} onChange={(event) => setPlanField(item.id, { rootCause: event.target.value })} placeholder="Root cause" className={field} />
                             <Input aria-label="Corrective action" required minLength={10} value={entry.correctiveAction} onChange={(event) => setPlanField(item.id, { correctiveAction: event.target.value })} placeholder="Action that removes the cause" className={field} />
                             <select aria-label="Action owner" required value={entry.ownerId} onChange={(event) => setPlanField(item.id, { ownerId: event.target.value })} className={select}>{owners}{people.map((person) => <option key={person.id} value={person.id}>{person.name}</option>)}</select>

@@ -252,7 +252,7 @@ function Frameworks({ snapshot, detail, active, choose, setScope, review, runLic
       <div className="flex flex-wrap gap-2">{snapshot.adoptions.map((item) => <button key={item.frameworkId} type="button" aria-pressed={active === item.frameworkId} onClick={() => choose(item.frameworkId)} className={cn("border px-3 py-1.5 text-[12px]", active === item.frameworkId ? "border-[#171713] bg-[#171713] text-white" : "border-[#cbc7bd] hover:border-[#171713]")}>{SHORT[item.frameworkId]}</button>)}</div>
       {!detail ? <p className="text-[11px] text-[#63615a]">Loading…</p> : (
         <>
-          <div className="grid gap-4 border border-[#cbc7bd] p-5 lg:grid-cols-[1fr_auto]">
+          <div className="grid grid-cols-1 gap-4 border border-[#cbc7bd] p-5 lg:grid-cols-[1fr_auto]">
             <div><p className="text-[14px] font-semibold">{detail.framework.name} <span className="font-normal text-[#63615a]">{detail.framework.version}</span></p><p className="text-[11px] text-[#5f5d56]">{detail.framework.granularity}</p><Bar value={detail.score} className="mt-3 max-w-md" /><p className="mt-2 font-mono text-[11px]">{detail.score}% · {detail.readiness} · {detail.verifiedShare}% backed by collected evidence · {detail.notApplicable} excluded</p><p className="mt-1 font-mono text-[10px] text-[#5f5d56]">Mapping: {detail.mapping.links} links · {detail.mapping.published} from a published source · {detail.mapping.validated} validated · {detail.mapping.rejected} rejected · {detail.mapping.added} added · {detail.mapping.reviewedShare}% reviewed · {detail.mapping.suggested} published suggestion(s) to review</p></div>
             <div className="flex flex-wrap items-start gap-2">
               <a href={`/api/compliance/report?framework=${active}`} download className="inline-flex h-8 items-center border border-[#171713] px-3 text-[11px] font-semibold hover:bg-[#171713] hover:text-white"><FileText className="me-1.5 h-3 w-3" aria-hidden="true" />PDF</a>
@@ -406,7 +406,7 @@ function Exceptions({ snapshot, act, pending }: { snapshot: Snapshot; act: (body
   const [notes, setNotes] = useState<Record<string, string>>({});
   const valid = form.title.length >= 5 && form.justification.length >= 20 && form.compensatingControls.length >= 10;
   return (
-    <div className="grid gap-8 xl:grid-cols-[360px_1fr]">
+    <div className="grid grid-cols-1 gap-8 xl:grid-cols-[360px_minmax(0,1fr)]">
       <form className="space-y-2 border border-[#cbc7bd] p-4" onSubmit={(event) => { event.preventDefault(); act({ action: "request_exception", ucCode: form.ucCode, title: form.title, justification: form.justification, compensatingControls: form.compensatingControls, riskLevel: form.riskLevel, expiresAt: new Date(Date.now() + form.days * 86_400_000).toISOString() }, "Exception request created", () => setForm({ ...form, title: "", justification: "", compensatingControls: "" })); }}>
         <MicroLabel>Request a risk acceptance</MicroLabel>
         <select aria-label="Control" value={form.ucCode} onChange={(event) => setForm({ ...form, ucCode: event.target.value })} className={cn(select, "w-full")}>{snapshot.controls.map((control) => <option key={control.code} value={control.code}>{control.code} — {control.title}</option>)}</select>
@@ -434,7 +434,7 @@ function Exceptions({ snapshot, act, pending }: { snapshot: Snapshot; act: (body
 function Policies({ snapshot, act, pending }: { snapshot: Snapshot; act: (body: Record<string, unknown>, success: string, after?: () => void) => void; pending: boolean }) {
   const [form, setForm] = useState({ title: "", version: "1.0", status: "draft", ucCode: "UC-GOV-01", reviewDays: 365, content: "" });
   return (
-    <div className="grid gap-8 xl:grid-cols-[360px_1fr]">
+    <div className="grid grid-cols-1 gap-8 xl:grid-cols-[360px_minmax(0,1fr)]">
       <form className="space-y-2 border border-[#cbc7bd] p-4" onSubmit={(event) => { event.preventDefault(); act({ action: "save_policy", title: form.title, version: form.version, status: form.status, ucCodes: [form.ucCode], nextReview: new Date(Date.now() + form.reviewDays * 86_400_000).toISOString(), content: form.content || undefined }, "Policy recorded", () => setForm({ ...form, title: "", content: "" })); }}>
         <MicroLabel>Record a policy</MicroLabel>
         <Input aria-label="Policy title" placeholder="Policy title" value={form.title} onChange={(event) => setForm({ ...form, title: event.target.value })} className={field} />
