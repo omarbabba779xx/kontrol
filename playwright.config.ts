@@ -14,7 +14,8 @@ export default defineConfig({
   workers: 1,
   retries: process.env.CI ? 1 : 0,
   reporter: process.env.CI ? [["github"], ["html", { open: "never" }]] : "list",
-  use: { baseURL: `http://localhost:${port}`, trace: "retain-on-failure", screenshot: "only-on-failure" },
+  // Entrance animations are switched off so that axe never measures a half-faded page.
+  use: { baseURL: `http://localhost:${port}`, trace: "retain-on-failure", screenshot: "only-on-failure", reducedMotion: "reduce" },
   projects: [{ name: "chromium", use: { ...devices["Desktop Chrome"], channel: process.env.PW_CHANNEL || undefined } }],
   webServer: { command: "node e2e/start.mjs", url: `http://localhost:${port}/api/health`, reuseExistingServer: false, timeout: 240_000, stdout: "pipe" },
 });

@@ -17,8 +17,8 @@ type Trace = {
   breaks: { risksWithoutControl: string[]; risksWithoutAsset: string[]; mitigationWithoutPlan: string[]; untreated: string[]; controlsNotLinkedToARisk: string[] };
 };
 
-const select = "h-8 border border-[#cbc7bd] bg-transparent px-2 text-[10px] focus-visible:outline-2 focus-visible:outline-[#171713]";
-const button = "h-8 rounded-none border-[#171713] bg-transparent text-[9px]";
+const select = "h-8 border border-[#cbc7bd] bg-transparent px-2 text-[12px] focus-visible:outline-2 focus-visible:outline-[#171713]";
+const button = "h-8 rounded-none border-[#171713] bg-transparent text-[11px]";
 const levels = [1, 2, 3, 4, 5].map((value) => <option key={value} value={value}>{value}</option>);
 
 function useView<T>(url: string, version: number) {
@@ -38,12 +38,12 @@ export function RiskIdentification({ act, pending, nist, version }: { act: Act; 
   const { data, error } = useView<Identification>("/api/risk-register?view=identification", version);
   const [valuation, setValuation] = useState<Record<string, Valuation>>({});
   const [scenario, setScenario] = useState<Record<string, { threatId: string; likelihood: number; initiation: number; adverse: number }>>({});
-  if (error) return <p role="alert" className="border border-[#b8322a] bg-[#f5e5e1] p-3 text-[9px] text-[#9f2923]">{error}</p>;
-  if (!data) return <p className="text-[9px] text-[#63615a]">Loading…</p>;
+  if (error) return <p role="alert" className="border border-[#b8322a] bg-[#f5e5e1] p-3 text-[11px] text-[#9f2923]">{error}</p>;
+  if (!data) return <p className="text-[11px] text-[#63615a]">Loading…</p>;
   const threatOf = (id: string) => data.threats.find((threat) => threat.id === id);
   return (
     <div className="space-y-4">
-      <p className="text-[9px] text-[#55534b]">{data.coverage.valued} of {data.coverage.assets} asset(s) valued · {data.coverage.scenarios} scenario(s) assessed. The impact of a scenario follows the value of the asset for the properties the threat affects; you judge the likelihood.</p>
+      <p className="text-[11px] text-[#55534b]">{data.coverage.valued} of {data.coverage.assets} asset(s) valued · {data.coverage.scenarios} scenario(s) assessed. The impact of a scenario follows the value of the asset for the properties the threat affects; you judge the likelihood.</p>
       <ul className="space-y-3">
         {data.assets.map((asset) => {
           const value = valuation[asset.id] ?? asset.valuation ?? { confidentiality: 3, integrity: 3, availability: 3 };
@@ -52,24 +52,24 @@ export function RiskIdentification({ act, pending, nist, version }: { act: Act; 
           const setValue = (patch: Partial<Valuation>) => setValuation((current) => ({ ...current, [asset.id]: { ...value, ...patch } }));
           const setEntry = (patch: Partial<typeof entry>) => setScenario((current) => ({ ...current, [asset.id]: { ...entry, ...patch } }));
           return (
-            <li key={asset.id} className="border border-[#cbc7bd] p-3 text-[10px]">
-              <p><span className="font-semibold">{asset.name}</span> <span className="text-[9px] text-[#55534b]">{asset.type} · {asset.valuation ? `valued C${asset.valuation.confidentiality} I${asset.valuation.integrity} A${asset.valuation.availability}` : "not valued yet"} · {asset.assessed.length} scenario(s){asset.assessed.length ? `: ${asset.assessed.map((item) => item.ref).join(", ")}` : ""}</span></p>
+            <li key={asset.id} className="border border-[#cbc7bd] p-3 text-[12px]">
+              <p><span className="font-semibold">{asset.name}</span> <span className="text-[11px] text-[#55534b]">{asset.type} · {asset.valuation ? `valued C${asset.valuation.confidentiality} I${asset.valuation.integrity} A${asset.valuation.availability}` : "not valued yet"} · {asset.assessed.length} scenario(s){asset.assessed.length ? `: ${asset.assessed.map((item) => item.ref).join(", ")}` : ""}</span></p>
               <form className="mt-2 flex flex-wrap items-end gap-2" onSubmit={(event) => { event.preventDefault(); act({ action: "value_asset", assetId: asset.id, ...value }, "Asset valued"); }}>
-                {(["confidentiality", "integrity", "availability"] as const).map((dimension) => <label key={dimension} className="text-[8px] capitalize">{dimension}<select aria-label={`${dimension} of ${asset.name}`} value={value[dimension]} onChange={(event) => setValue({ [dimension]: Number(event.target.value) })} className={cn(select, "block w-20")}>{levels}</select></label>)}
+                {(["confidentiality", "integrity", "availability"] as const).map((dimension) => <label key={dimension} className="text-[10px] capitalize">{dimension}<select aria-label={`${dimension} of ${asset.name}`} value={value[dimension]} onChange={(event) => setValue({ [dimension]: Number(event.target.value) })} className={cn(select, "block w-20")}>{levels}</select></label>)}
                 <Button type="submit" variant="outline" disabled={pending} className={button}>Save valuation</Button>
               </form>
               {asset.valuation && asset.toConsider.length ? (
                 <form className="mt-2 flex flex-wrap items-end gap-2" onSubmit={(event) => { event.preventDefault(); act({ action: "scenario", assetId: asset.id, threatId: entry.threatId, ...(nist ? { likelihoodInitiation: entry.initiation, likelihoodImpact: entry.adverse } : { likelihood: entry.likelihood }) }, "Scenario recorded as a risk"); }}>
-                  <label className="text-[8px]">Threat to assess ({asset.toConsider.length} left)<select aria-label={`Threat on ${asset.name}`} value={entry.threatId} onChange={(event) => setEntry({ threatId: event.target.value })} className={cn(select, "block w-72")}>{asset.toConsider.map((id) => <option key={id} value={id}>{threatOf(id)?.title ?? id}</option>)}</select></label>
-                  {nist ? <><label className="text-[8px]">Initiation<select aria-label={`Initiation likelihood on ${asset.name}`} value={entry.initiation} onChange={(event) => setEntry({ initiation: Number(event.target.value) })} className={cn(select, "block w-16")}>{levels}</select></label><label className="text-[8px]">Adverse impact<select aria-label={`Adverse impact likelihood on ${asset.name}`} value={entry.adverse} onChange={(event) => setEntry({ adverse: Number(event.target.value) })} className={cn(select, "block w-16")}>{levels}</select></label></> : <label className="text-[8px]">Likelihood<select aria-label={`Likelihood on ${asset.name}`} value={entry.likelihood} onChange={(event) => setEntry({ likelihood: Number(event.target.value) })} className={cn(select, "block w-16")}>{levels}</select></label>}
+                  <label className="text-[10px]">Threat to assess ({asset.toConsider.length} left)<select aria-label={`Threat on ${asset.name}`} value={entry.threatId} onChange={(event) => setEntry({ threatId: event.target.value })} className={cn(select, "block w-72")}>{asset.toConsider.map((id) => <option key={id} value={id}>{threatOf(id)?.title ?? id}</option>)}</select></label>
+                  {nist ? <><label className="text-[10px]">Initiation<select aria-label={`Initiation likelihood on ${asset.name}`} value={entry.initiation} onChange={(event) => setEntry({ initiation: Number(event.target.value) })} className={cn(select, "block w-16")}>{levels}</select></label><label className="text-[10px]">Adverse impact<select aria-label={`Adverse impact likelihood on ${asset.name}`} value={entry.adverse} onChange={(event) => setEntry({ adverse: Number(event.target.value) })} className={cn(select, "block w-16")}>{levels}</select></label></> : <label className="text-[10px]">Likelihood<select aria-label={`Likelihood on ${asset.name}`} value={entry.likelihood} onChange={(event) => setEntry({ likelihood: Number(event.target.value) })} className={cn(select, "block w-16")}>{levels}</select></label>}
                   <Button type="submit" variant="outline" disabled={pending || !entry.threatId} className={button}>Assess scenario</Button>
-                  {threat ? <span className="basis-full text-[9px] text-[#55534b]">Affects {threat.affects.join(", ")} · usual controls: {threat.controls.join(", ")}</span> : null}
+                  {threat ? <span className="basis-full text-[11px] text-[#55534b]">Affects {threat.affects.join(", ")} · usual controls: {threat.controls.join(", ")}</span> : null}
                 </form>
               ) : null}
             </li>
           );
         })}
-        {data.assets.length === 0 ? <li className="border border-[#cbc7bd] p-3 text-[9px] text-[#63615a]">No asset in the inventory yet.</li> : null}
+        {data.assets.length === 0 ? <li className="border border-[#cbc7bd] p-3 text-[11px] text-[#63615a]">No asset in the inventory yet.</li> : null}
       </ul>
     </div>
   );
@@ -78,18 +78,18 @@ export function RiskIdentification({ act, pending, nist, version }: { act: Act; 
 /** The thread from asset and threat to risk, control and requirement, and the places where it breaks. */
 export function RiskTraceability({ version }: { version: number }) {
   const { data, error } = useView<Trace>("/api/risk-register?view=traceability", version);
-  if (error) return <p role="alert" className="border border-[#b8322a] bg-[#f5e5e1] p-3 text-[9px] text-[#9f2923]">{error}</p>;
-  if (!data) return <p className="text-[9px] text-[#63615a]">Loading…</p>;
+  if (error) return <p role="alert" className="border border-[#b8322a] bg-[#f5e5e1] p-3 text-[11px] text-[#9f2923]">{error}</p>;
+  if (!data) return <p className="text-[11px] text-[#63615a]">Loading…</p>;
   const breaks: Array<[string, string[]]> = [["Risks with no control", data.breaks.risksWithoutControl], ["Risks with no asset", data.breaks.risksWithoutAsset], ["Mitigations with no plan", data.breaks.mitigationWithoutPlan], ["Untreated risks", data.breaks.untreated], ["Claimed controls treating no recorded risk", data.breaks.controlsNotLinkedToARisk]];
   return (
     <div className="space-y-4">
       <div className="grid gap-px border border-[#cbc7bd] bg-[#cbc7bd] sm:grid-cols-2 lg:grid-cols-5">
-        {breaks.map(([label, items]) => <div key={label} className="bg-[#f4f1e9] p-3"><MicroLabel>{label}</MicroLabel><p className={cn("mt-1 font-mono text-lg font-semibold", items.length > 0 && "text-[#9f2923]")}>{items.length}</p><p className="mt-1 break-words font-mono text-[8px] text-[#55534b]">{items.slice(0, 12).join(" ")}{items.length > 12 ? " …" : ""}</p></div>)}
+        {breaks.map(([label, items]) => <div key={label} className="bg-[#f4f1e9] p-3"><MicroLabel>{label}</MicroLabel><p className={cn("mt-1 font-mono text-lg font-semibold", items.length > 0 && "text-[#9f2923]")}>{items.length}</p><p className="mt-1 break-words font-mono text-[10px] text-[#55534b]">{items.slice(0, 12).join(" ")}{items.length > 12 ? " …" : ""}</p></div>)}
       </div>
       <div tabIndex={0} role="region" aria-label="Traceability table, scrollable" className="overflow-x-auto border border-[#cbc7bd] focus-visible:outline-2 focus-visible:outline-[#171713]">
-        <table className="w-full min-w-[820px] text-left text-[9px]">
+        <table className="w-full min-w-[820px] text-left text-[11px]">
           <caption className="sr-only">Risk traceability</caption>
-          <thead><tr className="bg-[#e9e5db] font-mono text-[7px] uppercase tracking-wider text-[#5f5d56]">{["Risk", "Asset", "Threat", "Residual", "Treatment", "Controls and the requirements they satisfy"].map((heading) => <th key={heading} scope="col" className="px-3 py-2.5">{heading}</th>)}</tr></thead>
+          <thead><tr className="bg-[#e9e5db] font-mono text-[10px] uppercase tracking-wider text-[#5f5d56]">{["Risk", "Asset", "Threat", "Residual", "Treatment", "Controls and the requirements they satisfy"].map((heading) => <th key={heading} scope="col" className="px-3 py-2.5">{heading}</th>)}</tr></thead>
           <tbody>
             {data.risks.map((risk) => (
               <tr key={risk.ref} className="border-t border-[#d8d4ca] align-top">
@@ -98,12 +98,12 @@ export function RiskTraceability({ version }: { version: number }) {
                 <td className="px-3 py-3">{risk.threat?.event ?? "—"}</td>
                 <td className="px-3 py-3 font-mono">{risk.residual.band} ({risk.residual.score})</td>
                 <td className="px-3 py-3">{risk.treatment}</td>
-                <td className="px-3 py-3">{risk.controls.length ? risk.controls.map((control) => <span key={control.code} className="mb-1 block"><span className="font-mono font-semibold">{control.code}</span> <span className="text-[#55534b]">{control.status}, {control.verification}</span> {Object.entries(control.requirements).map(([framework, ids]) => <span key={framework} className="ms-1 border border-[#cbc7bd] px-1 font-mono text-[7px]" title={ids.join(", ")}>{framework}: {ids.slice(0, 4).join(" ")}{ids.length > 4 ? " …" : ""}</span>)}</span>) : "—"}</td>
+                <td className="px-3 py-3">{risk.controls.length ? risk.controls.map((control) => <span key={control.code} className="mb-1 block"><span className="font-mono font-semibold">{control.code}</span> <span className="text-[#55534b]">{control.status}, {control.verification}</span> {Object.entries(control.requirements).map(([framework, ids]) => <span key={framework} className="ms-1 border border-[#cbc7bd] px-1 font-mono text-[10px]" title={ids.join(", ")}>{framework}: {ids.slice(0, 4).join(" ")}{ids.length > 4 ? " …" : ""}</span>)}</span>) : "—"}</td>
               </tr>
             ))}
           </tbody>
         </table>
-        {data.risks.length === 0 ? <p className="p-6 text-center text-[10px] text-[#5f5d56]">No open risk.</p> : null}
+        {data.risks.length === 0 ? <p className="p-6 text-center text-[12px] text-[#5f5d56]">No open risk.</p> : null}
       </div>
     </div>
   );
