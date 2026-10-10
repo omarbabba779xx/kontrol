@@ -1,0 +1,63 @@
+requirement_id,title,group,applicable,justification,status,score_percent,evidence_verified,unified_controls,mapping_basis,control_statuses,risks_treated,inclusion_reason
+C4.1,Understanding the organization and its context,AIMS clauses,yes,,compliant,100,yes,UC-GOV-03,UC-GOV-03=editorial,UC-GOV-03=implemented,,framework requirement
+C4.2,Understanding the needs and expectations of interested parties,AIMS clauses,yes,,compliant,100,yes,UC-GOV-03,UC-GOV-03=editorial,UC-GOV-03=implemented,,framework requirement
+C4.3,Determining the scope of the AI management system,AIMS clauses,yes,,compliant,100,yes,UC-GOV-03,UC-GOV-03=editorial,UC-GOV-03=implemented,,framework requirement
+C4.4,AI management system,AIMS clauses,yes,,compliant,100,no,UC-GOV-01,UC-GOV-01=editorial,UC-GOV-01=implemented,,framework requirement
+C5.1,Leadership and commitment,AIMS clauses,yes,,partial,50,no,UC-GOV-02,UC-GOV-02=editorial,UC-GOV-02=partial,RSK-012 RSK-015,risk treatment and framework requirement
+C5.2,AI policy,AIMS clauses,yes,,compliant,100,no,UC-GOV-01,UC-GOV-01=editorial,UC-GOV-01=implemented,,framework requirement
+C5.3,"Roles, responsibilities and authorities",AIMS clauses,yes,,partial,50,no,UC-GOV-02,UC-GOV-02=editorial,UC-GOV-02=partial,RSK-012 RSK-015,risk treatment and framework requirement
+C6.1,Actions to address risks and opportunities,AIMS clauses,yes,,partial,50,yes,UC-GOV-04,UC-GOV-04=editorial,UC-GOV-04=partial,,framework requirement
+C6.2,AI objectives and planning to achieve them,AIMS clauses,yes,,initial,15,yes,UC-GOV-05,UC-GOV-05=editorial,UC-GOV-05=planned,,framework requirement
+C6.3,Planning of changes,AIMS clauses,yes,,initial,15,yes,UC-GOV-07,UC-GOV-07=editorial,UC-GOV-07=planned,,framework requirement
+C7.1,Resources,AIMS clauses,yes,,partial,50,no,UC-GOV-02,UC-GOV-02=editorial,UC-GOV-02=partial,RSK-012 RSK-015,risk treatment and framework requirement
+C7.2,Competence,AIMS clauses,yes,,partial,50,yes,UC-HR-02,UC-HR-02=editorial,UC-HR-02=partial,RSK-011 RSK-015,risk treatment and framework requirement
+C7.3,Awareness,AIMS clauses,yes,,partial,50,yes,UC-HR-02,UC-HR-02=editorial,UC-HR-02=partial,RSK-011 RSK-015,risk treatment and framework requirement
+C7.4,Communication,AIMS clauses,yes,,gap,0,no,UC-GOV-08,UC-GOV-08=editorial,UC-GOV-08=not_started,,framework requirement
+C7.5,Documented information,AIMS clauses,yes,,compliant,100,no,UC-GOV-01,UC-GOV-01=editorial,UC-GOV-01=implemented,,framework requirement
+C8.1,Operational planning and control,AIMS clauses,yes,,compliant,100,no,UC-GOV-01,UC-GOV-01=editorial,UC-GOV-01=implemented,,framework requirement
+C8.2,AI risk assessment,AIMS clauses,yes,,partial,50,yes,UC-GOV-04,UC-GOV-04=editorial,UC-GOV-04=partial,,framework requirement
+C8.3,AI risk treatment,AIMS clauses,yes,,partial,50,yes,UC-GOV-04,UC-GOV-04=editorial,UC-GOV-04=partial,,framework requirement
+C8.4,AI system impact assessment,AIMS clauses,yes,,partial,50,no,UC-AI-02,UC-AI-02=editorial,UC-AI-02=partial,RSK-010,risk treatment and framework requirement
+C9.1,"Monitoring, measurement, analysis and evaluation",AIMS clauses,yes,,initial,15,yes,UC-GOV-05,UC-GOV-05=editorial,UC-GOV-05=planned,,framework requirement
+C9.2,Internal audit,AIMS clauses,yes,,initial,15,no,UC-GOV-06,UC-GOV-06=editorial,UC-GOV-06=planned,,framework requirement
+C9.3,Management review,AIMS clauses,yes,,initial,15,yes,UC-GOV-05,UC-GOV-05=editorial,UC-GOV-05=planned,,framework requirement
+C10.1,Continual improvement,AIMS clauses,yes,,initial,15,yes,UC-GOV-07,UC-GOV-07=editorial,UC-GOV-07=planned,,framework requirement
+C10.2,Nonconformity and corrective action,AIMS clauses,yes,,initial,15,yes,UC-GOV-07,UC-GOV-07=editorial,UC-GOV-07=planned,,framework requirement
+A.2.2,AI policy,A2 Policies related to AI,yes,,initial,15,no,UC-AI-01,UC-AI-01=editorial,UC-AI-01=planned,,framework requirement
+A.2.3,Alignment with other organizational policies,A2 Policies related to AI,yes,,partial,57,no,UC-AI-01 UC-GOV-01,UC-AI-01=editorial UC-GOV-01=editorial,UC-AI-01=planned UC-GOV-01=implemented,,framework requirement
+A.2.4,Review of the AI policy,A2 Policies related to AI,yes,,initial,15,no,UC-AI-01 UC-GOV-05,UC-AI-01=editorial UC-GOV-05=editorial,UC-AI-01=planned UC-GOV-05=planned,,framework requirement
+A.3.2,AI roles and responsibilities,A3 Internal organization,yes,,initial,33,no,UC-GOV-02 UC-AI-01,UC-GOV-02=editorial UC-AI-01=editorial,UC-GOV-02=partial UC-AI-01=planned,RSK-012 RSK-015,risk treatment and framework requirement
+A.3.3,Reporting of concerns,A3 Internal organization,yes,,partial,57,no,UC-AI-01 UC-INC-01,UC-AI-01=editorial UC-INC-01=editorial,UC-AI-01=planned UC-INC-01=implemented,RSK-001 RSK-008,risk treatment and framework requirement
+A.4.2,Resource documentation,A4 Resources for AI systems,yes,,initial,33,no,UC-AI-01 UC-ASM-01,UC-AI-01=editorial UC-ASM-01=editorial,UC-AI-01=planned UC-ASM-01=partial,,framework requirement
+A.4.3,Data resources,A4 Resources for AI systems,yes,,gap,0,no,UC-AI-03,UC-AI-03=editorial,UC-AI-03=not_started,,framework requirement
+A.4.4,Tooling resources,A4 Resources for AI systems,yes,,initial,33,no,UC-AI-01 UC-ASM-01,UC-AI-01=editorial UC-ASM-01=editorial,UC-AI-01=planned UC-ASM-01=partial,,framework requirement
+A.4.5,System and computing resources,A4 Resources for AI systems,yes,,initial,33,no,UC-AI-01 UC-OPS-07,UC-AI-01=editorial UC-OPS-07=editorial,UC-AI-01=planned UC-OPS-07=partial,RSK-009,risk treatment and framework requirement
+A.4.6,Human resources,A4 Resources for AI systems,yes,,initial,33,no,UC-AI-01 UC-HR-02,UC-AI-01=editorial UC-HR-02=editorial,UC-AI-01=planned UC-HR-02=partial,RSK-011 RSK-015,risk treatment and framework requirement
+A.5.2,AI system impact assessment process,A5 Assessing impacts of AI systems,yes,,partial,50,no,UC-AI-02,UC-AI-02=editorial,UC-AI-02=partial,RSK-010,risk treatment and framework requirement
+A.5.3,Documentation of AI system impact assessments,A5 Assessing impacts of AI systems,yes,,partial,50,no,UC-AI-02,UC-AI-02=editorial,UC-AI-02=partial,RSK-010,risk treatment and framework requirement
+A.5.4,Assessment of AI system impact on individuals or groups of individuals,A5 Assessing impacts of AI systems,yes,,partial,50,no,UC-AI-02,UC-AI-02=editorial,UC-AI-02=partial,RSK-010,risk treatment and framework requirement
+A.5.5,Assessment of societal impacts of AI systems,A5 Assessing impacts of AI systems,yes,,partial,50,no,UC-AI-02,UC-AI-02=editorial,UC-AI-02=partial,RSK-010,risk treatment and framework requirement
+A.6.1.2,Objectives for responsible development of AI system,A6 AI system life cycle,yes,,partial,50,no,UC-AI-04,UC-AI-04=editorial,UC-AI-04=partial,RSK-010,risk treatment and framework requirement
+A.6.1.3,Processes for responsible design and development of AI systems,A6 AI system life cycle,yes,,partial,50,no,UC-AI-04,UC-AI-04=editorial,UC-AI-04=partial,RSK-010,risk treatment and framework requirement
+A.6.2.2,AI system requirements and specification,A6 AI system life cycle,yes,,partial,50,no,UC-AI-04,UC-AI-04=editorial,UC-AI-04=partial,RSK-010,risk treatment and framework requirement
+A.6.2.3,Documentation of AI system design and development,A6 AI system life cycle,yes,,partial,50,no,UC-AI-04,UC-AI-04=editorial,UC-AI-04=partial,RSK-010,risk treatment and framework requirement
+A.6.2.4,AI system verification and validation,A6 AI system life cycle,yes,,partial,50,no,UC-AI-04,UC-AI-04=editorial,UC-AI-04=partial,RSK-010,risk treatment and framework requirement
+A.6.2.5,AI system deployment,A6 AI system life cycle,yes,,partial,50,no,UC-AI-04,UC-AI-04=editorial,UC-AI-04=partial,RSK-010,risk treatment and framework requirement
+A.6.2.6,AI system operation and monitoring,A6 AI system life cycle,yes,,partial,50,no,UC-AI-06,UC-AI-06=editorial,UC-AI-06=partial,,framework requirement
+A.6.2.7,AI system technical documentation,A6 AI system life cycle,yes,,partial,50,no,UC-AI-04,UC-AI-04=editorial,UC-AI-04=partial,RSK-010,risk treatment and framework requirement
+A.6.2.8,AI system recording of event logs,A6 AI system life cycle,yes,,partial,75,no,UC-AI-04 UC-OPS-05,UC-AI-04=editorial UC-OPS-05=editorial,UC-AI-04=partial UC-OPS-05=implemented,RSK-005 RSK-008 RSK-009 RSK-010 RSK-012 RSK-013,risk treatment and framework requirement
+A.7.2,Data for development and enhancement of AI system,A7 Data for AI systems,yes,,gap,0,no,UC-AI-03,UC-AI-03=editorial,UC-AI-03=not_started,,framework requirement
+A.7.3,Acquisition of data,A7 Data for AI systems,yes,,gap,0,no,UC-AI-03,UC-AI-03=editorial,UC-AI-03=not_started,,framework requirement
+A.7.4,Quality of data for AI systems,A7 Data for AI systems,yes,,gap,0,no,UC-AI-03,UC-AI-03=editorial,UC-AI-03=not_started,,framework requirement
+A.7.5,Data provenance,A7 Data for AI systems,yes,,gap,0,no,UC-AI-03,UC-AI-03=editorial,UC-AI-03=not_started,,framework requirement
+A.7.6,Data preparation,A7 Data for AI systems,yes,,gap,0,no,UC-AI-03,UC-AI-03=editorial,UC-AI-03=not_started,,framework requirement
+A.8.2,System documentation and information for users,A8 Information for interested parties of AI systems,yes,,partial,50,no,UC-AI-04,UC-AI-04=editorial,UC-AI-04=partial,RSK-010,risk treatment and framework requirement
+A.8.3,External reporting,A8 Information for interested parties of AI systems,yes,,partial,50,no,UC-AI-04 UC-INC-02,UC-AI-04=editorial UC-INC-02=editorial,UC-AI-04=partial UC-INC-02=partial,RSK-008 RSK-010,risk treatment and framework requirement
+A.8.4,Communication of incidents,A8 Information for interested parties of AI systems,yes,,partial,50,no,UC-AI-04 UC-INC-02,UC-AI-04=editorial UC-INC-02=editorial,UC-AI-04=partial UC-INC-02=partial,RSK-008 RSK-010,risk treatment and framework requirement
+A.8.5,Information for interested parties,A8 Information for interested parties of AI systems,yes,,partial,50,no,UC-AI-04,UC-AI-04=editorial,UC-AI-04=partial,RSK-010,risk treatment and framework requirement
+A.9.2,Processes for responsible use of AI systems,A9 Use of AI systems,yes,,compliant,100,no,UC-AI-05,UC-AI-05=editorial,UC-AI-05=implemented,RSK-010,risk treatment and framework requirement
+A.9.3,Objectives for responsible use of AI system,A9 Use of AI systems,yes,,compliant,100,no,UC-AI-05,UC-AI-05=editorial,UC-AI-05=implemented,RSK-010,risk treatment and framework requirement
+A.9.4,Intended use of the AI system,A9 Use of AI systems,yes,,compliant,100,no,UC-AI-05,UC-AI-05=editorial,UC-AI-05=implemented,RSK-010,risk treatment and framework requirement
+A.10.2,Allocating responsibilities,A10 Third-party and customer relationships,yes,,initial,25,no,UC-AI-07 UC-GOV-02,UC-AI-07=editorial UC-GOV-02=editorial,UC-AI-07=not_started UC-GOV-02=partial,RSK-012 RSK-015,risk treatment and framework requirement
+A.10.3,Suppliers,A10 Third-party and customer relationships,yes,,initial,8,no,UC-AI-07 UC-TPM-01,UC-AI-07=editorial UC-TPM-01=editorial,UC-AI-07=not_started UC-TPM-01=planned,RSK-003 RSK-014,risk treatment and framework requirement
+A.10.4,Customers,A10 Third-party and customer relationships,yes,,gap,0,no,UC-AI-07,UC-AI-07=editorial,UC-AI-07=not_started,,framework requirement
