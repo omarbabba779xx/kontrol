@@ -158,8 +158,8 @@ function NewRisk({ people, act, pending, nist }: { people: Person[]; act: Act; p
       <form className="mt-3 space-y-2" onSubmit={(event) => { event.preventDefault(); act({ action: "create", title: form.title, category: form.category, impact: form.impact, ownerId: form.ownerId || undefined, controls: codes, ...(nist ? { threatSource: form.threatSource, threatEvent: form.threatEvent, vulnerability: form.vulnerability || undefined, likelihoodInitiation: form.likelihoodInitiation, likelihoodImpact: form.likelihoodImpact } : { likelihood: form.likelihood }) }, "Risk added", () => setForm({ ...form, title: "", controls: "", threatEvent: "", vulnerability: "" })); }}>
         <Input aria-label="Risk title" placeholder="Risk (cause, event, consequence)" value={form.title} onChange={(event) => setForm({ ...form, title: event.target.value })} className={field} />
         <div className="flex gap-2">
-          <select aria-label="Category" value={form.category} onChange={(event) => setForm({ ...form, category: event.target.value })} className={cn(select, "flex-1")}>{CATEGORIES.map((value) => <option key={value} value={value}>{label(value)}</option>)}</select>
-          <select aria-label="Owner" value={form.ownerId} onChange={(event) => setForm({ ...form, ownerId: event.target.value })} className={cn(select, "flex-1")}><option value="">No owner</option>{people.map((person) => <option key={person.id} value={person.id}>{person.name}</option>)}</select>
+          <select aria-label="Category" value={form.category} onChange={(event) => setForm({ ...form, category: event.target.value })} className={cn(select, "min-w-0 flex-1")}>{CATEGORIES.map((value) => <option key={value} value={value}>{label(value)}</option>)}</select>
+          <select aria-label="Owner" value={form.ownerId} onChange={(event) => setForm({ ...form, ownerId: event.target.value })} className={cn(select, "min-w-0 flex-1")}><option value="">No owner</option>{people.map((person) => <option key={person.id} value={person.id}>{person.name}</option>)}</select>
         </div>
         <div className="flex gap-2">
           {nist ? (
