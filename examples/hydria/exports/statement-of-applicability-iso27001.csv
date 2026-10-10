@@ -7,27 +7,27 @@ C5.1,Leadership and commitment,ISMS clauses,yes,,partial,50,no,UC-GOV-02,UC-GOV-
 C5.2,Information security policy,ISMS clauses,yes,,compliant,100,no,UC-GOV-01,UC-GOV-01=editorial,UC-GOV-01=implemented,,framework requirement
 C5.3,"Organizational roles, responsibilities and authorities",ISMS clauses,yes,,partial,50,no,UC-GOV-02,UC-GOV-02=editorial,UC-GOV-02=partial,RSK-012 RSK-015,risk treatment and framework requirement
 C6.1,Actions to address risks and opportunities,ISMS clauses,yes,,partial,50,yes,UC-GOV-04,UC-GOV-04=editorial,UC-GOV-04=partial,,framework requirement
-C6.2,Information security objectives and planning to achieve them,ISMS clauses,yes,,initial,15,yes,UC-GOV-05,UC-GOV-05=editorial,UC-GOV-05=planned,,framework requirement
-C6.3,Planning of changes,ISMS clauses,yes,,initial,15,yes,UC-GOV-07,UC-GOV-07=editorial,UC-GOV-07=planned,,framework requirement
+C6.2,Information security objectives and planning to achieve them,ISMS clauses,yes,,compliant,100,yes,UC-GOV-05,UC-GOV-05=editorial,UC-GOV-05=implemented,,framework requirement
+C6.3,Planning of changes,ISMS clauses,yes,,compliant,100,yes,UC-GOV-07,UC-GOV-07=editorial,UC-GOV-07=implemented,,framework requirement
 C7.1,Resources,ISMS clauses,yes,,partial,50,no,UC-GOV-02,UC-GOV-02=editorial,UC-GOV-02=partial,RSK-012 RSK-015,risk treatment and framework requirement
 C7.2,Competence,ISMS clauses,yes,,partial,50,yes,UC-HR-02,UC-HR-02=editorial,UC-HR-02=partial,RSK-011 RSK-015,risk treatment and framework requirement
 C7.3,Awareness,ISMS clauses,yes,,partial,50,yes,UC-HR-02,UC-HR-02=editorial,UC-HR-02=partial,RSK-011 RSK-015,risk treatment and framework requirement
-C7.4,Communication,ISMS clauses,yes,,gap,0,no,UC-GOV-08,UC-GOV-08=editorial,UC-GOV-08=not_started,,framework requirement
+C7.4,Communication,ISMS clauses,yes,,partial,50,yes,UC-GOV-08,UC-GOV-08=editorial,UC-GOV-08=partial,,framework requirement
 C7.5,Documented information,ISMS clauses,yes,,compliant,100,no,UC-GOV-01,UC-GOV-01=editorial,UC-GOV-01=implemented,,framework requirement
 C8.1,Operational planning and control,ISMS clauses,yes,,partial,50,yes,UC-GOV-04,UC-GOV-04=editorial,UC-GOV-04=partial,,framework requirement
 C8.2,Information security risk assessment,ISMS clauses,yes,,partial,50,yes,UC-GOV-04,UC-GOV-04=editorial,UC-GOV-04=partial,,framework requirement
 C8.3,Information security risk treatment,ISMS clauses,yes,,partial,50,yes,UC-GOV-04,UC-GOV-04=editorial,UC-GOV-04=partial,,framework requirement
-C9.1,"Monitoring, measurement, analysis and evaluation",ISMS clauses,yes,,initial,15,yes,UC-GOV-05,UC-GOV-05=editorial,UC-GOV-05=planned,,framework requirement
+C9.1,"Monitoring, measurement, analysis and evaluation",ISMS clauses,yes,,compliant,100,yes,UC-GOV-05,UC-GOV-05=editorial,UC-GOV-05=implemented,,framework requirement
 C9.2,Internal audit,ISMS clauses,yes,,initial,15,no,UC-GOV-06,UC-GOV-06=editorial,UC-GOV-06=planned,,framework requirement
-C9.3,Management review,ISMS clauses,yes,,initial,15,yes,UC-GOV-05,UC-GOV-05=editorial,UC-GOV-05=planned,,framework requirement
-C10.1,Continual improvement,ISMS clauses,yes,,initial,15,yes,UC-GOV-07,UC-GOV-07=editorial,UC-GOV-07=planned,,framework requirement
-C10.2,Nonconformity and corrective action,ISMS clauses,yes,,initial,15,yes,UC-GOV-07,UC-GOV-07=editorial,UC-GOV-07=planned,,framework requirement
+C9.3,Management review,ISMS clauses,yes,,compliant,100,yes,UC-GOV-05,UC-GOV-05=editorial,UC-GOV-05=implemented,,framework requirement
+C10.1,Continual improvement,ISMS clauses,yes,,compliant,100,yes,UC-GOV-07,UC-GOV-07=editorial,UC-GOV-07=implemented,,framework requirement
+C10.2,Nonconformity and corrective action,ISMS clauses,yes,,compliant,100,yes,UC-GOV-07,UC-GOV-07=editorial,UC-GOV-07=implemented,,framework requirement
 A5.1,Policies for information security,Organizational controls,yes,,compliant,100,no,UC-GOV-01,UC-GOV-01=editorial,UC-GOV-01=implemented,,framework requirement
 A5.2,Information security roles and responsibilities,Organizational controls,yes,,partial,50,no,UC-GOV-02,UC-GOV-02=editorial,UC-GOV-02=partial,RSK-012 RSK-015,risk treatment and framework requirement
 A5.3,Segregation of duties,Organizational controls,yes,,partial,50,no,UC-GOV-02,UC-GOV-02=editorial,UC-GOV-02=partial,RSK-012 RSK-015,risk treatment and framework requirement
 A5.4,Management responsibilities,Organizational controls,yes,,partial,50,no,UC-GOV-02,UC-GOV-02=editorial,UC-GOV-02=partial,RSK-012 RSK-015,risk treatment and framework requirement
-A5.5,Contact with authorities,Organizational controls,yes,,gap,0,no,UC-GOV-08,UC-GOV-08=editorial,UC-GOV-08=not_started,,framework requirement
-A5.6,Contact with special interest groups,Organizational controls,yes,,gap,0,no,UC-GOV-08,UC-GOV-08=editorial,UC-GOV-08=not_started,,framework requirement
+A5.5,Contact with authorities,Organizational controls,yes,,partial,50,yes,UC-GOV-08,UC-GOV-08=editorial,UC-GOV-08=partial,,framework requirement
+A5.6,Contact with special interest groups,Organizational controls,yes,,partial,50,yes,UC-GOV-08,UC-GOV-08=editorial,UC-GOV-08=partial,,framework requirement
 A5.7,Threat intelligence,Organizational controls,yes,,gap,0,no,UC-OPS-10,UC-OPS-10=editorial,UC-OPS-10=not_started,,framework requirement
 A5.8,Information security in project management,Organizational controls,no,,not_applicable,,no,UC-SDL-01,UC-SDL-01=editorial,UC-SDL-01=not_applicable,RSK-003 RSK-004,
 A5.9,Inventory of information and other associated assets,Organizational controls,yes,,partial,50,no,UC-ASM-01,UC-ASM-01=editorial,UC-ASM-01=partial,,framework requirement
@@ -59,12 +59,12 @@ A5.34,Privacy and protection of PII,Organizational controls,yes,,partial,50,no,U
 A5.35,Independent review of information security,Organizational controls,yes,,initial,15,no,UC-GOV-06,UC-GOV-06=editorial,UC-GOV-06=planned,,framework requirement
 A5.36,"Compliance with policies, rules and standards",Organizational controls,yes,,initial,33,no,UC-GOV-06 UC-CMP-01,UC-GOV-06=editorial UC-CMP-01=editorial,UC-GOV-06=planned UC-CMP-01=partial,,framework requirement
 A5.37,Documented operating procedures,Organizational controls,yes,,compliant,100,no,UC-GOV-01,UC-GOV-01=editorial,UC-GOV-01=implemented,,framework requirement
-A6.1,Screening,People controls,yes,,gap,0,no,UC-HR-01,UC-HR-01=editorial,UC-HR-01=not_started,RSK-005,risk treatment and framework requirement
-A6.2,Terms and conditions of employment,People controls,yes,,gap,0,no,UC-HR-01,UC-HR-01=editorial,UC-HR-01=not_started,RSK-005,risk treatment and framework requirement
+A6.1,Screening,People controls,yes,,partial,50,yes,UC-HR-01,UC-HR-01=editorial,UC-HR-01=partial,RSK-005,risk treatment and framework requirement
+A6.2,Terms and conditions of employment,People controls,yes,,partial,50,yes,UC-HR-01,UC-HR-01=editorial,UC-HR-01=partial,RSK-005,risk treatment and framework requirement
 A6.3,"Information security awareness, education and training",People controls,yes,,partial,50,yes,UC-HR-02,UC-HR-02=editorial,UC-HR-02=partial,RSK-011 RSK-015,risk treatment and framework requirement
-A6.4,Disciplinary process,People controls,yes,,gap,0,no,UC-HR-01,UC-HR-01=editorial,UC-HR-01=not_started,RSK-005,risk treatment and framework requirement
-A6.5,Responsibilities after termination or change of employment,People controls,yes,,initial,25,no,UC-IAM-01 UC-HR-01,UC-IAM-01=editorial UC-HR-01=editorial,UC-IAM-01=partial UC-HR-01=not_started,RSK-005 RSK-011,risk treatment and framework requirement
-A6.6,Confidentiality or non-disclosure agreements,People controls,yes,,gap,0,no,UC-HR-01,UC-HR-01=editorial,UC-HR-01=not_started,RSK-005,risk treatment and framework requirement
+A6.4,Disciplinary process,People controls,yes,,partial,50,yes,UC-HR-01,UC-HR-01=editorial,UC-HR-01=partial,RSK-005,risk treatment and framework requirement
+A6.5,Responsibilities after termination or change of employment,People controls,yes,,partial,50,no,UC-IAM-01 UC-HR-01,UC-IAM-01=editorial UC-HR-01=editorial,UC-IAM-01=partial UC-HR-01=partial,RSK-005 RSK-011,risk treatment and framework requirement
+A6.6,Confidentiality or non-disclosure agreements,People controls,yes,,partial,50,yes,UC-HR-01,UC-HR-01=editorial,UC-HR-01=partial,RSK-005,risk treatment and framework requirement
 A6.7,Remote working,People controls,yes,,gap,0,no,UC-HR-03,UC-HR-03=editorial,UC-HR-03=not_started,,framework requirement
 A6.8,Information security event reporting,People controls,yes,,compliant,100,yes,UC-INC-01,UC-INC-01=editorial,UC-INC-01=implemented,RSK-001 RSK-008,risk treatment and framework requirement
 A7.1,Physical security perimeters,Physical controls,yes,,compliant,100,no,UC-PHY-01,UC-PHY-01=editorial,UC-PHY-01=implemented,,framework requirement

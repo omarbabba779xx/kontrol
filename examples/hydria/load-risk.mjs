@@ -34,8 +34,7 @@ if ((register.risks ?? register.items ?? []).length) {
   process.exit(0);
 }
 
-// ---------------------------------------------------------------- the organisation and its method (administrator)
-await call("/api/admin", { action: "rename_organisation", name: "Hydria", region: "MA" });
+// ---------------------------------------------------------------- the risk method (administrator)
 await admin({
   action: "set_method",
   method: "iso27005",
@@ -87,6 +86,7 @@ for (const [ucCode, status, maturity, owner, notes] of [
   ["UC-GOV-05", "planned", 1, "ciso", "Objectives are set; the first measurements and the first management review are planned."],
   ["UC-GOV-06", "planned", 1, "audit", "First internal audit planned once the auditor is trained."],
   ["UC-GOV-07", "planned", 1, "ciso", "Corrective-action process defined, not yet exercised."],
+  ["UC-GOV-08", "partial", 2, "ciso", "A communication plan names who tells whom and when; the contacts at the authorities are still to be confirmed."],
   ["UC-CMP-01", "partial", 2, "ciso", "Applicable laws listed; the exact obligations under the national cybersecurity law await Legal's confirmation."],
   ["UC-ASM-01", "partial", 2, "itops", "Inventory covers the systems in scope; owners named for the main assets only."],
   ["UC-IAM-01", "partial", 2, "itops", "Joiners handled through HR; leavers' accounts are sometimes disabled late."],
@@ -110,6 +110,7 @@ for (const [ucCode, status, maturity, owner, notes] of [
   ["UC-INC-02", "partial", 2, "dpo", "Notification steps written for personal-data incidents; contacts at the authorities to be confirmed."],
   ["UC-BCP-01", "partial", 2, "itops", "Continuity plan for the datacentre; not tested with the billing vendor."],
   ["UC-BCP-02", "planned", 1, "ciso", "Crisis communication plan in draft."],
+  ["UC-HR-01", "partial", 2, "ciso", "Screening before start is reported by the HR system; security terms are not yet in every contract."],
   ["UC-HR-02", "partial", 2, "ciso", "Yearly awareness and quarterly phishing simulations; no role-specific training for administrators."],
   ["UC-TPM-01", "planned", 1, "itops", "No security assessment of the billing vendor yet."],
   ["UC-TPM-02", "partial", 2, "itops", "Security clauses in the vendor contract; remote access conditions are not stated."],

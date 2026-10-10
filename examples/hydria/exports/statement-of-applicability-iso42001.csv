@@ -7,25 +7,25 @@ C5.1,Leadership and commitment,AIMS clauses,yes,,partial,50,no,UC-GOV-02,UC-GOV-
 C5.2,AI policy,AIMS clauses,yes,,compliant,100,no,UC-GOV-01,UC-GOV-01=editorial,UC-GOV-01=implemented,,framework requirement
 C5.3,"Roles, responsibilities and authorities",AIMS clauses,yes,,partial,50,no,UC-GOV-02,UC-GOV-02=editorial,UC-GOV-02=partial,RSK-012 RSK-015,risk treatment and framework requirement
 C6.1,Actions to address risks and opportunities,AIMS clauses,yes,,partial,50,yes,UC-GOV-04,UC-GOV-04=editorial,UC-GOV-04=partial,,framework requirement
-C6.2,AI objectives and planning to achieve them,AIMS clauses,yes,,initial,15,yes,UC-GOV-05,UC-GOV-05=editorial,UC-GOV-05=planned,,framework requirement
-C6.3,Planning of changes,AIMS clauses,yes,,initial,15,yes,UC-GOV-07,UC-GOV-07=editorial,UC-GOV-07=planned,,framework requirement
+C6.2,AI objectives and planning to achieve them,AIMS clauses,yes,,compliant,100,yes,UC-GOV-05,UC-GOV-05=editorial,UC-GOV-05=implemented,,framework requirement
+C6.3,Planning of changes,AIMS clauses,yes,,compliant,100,yes,UC-GOV-07,UC-GOV-07=editorial,UC-GOV-07=implemented,,framework requirement
 C7.1,Resources,AIMS clauses,yes,,partial,50,no,UC-GOV-02,UC-GOV-02=editorial,UC-GOV-02=partial,RSK-012 RSK-015,risk treatment and framework requirement
 C7.2,Competence,AIMS clauses,yes,,partial,50,yes,UC-HR-02,UC-HR-02=editorial,UC-HR-02=partial,RSK-011 RSK-015,risk treatment and framework requirement
 C7.3,Awareness,AIMS clauses,yes,,partial,50,yes,UC-HR-02,UC-HR-02=editorial,UC-HR-02=partial,RSK-011 RSK-015,risk treatment and framework requirement
-C7.4,Communication,AIMS clauses,yes,,gap,0,no,UC-GOV-08,UC-GOV-08=editorial,UC-GOV-08=not_started,,framework requirement
+C7.4,Communication,AIMS clauses,yes,,partial,50,yes,UC-GOV-08,UC-GOV-08=editorial,UC-GOV-08=partial,,framework requirement
 C7.5,Documented information,AIMS clauses,yes,,compliant,100,no,UC-GOV-01,UC-GOV-01=editorial,UC-GOV-01=implemented,,framework requirement
 C8.1,Operational planning and control,AIMS clauses,yes,,compliant,100,no,UC-GOV-01,UC-GOV-01=editorial,UC-GOV-01=implemented,,framework requirement
 C8.2,AI risk assessment,AIMS clauses,yes,,partial,50,yes,UC-GOV-04,UC-GOV-04=editorial,UC-GOV-04=partial,,framework requirement
 C8.3,AI risk treatment,AIMS clauses,yes,,partial,50,yes,UC-GOV-04,UC-GOV-04=editorial,UC-GOV-04=partial,,framework requirement
 C8.4,AI system impact assessment,AIMS clauses,yes,,partial,50,no,UC-AI-02,UC-AI-02=editorial,UC-AI-02=partial,RSK-010,risk treatment and framework requirement
-C9.1,"Monitoring, measurement, analysis and evaluation",AIMS clauses,yes,,initial,15,yes,UC-GOV-05,UC-GOV-05=editorial,UC-GOV-05=planned,,framework requirement
+C9.1,"Monitoring, measurement, analysis and evaluation",AIMS clauses,yes,,compliant,100,yes,UC-GOV-05,UC-GOV-05=editorial,UC-GOV-05=implemented,,framework requirement
 C9.2,Internal audit,AIMS clauses,yes,,initial,15,no,UC-GOV-06,UC-GOV-06=editorial,UC-GOV-06=planned,,framework requirement
-C9.3,Management review,AIMS clauses,yes,,initial,15,yes,UC-GOV-05,UC-GOV-05=editorial,UC-GOV-05=planned,,framework requirement
-C10.1,Continual improvement,AIMS clauses,yes,,initial,15,yes,UC-GOV-07,UC-GOV-07=editorial,UC-GOV-07=planned,,framework requirement
-C10.2,Nonconformity and corrective action,AIMS clauses,yes,,initial,15,yes,UC-GOV-07,UC-GOV-07=editorial,UC-GOV-07=planned,,framework requirement
+C9.3,Management review,AIMS clauses,yes,,compliant,100,yes,UC-GOV-05,UC-GOV-05=editorial,UC-GOV-05=implemented,,framework requirement
+C10.1,Continual improvement,AIMS clauses,yes,,compliant,100,yes,UC-GOV-07,UC-GOV-07=editorial,UC-GOV-07=implemented,,framework requirement
+C10.2,Nonconformity and corrective action,AIMS clauses,yes,,compliant,100,yes,UC-GOV-07,UC-GOV-07=editorial,UC-GOV-07=implemented,,framework requirement
 A.2.2,AI policy,A2 Policies related to AI,yes,,initial,15,no,UC-AI-01,UC-AI-01=editorial,UC-AI-01=planned,,framework requirement
 A.2.3,Alignment with other organizational policies,A2 Policies related to AI,yes,,partial,57,no,UC-AI-01 UC-GOV-01,UC-AI-01=editorial UC-GOV-01=editorial,UC-AI-01=planned UC-GOV-01=implemented,,framework requirement
-A.2.4,Review of the AI policy,A2 Policies related to AI,yes,,initial,15,no,UC-AI-01 UC-GOV-05,UC-AI-01=editorial UC-GOV-05=editorial,UC-AI-01=planned UC-GOV-05=planned,,framework requirement
+A.2.4,Review of the AI policy,A2 Policies related to AI,yes,,partial,57,no,UC-AI-01 UC-GOV-05,UC-AI-01=editorial UC-GOV-05=editorial,UC-AI-01=planned UC-GOV-05=implemented,,framework requirement
 A.3.2,AI roles and responsibilities,A3 Internal organization,yes,,initial,33,no,UC-GOV-02 UC-AI-01,UC-GOV-02=editorial UC-AI-01=editorial,UC-GOV-02=partial UC-AI-01=planned,RSK-012 RSK-015,risk treatment and framework requirement
 A.3.3,Reporting of concerns,A3 Internal organization,yes,,partial,57,no,UC-AI-01 UC-INC-01,UC-AI-01=editorial UC-INC-01=editorial,UC-AI-01=planned UC-INC-01=implemented,RSK-001 RSK-008,risk treatment and framework requirement
 A.4.2,Resource documentation,A4 Resources for AI systems,yes,,initial,33,no,UC-AI-01 UC-ASM-01,UC-AI-01=editorial UC-ASM-01=editorial,UC-AI-01=planned UC-ASM-01=partial,,framework requirement
