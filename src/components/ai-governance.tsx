@@ -69,7 +69,7 @@ export function AiGovernance() {
               {([["AI systems", s.total], ["High-risk", s.high], ["Prohibited", s.prohibited], ["Unclassified", s.unclassified], ["Awaiting approval", s.awaitingApproval], ["Approved", s.approved]] as const).map(([name, value]) => <div key={name} className="bg-[#f4f1e9] p-4"><MicroLabel>{name}</MicroLabel><p className={cn("mt-1 font-mono text-[22px] font-semibold", name === "Prohibited" && value > 0 && "text-[#b8322a]")}>{value}</p></div>)}
             </div>
             <p className="max-w-3xl border-s-2 border-[#a98a45] ps-3 text-[12px] text-[#55534b]">Classification is a triage that records its reasoning; it is not legal advice. Borderline calls (the Art.6(3) derogation, systemic-risk designation) should be confirmed with counsel, and application dates should be checked against the current timeline rather than assumed.</p>
-            <div className="grid gap-8 xl:grid-cols-[320px_1fr]">
+            <div className="grid grid-cols-1 gap-8 xl:grid-cols-[320px_minmax(0,1fr)]">
               <NewUseCase people={people} act={act} pending={isPending} onCreated={(id) => setOpen(id)} />
               <div tabIndex={0} role="region" aria-label="AI systems table, scrollable" className="overflow-x-auto border border-[#cbc7bd] focus-visible:outline-2 focus-visible:outline-[#171713]"><table className="w-full min-w-[720px] text-left text-[11px]"><caption className="sr-only">AI systems register</caption>
                 <thead><tr className="bg-[#e9e5db] font-mono text-[10px] uppercase tracking-wider text-[#5f5d56]">{["Ref", "System", "Risk tier", "Status", "Readiness", ""].map((h) => <th key={h} scope="col" className="px-3 py-2.5">{h}</th>)}</tr></thead>

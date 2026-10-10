@@ -28,7 +28,7 @@ export function IncidentsTab({ incidents, act, pending }: { incidents: Incident[
   const set = (id: string, patch: Partial<ReturnType<typeof of>>) => setReview((current) => ({ ...current, [id]: { ...of(id), ...patch } }));
   return (
     <div className="space-y-4">
-      <form className="grid gap-2 border border-[#cbc7bd] bg-[#f8f6f0] p-4 sm:grid-cols-2 lg:grid-cols-[1fr_120px_150px_auto_auto]" onSubmit={(event) => { event.preventDefault(); act({ action: "report_incident", title: form.title, severity: form.severity, detectedAt: toIso(form.detectedAt), personalData: form.personalData }, "Incident reported", () => setForm({ title: "", severity: "medium", detectedAt: "", personalData: false })); }}>
+      <form className="grid grid-cols-1 gap-2 border border-[#cbc7bd] bg-[#f8f6f0] p-4 sm:grid-cols-2 lg:grid-cols-[1fr_120px_150px_auto_auto]" onSubmit={(event) => { event.preventDefault(); act({ action: "report_incident", title: form.title, severity: form.severity, detectedAt: toIso(form.detectedAt), personalData: form.personalData }, "Incident reported", () => setForm({ title: "", severity: "medium", detectedAt: "", personalData: false })); }}>
         <Input aria-label="Incident" required minLength={3} value={form.title} onChange={(event) => setForm({ ...form, title: event.target.value })} placeholder="What happened" className={field} />
         <select aria-label="Incident severity" value={form.severity} onChange={(event) => setForm({ ...form, severity: event.target.value })} className={select}>{["low", "medium", "high", "critical"].map((value) => <option key={value} value={value}>{value}</option>)}</select>
         <Input aria-label="Detected on" type="date" required value={form.detectedAt} onChange={(event) => setForm({ ...form, detectedAt: event.target.value })} className={field} />
@@ -89,7 +89,7 @@ export function AuditsTab({ audits, users, me, act, pending }: { audits: Interna
             <p className="mt-1 text-[11px] text-[#55534b]">{day(item.period_start)} to {day(item.period_end)}{item.criteria ? ` · criteria: ${item.criteria}` : ""}{item.controls?.length ? ` · ${item.controls.join(", ")}` : ""}</p>
             {item.conclusion ? <p className="mt-1 text-[11px]">Conclusion: {item.conclusion}</p> : null}
             {item.status !== "closed" && item.auditor_id === me ? (
-              <div className="mt-2 grid gap-2 sm:grid-cols-[1fr_auto]">
+              <div className="mt-2 grid grid-cols-1 gap-2 sm:grid-cols-[1fr_auto]">
                 <Input aria-label={`Finding of ${item.name}`} value={finding[item.id] ?? ""} onChange={(event) => setFinding((current) => ({ ...current, [item.id]: event.target.value }))} placeholder="Finding" className={field} />
                 <Button type="button" variant="outline" disabled={pending || (finding[item.id] ?? "").trim().length < 3} onClick={() => act({ action: "raise_audit_finding", auditId: item.id, severity: "minor", title: finding[item.id] }, "Finding recorded", () => setFinding((current) => ({ ...current, [item.id]: "" })))} className={button}>Record finding</Button>
                 <Input aria-label={`Conclusion of ${item.name}`} value={conclusion[item.id] ?? ""} onChange={(event) => setConclusion((current) => ({ ...current, [item.id]: event.target.value }))} placeholder="Conclusion (20 characters minimum)" className={field} />

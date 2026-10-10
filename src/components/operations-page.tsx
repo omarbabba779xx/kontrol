@@ -77,7 +77,7 @@ export function OperationsPage() {
         {metrics.map(([label, value]) => <div key={label} className="border-e border-b border-[#cbc7bd] px-5 py-5 sm:border-b-0"><MicroLabel>{label}</MicroLabel><div className="mt-2 font-mono text-2xl tracking-[-.06em]">{value}</div></div>)}
       </section>
 
-      <div className="grid xl:grid-cols-[1.15fr_.85fr]">
+      <div className="grid grid-cols-1 xl:grid-cols-[1.15fr_.85fr]">
         <section className="border-b border-[#cbc7bd] p-5 sm:p-7 xl:border-e">
           <div className="mb-5 flex items-end justify-between"><div><MicroLabel>Evidence automation</MicroLabel><h2 className="mt-2 text-xl font-medium tracking-[-.04em]">Active connectors</h2></div><GitBranch className="h-5 w-5 text-[#827f77]" /></div>
           <div className="grid gap-px border border-[#cbc7bd] bg-[#cbc7bd] md:grid-cols-3">
