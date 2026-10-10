@@ -12,6 +12,7 @@ import { evaluatePolicy } from "../../src/lib/core/policy-engine";
 const report = (connector: string, facts: Record<string, unknown>) => {
   const controls = PACK.filter((control) => control.connector === connector);
   const lines = controls.map((control) => {
+    if (control.notApplicable?.(facts)) return `  n/a      ${control.code}  (not applicable: ${control.title})`;
     const missing = missingFacts(control, facts);
     return missing.length ? `  skipped  ${control.code}  (unreadable: ${missing.join(", ")})` : `  ${evaluatePolicy(control.policy, facts).passed ? "pass   " : "FAIL   "}  ${control.code}  ${control.title}`;
   });
