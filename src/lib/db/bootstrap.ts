@@ -10,6 +10,16 @@ export function shouldSeed(env: Record<string, string | undefined> = process.env
 }
 
 /**
+ * What the first start puts in an empty database: the demonstration tenant with its sample records, the same organisation and
+ * administrator with no record at all (`KONTROL_SEED=empty`, for working a case of your own under demo sign-in), or nothing.
+ * The empty seed exists for evaluation; production starts from `KONTROL_BOOTSTRAP_ADMIN_EMAIL` instead.
+ */
+export function seedMode(env: Record<string, string | undefined> = process.env): "sample" | "empty" | "none" {
+  if (env.KONTROL_SEED === "empty") return env.NODE_ENV === "production" ? "none" : "empty";
+  return shouldSeed(env) ? "sample" : "none";
+}
+
+/**
  * Creates the first organisation and its administrator on an empty database, so that someone can sign in without demo data.
  * Does nothing when any tenant exists, so it can run at every start. The administrator signs in through the identity provider with
  * the email given here; no password or secret is created.
