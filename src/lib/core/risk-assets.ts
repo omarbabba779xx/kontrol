@@ -1,5 +1,6 @@
 import "server-only";
 
+import { randomUUID } from "node:crypto";
 import type { Actor } from "@/lib/core/auth";
 import { userError } from "@/lib/core/errors";
 import { appendAudit } from "@/lib/core/integrity";
@@ -17,6 +18,45 @@ const db = async (tenantId: string) => (await getDb()).scope(tenantId);
 const level = (value: number, label: string) => {
   if (!Number.isInteger(value) || value < 1 || value > 5) throw userError(`${label} must be between 1 and 5`);
 };
+
+export const ASSET_TYPES = ["service", "application", "data", "infrastructure", "ai_system", "repository", "supplier", "people", "site"] as const;
+export const ASSET_CRITICALITIES = ["low", "medium", "high", "critical"] as const;
+
+/**
+ * Adds an asset to the inventory by hand. Connectors register the assets they collect from; everything else an organisation
+ * depends on (a service, a data set, a supplier) has to be entered by someone, or it can never be valued or assessed.
+ */
+export async function registerAsset(actor: Actor, input: { name: string; type: (typeof ASSET_TYPES)[number]; criticality: (typeof ASSET_CRITICALITIES)[number]; ownerId?: string | null; description?: string }) {
+  const name = input.name.trim();
+  if (name.length < 2) throw userError("The asset needs a name");
+  const scope = await db(actor.tenantId);
+  if (await scope.get("SELECT id FROM assets WHERE tenant_id = ? AND name = ? AND valid_to IS NULL", actor.tenantId, name)) throw userError(`An asset named ${name} already exists`);
+  if (input.ownerId && !(await scope.get("SELECT id FROM users WHERE tenant_id = ? AND id = ?", actor.tenantId, input.ownerId))) throw userError("Owner not found");
+  const id = `asset_${randomUUID()}`;
+  const now = new Date().toISOString();
+  await scope.transaction(async (tx) => {
+    await tx.run(
+      "INSERT INTO assets (id,tenant_id,type,name,criticality,owner_id,attributes_json,valid_from,recorded_at) VALUES (?,?,?,?,?,?,?,?,?)",
+      id, actor.tenantId, input.type, name, input.criticality, input.ownerId ?? null, JSON.stringify({ managedBy: "manual", description: input.description?.trim() ?? "" }), now, now);
+    await appendAudit({ tenantId: actor.tenantId, actorId: actor.userId, action: "risk.asset_registered", objectType: "asset", objectId: id, payload: { name, type: input.type, criticality: input.criticality } }, tx);
+  });
+  return { id, name };
+}
+
+/** Takes an asset out of the current inventory. Its history stays; a risk still open on it has to be dealt with first. */
+export async function retireAsset(actor: Actor, input: { assetId: string; reason: string }) {
+  const scope = await db(actor.tenantId);
+  const asset = await scope.get<{ id: string; name: string }>("SELECT id, name FROM assets WHERE tenant_id = ? AND id = ? AND valid_to IS NULL", actor.tenantId, input.assetId);
+  if (!asset) throw userError("Asset not found");
+  const open = await scope.get<{ n: number | string }>("SELECT COUNT(*) AS n FROM risk_items WHERE tenant_id = ? AND asset_id = ? AND status <> 'closed'", actor.tenantId, asset.id);
+  if (Number(open?.n ?? 0) > 0) throw userError(`${asset.name} still has ${open?.n} open risk(s): close or move them first`);
+  const now = new Date().toISOString();
+  await scope.transaction(async (tx) => {
+    await tx.run("UPDATE assets SET valid_to = ? WHERE tenant_id = ? AND id = ?", now, actor.tenantId, asset.id);
+    await appendAudit({ tenantId: actor.tenantId, actorId: actor.userId, action: "risk.asset_retired", objectType: "asset", objectId: asset.id, payload: { name: asset.name, reason: input.reason } }, tx);
+  });
+  return { id: asset.id, retired: true };
+}
 
 const CATEGORY_OF: Record<ThreatFamily, Category> = {
   physical: "operational", natural: "resilience", essential_services: "resilience", technical_failure: "operational",

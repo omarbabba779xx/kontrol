@@ -14,7 +14,7 @@ import {
   TREATMENTS,
   updateRisk,
 } from "@/lib/core/risk-register";
-import { createScenario, riskIdentification, valueAsset } from "@/lib/core/risk-assets";
+import { ASSET_CRITICALITIES, ASSET_TYPES, createScenario, registerAsset, retireAsset, riskIdentification, valueAsset } from "@/lib/core/risk-assets";
 import { riskTraceability, treatmentPlanCsv } from "@/lib/core/risk-traceability";
 import { METHODS, THREAT_SOURCES } from "@/lib/core/risk-method";
 import { scenarioSchema } from "@/lib/core/schemas";
@@ -74,6 +74,8 @@ const actionSchema = z.discriminatedUnion("action", [
   z.object({ action: z.literal("quantify"), id: z.string().min(3), scenario: scenarioSchema }),
   z.object({ action: z.literal("from_gaps"), limit: z.number().int().min(1).max(25).default(10) }),
   z.object({ action: z.literal("treatment_task"), id: z.string().min(3) }),
+  z.object({ action: z.literal("register_asset"), name: z.string().min(2).max(200), type: z.enum(ASSET_TYPES), criticality: z.enum(ASSET_CRITICALITIES), ownerId: z.string().min(3).nullable().optional(), description: z.string().max(1000).optional() }),
+  z.object({ action: z.literal("retire_asset"), assetId: z.string().min(3), reason: z.string().min(10).max(1000) }),
   z.object({ action: z.literal("value_asset"), assetId: z.string().min(3), confidentiality: score, integrity: score, availability: score, rationale: z.string().max(1000).optional() }),
   z.object({ action: z.literal("scenario"), assetId: z.string().min(3), threatId: z.string().regex(/^TH-[A-Z]+-\d{2}$/), likelihood: score.optional(), likelihoodInitiation: score.optional(), likelihoodImpact: score.optional(), impact: score.optional(), impactReason: z.string().max(500).optional(), ownerId: z.string().min(3).optional() }),
   z.object({
@@ -122,6 +124,10 @@ export async function POST(request: Request) {
         return Response.json(await quantifyRisk(actor, input));
       case "from_gaps":
         return Response.json(await createFromGaps(actor, input), { status: 201 });
+      case "register_asset":
+        return Response.json(await registerAsset(actor, input), { status: 201 });
+      case "retire_asset":
+        return Response.json(await retireAsset(actor, input));
       case "value_asset":
         return Response.json(await valueAsset(actor, input));
       case "scenario":
