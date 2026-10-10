@@ -12,13 +12,13 @@ export type Incident = { id: string; ref: string; title: string; severity: strin
 export type InternalAudit = { id: string; name: string; status: string; period_start?: string; period_end: string; closed_at: string | null; objectives?: string; criteria?: string; auditor_id?: string; controls?: string[]; conclusion?: string | null; findings?: number };
 export type IsmsRecord = { id: string; kind: "change" | "competence" | "communication"; title: string; detail: Record<string, string>; status: string; owner_id: string | null; due_at: string | null; updated_at: string; overdue: boolean };
 
-const field = "h-8 rounded-none border-[#cbc7bd] bg-transparent text-[10px] shadow-none placeholder:text-[#63615a]";
-const select = "h-8 border border-[#cbc7bd] bg-transparent px-2 text-[10px] focus-visible:outline-2 focus-visible:outline-[#171713]";
-const button = "h-8 rounded-none border-[#171713] bg-transparent text-[9px]";
+const field = "h-8 rounded-none border-[#cbc7bd] bg-transparent text-[12px] shadow-none placeholder:text-[#63615a]";
+const select = "h-8 border border-[#cbc7bd] bg-transparent px-2 text-[12px] focus-visible:outline-2 focus-visible:outline-[#171713]";
+const button = "h-8 rounded-none border-[#171713] bg-transparent text-[11px]";
 const good = "bg-[#dcebe1] text-[#245c3f]", warn = "bg-[#f1e7cc] text-[#7a5a1a]", bad = "bg-[#f5e5e1] text-[#9f2923]";
 const day = (value: string | null | undefined) => (value ? value.slice(0, 10) : "no date");
 const toIso = (date: string) => new Date(`${date}T12:00:00Z`).toISOString();
-const badge = (text: string, style: string) => <span className={cn("ms-1 px-1 font-mono text-[8px] uppercase", style)}>{text}</span>;
+const badge = (text: string, style: string) => <span className={cn("ms-1 px-1 font-mono text-[10px] uppercase", style)}>{text}</span>;
 const people = (list: Person[]) => list.map((person) => <option key={person.id} value={person.id}>{person.name}</option>);
 
 export function IncidentsTab({ incidents, act, pending }: { incidents: Incident[]; act: Act; pending: boolean }) {
@@ -32,18 +32,18 @@ export function IncidentsTab({ incidents, act, pending }: { incidents: Incident[
         <Input aria-label="Incident" required minLength={3} value={form.title} onChange={(event) => setForm({ ...form, title: event.target.value })} placeholder="What happened" className={field} />
         <select aria-label="Incident severity" value={form.severity} onChange={(event) => setForm({ ...form, severity: event.target.value })} className={select}>{["low", "medium", "high", "critical"].map((value) => <option key={value} value={value}>{value}</option>)}</select>
         <Input aria-label="Detected on" type="date" required value={form.detectedAt} onChange={(event) => setForm({ ...form, detectedAt: event.target.value })} className={field} />
-        <label className="flex items-center gap-1.5 text-[9px]"><input type="checkbox" checked={form.personalData} onChange={(event) => setForm({ ...form, personalData: event.target.checked })} />Personal data</label>
+        <label className="flex items-center gap-1.5 text-[11px]"><input type="checkbox" checked={form.personalData} onChange={(event) => setForm({ ...form, personalData: event.target.checked })} />Personal data</label>
         <Button type="submit" variant="outline" disabled={pending} className={button}>Report</Button>
       </form>
-      <p className="text-[9px] text-[#55534b]">An incident involving personal data starts the 72-hour notification clock from its detection. Closing an incident is its post-incident review: a high or critical one needs a nonconformity carrying the corrective action, or the reason none is needed.</p>
+      <p className="text-[11px] text-[#55534b]">An incident involving personal data starts the 72-hour notification clock from its detection. Closing an incident is its post-incident review: a high or critical one needs a nonconformity carrying the corrective action, or the reason none is needed.</p>
       <ul className="space-y-3">
         {incidents.map((item) => {
           const entry = of(item.id);
           const next = item.status === "reported" ? "contained" : item.status === "contained" ? "resolved" : null;
           return (
-            <li key={item.id} className="border border-[#cbc7bd] p-3 text-[10px]">
+            <li key={item.id} className="border border-[#cbc7bd] p-3 text-[12px]">
               <p><span className="font-mono font-semibold">{item.ref}</span> {item.title}{badge(item.status, item.status === "closed" ? good : warn)}{badge(item.severity, item.severity === "high" || item.severity === "critical" ? bad : warn)}{item.notificationOverdue ? badge("notification overdue", bad) : null}</p>
-              <p className="mt-1 text-[9px] text-[#55534b]">Detected {day(item.detected_at)}{item.personal_data ? ` · personal data · notify by ${day(item.notification_due)}${item.notified_at ? ` · notified ${day(item.notified_at)}` : ""}` : ""}{item.root_cause ? ` · cause: ${item.root_cause}` : ""}</p>
+              <p className="mt-1 text-[11px] text-[#55534b]">Detected {day(item.detected_at)}{item.personal_data ? ` · personal data · notify by ${day(item.notification_due)}${item.notified_at ? ` · notified ${day(item.notified_at)}` : ""}` : ""}{item.root_cause ? ` · cause: ${item.root_cause}` : ""}</p>
               {next ? <Button type="button" variant="outline" disabled={pending} onClick={() => act({ action: "update_incident", id: item.id, status: next }, `Incident ${next}`)} className={cn(button, "mt-2")}>Mark {next}</Button> : null}
               {item.personal_data && !item.notified_at && item.status !== "closed" ? <Button type="button" variant="outline" disabled={pending} onClick={() => act({ action: "update_incident", id: item.id, notified: { at: new Date().toISOString(), note: "Notification decision recorded" } }, "Notification recorded")} className={cn(button, "ms-2 mt-2")}>Record notification</Button> : null}
               {item.status === "resolved" ? (
@@ -58,7 +58,7 @@ export function IncidentsTab({ incidents, act, pending }: { incidents: Incident[
             </li>
           );
         })}
-        {incidents.length === 0 ? <li className="border border-[#cbc7bd] p-3 text-[9px] text-[#63615a]">No incident recorded. Record minor ones and exercises too: a process that never ran is not shown to work.</li> : null}
+        {incidents.length === 0 ? <li className="border border-[#cbc7bd] p-3 text-[11px] text-[#63615a]">No incident recorded. Record minor ones and exercises too: a process that never ran is not shown to work.</li> : null}
       </ul>
     </div>
   );
@@ -81,13 +81,13 @@ export function AuditsTab({ audits, users, me, act, pending }: { audits: Interna
         <Input aria-label="Controls in scope" value={form.controls} onChange={(event) => setForm({ ...form, controls: event.target.value })} placeholder="Controls in scope: UC-IAM-01, UC-TPM-01" className={cn(field, "font-mono sm:col-span-2")} />
         <Button type="submit" variant="outline" disabled={pending} className={button}>Plan audit</Button>
       </form>
-      <p className="text-[9px] text-[#55534b]">An auditor does not audit controls they own. Only the auditor records findings and concludes; each finding becomes a nonconformity. One completed audit is not a programme: clause 9.2 is met when the next one is planned.</p>
+      <p className="text-[11px] text-[#55534b]">An auditor does not audit controls they own. Only the auditor records findings and concludes; each finding becomes a nonconformity. One completed audit is not a programme: clause 9.2 is met when the next one is planned.</p>
       <ul className="space-y-3">
         {audits.map((item) => (
-          <li key={item.id} className="border border-[#cbc7bd] p-3 text-[10px]">
+          <li key={item.id} className="border border-[#cbc7bd] p-3 text-[12px]">
             <p><span className="font-semibold">{item.name}</span>{badge(item.status, item.status === "closed" ? good : warn)}{typeof item.findings === "number" ? badge(`${item.findings} finding(s)`, item.findings ? warn : good) : null}</p>
-            <p className="mt-1 text-[9px] text-[#55534b]">{day(item.period_start)} to {day(item.period_end)}{item.criteria ? ` · criteria: ${item.criteria}` : ""}{item.controls?.length ? ` · ${item.controls.join(", ")}` : ""}</p>
-            {item.conclusion ? <p className="mt-1 text-[9px]">Conclusion: {item.conclusion}</p> : null}
+            <p className="mt-1 text-[11px] text-[#55534b]">{day(item.period_start)} to {day(item.period_end)}{item.criteria ? ` · criteria: ${item.criteria}` : ""}{item.controls?.length ? ` · ${item.controls.join(", ")}` : ""}</p>
+            {item.conclusion ? <p className="mt-1 text-[11px]">Conclusion: {item.conclusion}</p> : null}
             {item.status !== "closed" && item.auditor_id === me ? (
               <div className="mt-2 grid gap-2 sm:grid-cols-[1fr_auto]">
                 <Input aria-label={`Finding of ${item.name}`} value={finding[item.id] ?? ""} onChange={(event) => setFinding((current) => ({ ...current, [item.id]: event.target.value }))} placeholder="Finding" className={field} />
@@ -98,7 +98,7 @@ export function AuditsTab({ audits, users, me, act, pending }: { audits: Interna
             ) : null}
           </li>
         ))}
-        {audits.length === 0 ? <li className="border border-[#cbc7bd] p-3 text-[9px] text-[#63615a]">No internal audit planned.</li> : null}
+        {audits.length === 0 ? <li className="border border-[#cbc7bd] p-3 text-[11px] text-[#63615a]">No internal audit planned.</li> : null}
       </ul>
     </div>
   );
@@ -130,13 +130,13 @@ export function RecordsTab({ records, users, act, pending }: { records: IsmsReco
           <MicroLabel>{KIND_LABEL[value]}</MicroLabel>
           <ul className="mt-2 divide-y divide-[#d8d4ca] border border-[#cbc7bd]">
             {records.filter((record) => record.kind === value).map((record) => (
-              <li key={record.id} className="p-3 text-[10px]">
+              <li key={record.id} className="p-3 text-[12px]">
                 <span className="font-semibold">{record.title}</span>{badge(record.overdue ? "overdue" : record.status, record.overdue || record.status === "gap" ? bad : record.status === "planned" ? warn : good)}
-                <span className="block text-[9px] text-[#55534b]">{Object.entries(record.detail).filter(([, text]) => text).map(([key, text]) => `${key}: ${text}`).join(" · ")}{record.due_at ? ` · ${day(record.due_at)}` : ""}</span>
-                {record.kind === "change" && record.status === "planned" ? <Button type="button" variant="ghost" disabled={pending} onClick={() => act({ action: "save_record", id: record.id, kind: "change", title: record.title, status: "done", ownerId: record.owner_id, detail: record.detail }, "Change marked done")} className="mt-1 h-6 rounded-none text-[8px]">Mark done</Button> : null}
+                <span className="block text-[11px] text-[#55534b]">{Object.entries(record.detail).filter(([, text]) => text).map(([key, text]) => `${key}: ${text}`).join(" · ")}{record.due_at ? ` · ${day(record.due_at)}` : ""}</span>
+                {record.kind === "change" && record.status === "planned" ? <Button type="button" variant="ghost" disabled={pending} onClick={() => act({ action: "save_record", id: record.id, kind: "change", title: record.title, status: "done", ownerId: record.owner_id, detail: record.detail }, "Change marked done")} className="mt-1 h-6 rounded-none text-[10px]">Mark done</Button> : null}
               </li>
             ))}
-            {records.every((record) => record.kind !== value) ? <li className="p-3 text-[9px] text-[#63615a]">Nothing recorded.</li> : null}
+            {records.every((record) => record.kind !== value) ? <li className="p-3 text-[11px] text-[#63615a]">Nothing recorded.</li> : null}
           </ul>
         </div>
       ))}

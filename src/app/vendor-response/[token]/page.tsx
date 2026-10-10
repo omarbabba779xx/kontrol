@@ -40,28 +40,28 @@ export default function VendorResponse({ params }: { params: Promise<{ token: st
   return (
     <main id="main-content" className="mx-auto min-h-screen max-w-3xl bg-[#f4f1e9] px-5 py-10 text-[#1c1c18]">
       <h1 className="text-[22px] font-semibold tracking-tight">Security questionnaire</h1>
-      {done ? <p role="status" className="mt-6 border border-[#245c3f] bg-[#dcebe1] p-4 text-[12px] text-[#173d2a]">Thank you. Your answers were received and this link no longer works.</p> : null}
-      {error ? <p role="alert" className="mt-6 border border-[#b8322a] bg-[#f5e5e1] p-4 text-[12px] text-[#9f2923]">{error}</p> : null}
+      {done ? <p role="status" className="mt-6 border border-[#245c3f] bg-[#dcebe1] p-4 text-[14px] text-[#173d2a]">Thank you. Your answers were received and this link no longer works.</p> : null}
+      {error ? <p role="alert" className="mt-6 border border-[#b8322a] bg-[#f5e5e1] p-4 text-[14px] text-[#9f2923]">{error}</p> : null}
       {form && !done ? (
         <div className="mt-4 space-y-8">
-          <p className="text-[12px] text-[#34332e]">{form.organisation} asks {form.provider} to describe its security and resilience practices for the services it provides. Answer honestly: your answers may be requested as evidence. This link works once and expires on {form.expiresAt.slice(0, 10)}.</p>
+          <p className="text-[14px] text-[#34332e]">{form.organisation} asks {form.provider} to describe its security and resilience practices for the services it provides. Answer honestly: your answers may be requested as evidence. This link works once and expires on {form.expiresAt.slice(0, 10)}.</p>
           <div className="grid gap-3 sm:grid-cols-2">
-            <label className="text-[11px] font-medium">Your name<Input value={who.name} onChange={(event) => setWho({ ...who, name: event.target.value })} className="mt-1 h-9 rounded-none border-[#cbc7bd] bg-white text-[12px]" /></label>
-            <label className="text-[11px] font-medium">Your work email<Input type="email" value={who.email} onChange={(event) => setWho({ ...who, email: event.target.value })} className="mt-1 h-9 rounded-none border-[#cbc7bd] bg-white text-[12px]" /></label>
+            <label className="text-[13px] font-medium">Your name<Input value={who.name} onChange={(event) => setWho({ ...who, name: event.target.value })} className="mt-1 h-9 rounded-none border-[#cbc7bd] bg-white text-[14px]" /></label>
+            <label className="text-[13px] font-medium">Your work email<Input type="email" value={who.email} onChange={(event) => setWho({ ...who, email: event.target.value })} className="mt-1 h-9 rounded-none border-[#cbc7bd] bg-white text-[14px]" /></label>
           </div>
           {sections.map((section) => (
             <section key={section} aria-labelledby={`s-${section}`} className="space-y-4">
-              <h2 id={`s-${section}`} className="font-mono text-[10px] uppercase tracking-wider text-[#5f5d56]">{section}</h2>
+              <h2 id={`s-${section}`} className="font-mono text-[12px] uppercase tracking-wider text-[#5f5d56]">{section}</h2>
               {form.questions.filter((question) => question.section === section).map((question) => (
                 <fieldset key={question.id} className="border border-[#cbc7bd] bg-white p-4">
-                  <legend className="px-1 text-[12px] font-medium">{question.text}</legend>
-                  {question.evidence ? <p className="mb-2 text-[10px] text-[#5f5d56]">Useful to include: {question.evidence}</p> : null}
-                  <div className="flex flex-wrap gap-4">{CHOICES.map(([value, text]) => <label key={value} className="flex items-center gap-1.5 text-[11px]"><input type="radio" name={question.id} checked={answers[question.id]?.answer === value} onChange={() => setAnswers({ ...answers, [question.id]: { answer: value, comment: answers[question.id]?.comment ?? "" } })} />{text}</label>)}</div>
-                  <Textarea aria-label={`Comment on ${question.id}`} placeholder="Comment or reference (optional)" value={answers[question.id]?.comment ?? ""} disabled={!answers[question.id]} onChange={(event) => setAnswers({ ...answers, [question.id]: { answer: answers[question.id].answer, comment: event.target.value } })} className="mt-3 min-h-12 rounded-none text-[11px]" />
+                  <legend className="px-1 text-[14px] font-medium">{question.text}</legend>
+                  {question.evidence ? <p className="mb-2 text-[12px] text-[#5f5d56]">Useful to include: {question.evidence}</p> : null}
+                  <div className="flex flex-wrap gap-4">{CHOICES.map(([value, text]) => <label key={value} className="flex items-center gap-1.5 text-[13px]"><input type="radio" name={question.id} checked={answers[question.id]?.answer === value} onChange={() => setAnswers({ ...answers, [question.id]: { answer: value, comment: answers[question.id]?.comment ?? "" } })} />{text}</label>)}</div>
+                  <Textarea aria-label={`Comment on ${question.id}`} placeholder="Comment or reference (optional)" value={answers[question.id]?.comment ?? ""} disabled={!answers[question.id]} onChange={(event) => setAnswers({ ...answers, [question.id]: { answer: answers[question.id].answer, comment: event.target.value } })} className="mt-3 min-h-12 rounded-none text-[13px]" />
                 </fieldset>))}
             </section>))}
-          <Button type="button" disabled={!complete || busy} onClick={() => void submit()} className="h-10 rounded-none bg-[#171713] px-6 text-[12px] text-white">{busy ? "Sending…" : "Submit answers"}</Button>
-          {!complete ? <p className="text-[10px] text-[#5f5d56]">Answer every question and give your name and email to submit.</p> : null}
+          <Button type="button" disabled={!complete || busy} onClick={() => void submit()} className="h-10 rounded-none bg-[#171713] px-6 text-[14px] text-white">{busy ? "Sending…" : "Submit answers"}</Button>
+          {!complete ? <p className="text-[12px] text-[#5f5d56]">Answer every question and give your name and email to submit.</p> : null}
         </div>
       ) : null}
     </main>
