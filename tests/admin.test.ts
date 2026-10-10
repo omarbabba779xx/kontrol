@@ -194,3 +194,14 @@ test("a demonstration session can be opened for another active person of the org
     setEnv({ NODE_ENV: environment });
   }
 });
+
+test("a person's name is corrected by an administrator and the correction is audited", async () => {
+  const { inviteUser, renameUser, adminSnapshot } = await mod();
+  const created = await inviteUser(admin, { email: "typo@acme.example", name: "Jhon Smith", role: "viewer" });
+  await assert.rejects(renameUser(admin, { userId: created.id, name: " " }), /needs a name/);
+  await assert.rejects(renameUser(admin, { userId: "usr_missing", name: "Nobody" }), (error: Error & { status?: number }) => error.status === 404);
+  assert.deepEqual(await renameUser(admin, { userId: created.id, name: "  John Smith " }), { id: created.id, name: "John Smith" });
+  assert.ok((await adminSnapshot(admin.tenantId)).users.some((user) => user.id === created.id && user.name === "John Smith"));
+  const audit = await (await db()).scope(admin.tenantId).get<{ payload_json: string }>("SELECT payload_json FROM audit_log WHERE tenant_id = ? AND action = ? ORDER BY sequence DESC LIMIT 1", admin.tenantId, "admin.user_renamed");
+  assert.deepEqual(JSON.parse(audit!.payload_json), { from: "Jhon Smith", to: "John Smith" });
+});

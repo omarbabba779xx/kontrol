@@ -7,6 +7,7 @@ import {
   createApiKey,
   inviteUser,
   renameOrganisation,
+  renameUser,
   KEY_ROLES,
   revokeApiKey,
   revokeSessions,
@@ -28,6 +29,7 @@ const actionSchema = z.discriminatedUnion("action", [
     external: z.boolean().default(false),
   }),
   z.object({ action: z.literal("rename_organisation"), name: z.string().min(2).max(120), region: z.string().min(2).max(40).optional() }),
+  z.object({ action: z.literal("rename_user"), userId: z.string().min(3), name: z.string().min(2).max(120) }),
   z.object({ action: z.literal("set_role"), userId: z.string().min(3), role }),
   z.object({ action: z.literal("set_status"), userId: z.string().min(3), status: z.enum(["active", "disabled"]) }),
   z.object({
@@ -67,6 +69,8 @@ export async function POST(request: Request) {
         return Response.json(await inviteUser(actor, { ...input, role: input.role as never }), { status: 201 });
       case "rename_organisation":
         return Response.json(await renameOrganisation(actor, input));
+      case "rename_user":
+        return Response.json(await renameUser(actor, input));
       case "set_role":
         return Response.json(await setUserRole(actor, { userId: input.userId, role: input.role as never }));
       case "set_status":

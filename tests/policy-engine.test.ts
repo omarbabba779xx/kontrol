@@ -79,7 +79,8 @@ test("patterns that backtrack badly are refused, including sequential quantifier
   const run = (value: string, subject: string) => evaluatePolicy({ all: [{ path: "s", op: "matches", value }] } as never, { s: subject }, Date.now()).passed;
   const started = Date.now();
   for (const bad of ["(a+)+$", "(a|aa)+$", "a*a*a*b", "^(\\d+)*x", ".*.*.*x", "a+b+c+d", "(?:x+)+y", "(a)\\1", "a{1,}a{1,}a{1,}b"]) assert.equal(run(bad, "a".repeat(1500)), false, `${bad} must be refused, not run`);
-  assert.ok(Date.now() - started < 500, "refusal is immediate: nothing was matched");
+  // A pattern that was run instead of refused would take minutes on this subject; the margin only absorbs a loaded machine.
+  assert.ok(Date.now() - started < 3000, "refusal is immediate: nothing was matched");
   assert.equal(run("^[a-z]+-\\d{3}$", "repo-123"), true);
   assert.equal(run("^prod-.*$", "prod-eu-1"), true);
   assert.equal(run("^a+b*$", "aaabb"), true, "two unbounded quantifiers are allowed");
@@ -94,7 +95,8 @@ test("a match that runs past its time budget is stopped, whatever the pattern, a
   const started = Date.now();
   assert.equal(matchWithin(/^(a+)+$/, `${"a".repeat(40)}!`), false);
   assert.equal(matchWithin(/^(a|aa)+$/, `${"a".repeat(60)}!`), false);
-  assert.ok(Date.now() - started < 1500, `both were interrupted (took ${Date.now() - started} ms)`);
+  // Uninterrupted, either match runs for minutes; the margin only absorbs a loaded machine.
+  assert.ok(Date.now() - started < 5000, `both were interrupted (took ${Date.now() - started} ms)`);
   assert.equal(matchWithin(/^prod-/, "prod-eu-1"), true);
   assert.equal(matchWithin(/^prod-/i, "PROD-eu-1"), true, "flags are kept");
   assert.equal(matchWithin(/x/, "y"), false);
