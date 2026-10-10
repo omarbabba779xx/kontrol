@@ -162,3 +162,35 @@ test("administration is chained in the audit log without leaking secrets", async
   for (const expected of ["admin.user_created", "admin.role_changed", "admin.api_key_created", "admin.api_key_revoked", "admin.user_disabled", "credentials.saved", "credentials.deleted"]) assert.ok(actions.has(expected), `missing ${expected}`);
   assert.ok(!rows.some((row) => row.payload_json.includes("kon_") || row.payload_json.includes("github_pat_")), "no key or token in the audit payloads");
 });
+
+test("an organisation is renamed by an administrator, the change is audited, and the name is what reports read", async () => {
+  const { renameOrganisation } = await mod();
+  await assert.rejects(renameOrganisation(admin, { name: " " }), /needs a name/);
+  const renamed = await renameOrganisation(admin, { name: "  Hydria  ", region: "MA" });
+  assert.deepEqual(renamed, { id: admin.tenantId, name: "Hydria", region: "MA" });
+  const scope = (await db()).scope(admin.tenantId);
+  const row = await scope.get<{ name: string; region: string }>("SELECT name, region FROM tenants WHERE id = ?", admin.tenantId);
+  assert.deepEqual({ name: row?.name, region: row?.region }, { name: "Hydria", region: "MA" });
+  const audit = await scope.get<{ payload_json: string }>("SELECT payload_json FROM audit_log WHERE tenant_id = ? AND action = ? ORDER BY sequence DESC LIMIT 1", admin.tenantId, "admin.organisation_renamed");
+  assert.equal(JSON.parse(audit!.payload_json).to, "Hydria");
+  const kept = await renameOrganisation(admin, { name: "Hydria Distribution" });
+  assert.equal(kept.region, "MA", "the region is kept when it is not given");
+});
+
+test("a demonstration session can be opened for another active person of the organisation, and for nobody else", async () => {
+  const { inviteUser, setUserStatus } = await mod();
+  const { demoActorFor } = await import("../src/lib/core/auth");
+  const second = await inviteUser(admin, { email: "second.person@acme.example", name: "Second Person", role: "risk_owner" });
+  const actor = await demoActorFor(second.id);
+  assert.deepEqual({ userId: actor?.userId, tenantId: actor?.tenantId, role: actor?.role }, { userId: second.id, tenantId: admin.tenantId, role: "risk_owner" });
+  assert.equal(await demoActorFor("usr_nobody"), null);
+  await setUserStatus(admin, { userId: second.id, status: "disabled" });
+  assert.equal(await demoActorFor(second.id), null, "a disabled person cannot be impersonated");
+  const environment = process.env.NODE_ENV;
+  setEnv({ NODE_ENV: "production" });
+  try {
+    assert.equal(await demoActorFor(admin.userId), null, "never in production");
+  } finally {
+    setEnv({ NODE_ENV: environment });
+  }
+});

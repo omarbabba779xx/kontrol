@@ -220,4 +220,4 @@ paths:
   /api/session/oidc/callback:
     get: { summary: Complete the OIDC flow and set the session cookie, security: [], responses: { "302": { description: Redirect to the application } } }
   /api/session/demo:
-    post: { summary: Issue a demo session (evaluation environments only; disabled in production), responses: { "200": { description: Session token } } }
+    post: { summary: "Issue a demo session, for the administrator or with a userId for another active person of the demonstration organisation (evaluation environments only; disabled in production)", responses: { "200": { description: Session token } } }

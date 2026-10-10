@@ -135,6 +135,24 @@ async function demoActor(): Promise<Actor> {
   return { userId: row.id, tenantId: row.tenant_id, email: row.email, name: row.name, role: row.role };
 }
 
+/**
+ * A demonstration session for another person of the demonstration organisation, so that steps which need two people
+ * (accepting a risk, closing a nonconformity) can be shown. Only reachable where demo sign-in is allowed.
+ */
+export async function demoActorFor(userId: string): Promise<Actor | null> {
+  if (!demoAuthAllowed()) return null;
+  const home = await demoActor();
+  const row = await (await getDb())
+    .scope(home.tenantId)
+    .get<{ id: string; tenant_id: string; email: string; name: string; role: Role; status: string; external: number }>(
+      "SELECT id, tenant_id, email, name, role, status, external FROM users WHERE tenant_id = ? AND id = ?",
+      home.tenantId,
+      userId,
+    );
+  if (!row || row.status !== "active") return null;
+  return { userId: row.id, tenantId: row.tenant_id, email: row.email, name: row.name, role: row.role, external: Number(row.external) === 1 };
+}
+
 const KEY_PREFIX = "kon_";
 const KEY_TOUCH_MS = 60_000;
 

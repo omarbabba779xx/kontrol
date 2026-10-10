@@ -41,7 +41,7 @@ test("external auditors are a restricted kind of user: they must be auditors, an
   assert.match(((await denied.json()) as { error: string }).error, /only use the audit workspace/);
   assert.equal((await call(adminGet, "/api/admin")).status, 403);
   assert.equal((await call(auditGet, "/api/audit")).status, 200);
-  assert.deepEqual(await (await call(meGet, "/api/me")).json(), { userId: created.id, name: "Ada Auditor", role: "auditor", external: true });
+  assert.deepEqual(await (await call(meGet, "/api/me")).json(), { userId: created.id, name: "Ada Auditor", role: "auditor", external: true, organisation: "Acme Financial Europe" });
 
   const { setUserRole } = await adminMod();
   await assert.rejects(setUserRole(admin, { userId: created.id, role: "viewer" }), /must keep the auditor role/);

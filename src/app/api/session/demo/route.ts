@@ -1,11 +1,15 @@
 import { demoAuthAllowed } from "@/lib/core/config";
-import { authenticate, issueSessionToken } from "@/lib/core/auth";
+import { z } from "zod";
+import { authenticate, demoActorFor, issueSessionToken } from "@/lib/core/auth";
 
 export const runtime = "nodejs";
 export async function POST(request: Request) {
   if (!demoAuthAllowed()) return Response.json({ error: "Demo sessions disabled" }, { status: 403 });
-  const actor = await authenticate(request);
-  if (!actor) return Response.json({ error: "Demo actor unavailable" }, { status: 500 });
+  // With a userId, the session is for that person of the demonstration organisation; without one, for its administrator.
+  const body = z.object({ userId: z.string().min(3).max(80).optional() }).safeParse(await request.json().catch(() => ({})));
+  if (!body.success) return Response.json({ error: "Invalid request" }, { status: 400 });
+  const actor = body.data.userId ? await demoActorFor(body.data.userId) : await authenticate(request);
+  if (!actor) return Response.json({ error: body.data.userId ? "No active person with that id in the demonstration organisation" : "Demo actor unavailable" }, { status: body.data.userId ? 404 : 500 });
   const token = await issueSessionToken(actor);
   return Response.json(
     { actor, token },
