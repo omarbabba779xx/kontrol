@@ -19,7 +19,7 @@ type Person = { id: string; name: string; role: string; external: boolean };
 type EvidenceOption = { id: string; uc_code: string; title: string };
 
 const KINDS: Array<[string, string]> = [["soc2_type2", "SOC 2 Type II"], ["soc2_type1", "SOC 2 Type I"], ["iso27001_certification", "ISO 27001 certification"], ["internal", "Internal audit"], ["other", "Other"]];
-const FRAMEWORKS: Array<[string, string]> = [["soc2", "SOC 2"], ["iso27001", "ISO 27001"], ["nist_csf", "NIST CSF"], ["gdpr", "GDPR"], ["nis2", "NIS2"], ["dora", "DORA"], ["eu_ai_act", "EU AI Act"], ["iso42001", "ISO 42001"], ["pci_dss", "PCI DSS"], ["cis_v8", "CIS v8"]];
+const FRAMEWORKS: Array<[string, string]> = [["soc2", "SOC 2"], ["iso27001", "ISO 27001"], ["nist_csf", "NIST CSF"], ["gdpr", "GDPR"], ["nis2", "NIS2"], ["dora", "DORA"], ["eu_ai_act", "EU AI Act"], ["iso42001", "ISO 42001"], ["pci_dss", "PCI DSS"], ["cis_v8", "CIS v8"], ["ma_0520", "Morocco Law 05-20"], ["ma_0908", "Morocco Law 09-08"]];
 const STATUS_STYLE: Record<string, string> = { open: "bg-[#f1e7cc] text-[#7a5a1a]", provided: "bg-[#e5e2d8] text-[#34332e]", accepted: "bg-[#dcebe1] text-[#245c3f]", needs_more: "bg-[#f5e5e1] text-[#9f2923]", planning: "bg-[#e5e2d8] text-[#34332e]", fieldwork: "bg-[#f1e7cc] text-[#7a5a1a]", review: "bg-[#f6e3d3] text-[#944a15]", closed: "bg-[#dcebe1] text-[#245c3f]" };
 const NEXT: Record<string, string | null> = { planning: "fieldwork", fieldwork: "review", review: "closed", closed: null };
 const field = "h-8 rounded-none border-[#cbc7bd] bg-transparent text-[12px] shadow-none placeholder:text-[#63615a]";

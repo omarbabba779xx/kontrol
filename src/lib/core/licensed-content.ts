@@ -32,7 +32,7 @@ const itemSchema = z.object({
 });
 
 export const importSchema = z.object({
-  framework: z.enum(["iso27001", "nist_csf", "soc2", "gdpr", "nis2", "dora", "eu_ai_act", "iso42001", "pci_dss", "cis_v8", "cobit2019"]),
+  framework: z.enum(["iso27001", "nist_csf", "soc2", "gdpr", "nis2", "dora", "eu_ai_act", "iso42001", "pci_dss", "cis_v8", "cobit2019", "ma_0520", "ma_0908"]),
   sourceLabel: z.string().min(3).max(200),
   licenceReference: z.string().min(3).max(200),
   /** The importer confirms their organisation is licensed to hold and use this content internally. */

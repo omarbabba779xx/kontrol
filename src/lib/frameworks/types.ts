@@ -1,4 +1,4 @@
-export type FrameworkId = "iso27001" | "nist_csf" | "soc2" | "gdpr" | "nis2" | "dora" | "eu_ai_act" | "iso42001" | "pci_dss" | "cis_v8" | "cobit2019";
+export type FrameworkId = "iso27001" | "nist_csf" | "soc2" | "gdpr" | "nis2" | "dora" | "eu_ai_act" | "iso42001" | "pci_dss" | "cis_v8" | "cobit2019" | "ma_0520" | "ma_0908";
 
 export type Requirement = { id: string; title: string; group: string; /** Id of the group (category, principal requirement…) this item belongs to; it inherits that group's unified-control mapping unless refined. */ parent?: string };
 export type RequirementGroup = { id: string; title: string };

@@ -19,7 +19,7 @@ import {
 
 export const runtime = "nodejs";
 
-const framework = z.enum(["iso27001", "nist_csf", "soc2", "gdpr", "nis2", "dora", "eu_ai_act", "iso42001", "pci_dss", "cis_v8", "cobit2019"]);
+const framework = z.enum(["iso27001", "nist_csf", "soc2", "gdpr", "nis2", "dora", "eu_ai_act", "iso42001", "pci_dss", "cis_v8", "cobit2019", "ma_0520", "ma_0908"]);
 const actionSchema = z.discriminatedUnion("action", [
   z.object({
     action: z.literal("create_engagement"),

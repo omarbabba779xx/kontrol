@@ -1,6 +1,6 @@
 # How the crosswalk is built, sourced and measured
 
-Kontrol relates the requirements of eleven frameworks to 56 framework-neutral *unified controls*. Ten are security or privacy frameworks and are mapped in full; COBIT 2019 reaches beyond security, so only its security-relevant objectives are mapped. Implementing a control
+Kontrol relates the requirements of thirteen frameworks to 56 framework-neutral *unified controls*. Twelve are security or privacy frameworks and are mapped in full, among them two Moroccan laws (Law 05-20 on cybersecurity and Law 09-08 on personal data), whose links are editorial and whose French text governs; COBIT 2019 reaches beyond security, so only its security-relevant objectives are mapped. Implementing a control
 advances every requirement it is linked to. This page explains where each link comes from, how it is checked, and what is still open.
 
 ## Where a link comes from
