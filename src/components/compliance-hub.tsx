@@ -9,7 +9,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { cn } from "@/lib/utils";
 import { errorMessage, fetchJson, isAbort } from "@/components/api-client";
 
-type FrameworkId = "iso27001" | "nist_csf" | "soc2" | "gdpr" | "nis2" | "dora" | "eu_ai_act" | "iso42001" | "pci_dss" | "cis_v8";
+type FrameworkId = "iso27001" | "nist_csf" | "soc2" | "gdpr" | "nis2" | "dora" | "eu_ai_act" | "iso42001" | "pci_dss" | "cis_v8" | "cobit2019" | "ma_0520" | "ma_0908";
 type Status = "not_started" | "planned" | "partial" | "implemented" | "not_applicable";
 type ReqStatus = "compliant" | "partial" | "initial" | "gap" | "not_applicable";
 const CAPABILITY = ["Incomplete", "Performed", "Managed", "Defined", "Measured", "Optimising"];
@@ -40,7 +40,7 @@ type Detail = Score & { framework: { name: string; version: string; granularity:
 const tabs = ["Overview", "Frameworks", "Control library", "Roadmap", "Exceptions", "Policies"] as const;
 type Tab = (typeof tabs)[number];
 
-const SHORT: Record<string, string> = { iso27001: "ISO 27001", nist_csf: "NIST CSF", soc2: "SOC 2", gdpr: "GDPR", nis2: "NIS2", dora: "DORA", eu_ai_act: "AI Act", iso42001: "ISO 42001", pci_dss: "PCI DSS", cis_v8: "CIS v8" };
+const SHORT: Record<string, string> = { iso27001: "ISO 27001", nist_csf: "NIST CSF", soc2: "SOC 2", gdpr: "GDPR", nis2: "NIS2", dora: "DORA", eu_ai_act: "AI Act", iso42001: "ISO 42001", pci_dss: "PCI DSS", cis_v8: "CIS v8", cobit2019: "COBIT 2019", ma_0520: "MA Law 05-20", ma_0908: "MA Law 09-08" };
 const STATUS_STYLE: Record<string, string> = { compliant: "bg-[#dcebe1] text-[#245c3f]", implemented: "bg-[#dcebe1] text-[#245c3f]", partial: "bg-[#f1e7cc] text-[#7a5a1a]", initial: "bg-[#f6e3d3] text-[#944a15]", planned: "bg-[#f6e3d3] text-[#944a15]", gap: "bg-[#f5e5e1] text-[#b8322a]", not_started: "bg-[#f5e5e1] text-[#b8322a]", not_applicable: "bg-[#e5e2d8] text-[#5f5d56]" };
 const VERIFY_STYLE: Record<string, string> = { verified: "text-[#2f6f4f]", documented: "text-[#245c3f]", failing: "text-[#b8322a]", stale: "text-[#7a5a1a]", unverified: "text-[#63615a]" };
 const field = "h-8 rounded-none border-[#cbc7bd] bg-transparent text-[12px] shadow-none placeholder:text-[#63615a]";

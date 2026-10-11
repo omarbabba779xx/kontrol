@@ -19,6 +19,8 @@ test("catalogues have the published sizes and unique ids", () => {
   assert.equal(FRAMEWORK_BY_ID.get("cis_v8")!.groups?.length, 18);
   assert.equal(count("pci_dss"), 63);
   assert.equal(count("gdpr"), 42);
+  assert.equal(count("ma_0520"), 18);
+  assert.equal(count("ma_0908"), 18);
   for (const framework of FRAMEWORKS) {
     const ids = framework.requirements.map((requirement) => requirement.id);
     assert.equal(new Set(ids).size, ids.length, `${framework.id} has duplicate ids`);

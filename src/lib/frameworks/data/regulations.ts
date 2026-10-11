@@ -158,3 +158,63 @@ Art.72|Post-market monitoring by providers
 Art.73|Reporting of serious incidents
 Art.86|Right to explanation of individual decision-making`),
 ];
+
+/**
+ * Morocco, Law No. 05-20 on cybersecurity (Dahir No. 1-20-69 of 25 July 2020). The obligations of "entities" (State administrations,
+ * local authorities, public establishments and companies, other public-law bodies) and of infrastructures of vital importance.
+ * Titles are this product's short English descriptions of each article; the French text published in the Bulletin officiel governs.
+ * Not included: the duties of operators (Articles 26 to 34), governance (Chapter III) and sanctions.
+ */
+export const maLaw0520: Requirement[] = [
+  ...group("Chapter II, Section 1 - Entities", `
+Art.3|Compliance with the directives, rules and reference frameworks of the national authority
+Art.4|Security policy, risk identification and treatment, security audits
+Art.5|Classification of information assets and systems, and clearance to access classified information
+Art.6|Designation of an information systems security officer
+Art.7|Monitoring and detection of security events
+Art.8|Declaration of incidents to the national authority
+Art.9|Continuity or recovery plan, tested regularly
+Art.10|Security rules binding the provider of an outsourced sensitive system
+Art.11|Hosting of sensitive data on national territory
+Art.12|Outsourcing contract under Moroccan law: protection, auditability, reversibility, service levels`),
+  ...group("Chapter II, Section 2 - Infrastructures of vital importance", `
+Art.17|List of sensitive information systems, drawn from a risk analysis and sent to the national authority
+Art.18|Amendment of that list on the authority's observations within two months, and its secrecy
+Art.19|Security accreditation of a sensitive information system before it goes into operation
+Art.20|Audit of sensitive systems at the authority's request, by the authority or a qualified auditor
+Art.21|Information and access given to the auditors
+Art.22|Transmission of the audit report to the national authority
+Art.24|Action plan on the audit recommendations, sent to the national authority
+Art.25|Use of approved security products and of qualified cybersecurity service providers`),
+];
+
+/**
+ * Morocco, Law No. 09-08 on the protection of individuals with regard to the processing of personal data (Dahir No. 1-09-15 of
+ * 18 February 2009). The obligations of the controller and the rights it must honour. Titles are this product's short English
+ * descriptions; the French text governs. The law sets no duty to notify a personal data breach, so none is listed.
+ * Not included: the National Commission (Chapter IV), the national register (Chapter VI) and sanctions (Chapter VII).
+ */
+export const maLaw0908: Requirement[] = [
+  ...group("Chapter I - Data quality and consent", `
+Art.3|Quality of data: fair and lawful processing, specified purposes, adequacy, accuracy, limited retention
+Art.4|Prior consent of the data subject, and the cases where it is not required`),
+  ...group("Chapter II - Rights of the data subject", `
+Art.5|Right to information when data are collected
+Art.7|Right of access
+Art.8|Right of rectification
+Art.9|Right to object
+Art.10|Prohibition of direct marketing without prior consent
+Art.11|Neutrality of effects: limits on decisions founded on automated processing of personal data`),
+  ...group("Chapter III - Obligations of the controller", `
+Art.12|Prior authorisation or prior declaration of a processing operation
+Art.14|Prior declaration to the National Commission before automated processing
+Art.15|Content of the declaration
+Art.21|Prior authorisation for the processing of sensitive data
+Art.23|Security of processing, and choice of a processor offering sufficient guarantees
+Art.24|Additional security measures for sensitive and health data
+Art.25|Processing only on the controller's instructions
+Art.26|Professional secrecy`),
+  ...group("Chapter V - Transfer of data to a foreign country", `
+Art.43|Transfer only to a State ensuring a sufficient level of protection
+Art.44|Derogations: express consent of the person and the listed cases`),
+];

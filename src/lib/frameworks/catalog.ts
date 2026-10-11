@@ -1,6 +1,6 @@
 import { CSF_CATEGORIES, CSF_FUNCTIONS, CSF_SUBCATEGORIES } from "@/lib/frameworks/data/csf-data";
 import { CIS_GROUPS, CIS_REQUIREMENTS, ISO42001_GROUPS, ISO42001_REQUIREMENTS, PCI_GROUPS, PCI_REQUIREMENTS } from "@/lib/frameworks/data/standards";
-import { dora, euAiAct, gdpr, nis2 } from "@/lib/frameworks/data/regulations";
+import { dora, euAiAct, gdpr, maLaw0520, maLaw0908, nis2 } from "@/lib/frameworks/data/regulations";
 import { COBIT_REQUIREMENTS } from "@/lib/frameworks/data/cobit";
 import { group } from "@/lib/frameworks/data/helpers";
 import type { Framework, Requirement } from "@/lib/frameworks/types";
@@ -214,6 +214,8 @@ export const FRAMEWORKS: Framework[] = [
   { id: "pci_dss", name: "PCI DSS", version: "4.0.1", authority: "PCI SSC", kind: "standard", granularity: "12 requirements and 63 sections (x.y). Testing procedures are licensed content and are not reproduced", sourceUrl: "https://www.pcisecuritystandards.org/", groups: PCI_GROUPS, requirements: PCI_REQUIREMENTS },
   { id: "cis_v8", name: "CIS Critical Security Controls", version: "8", authority: "Center for Internet Security", kind: "framework", granularity: "Complete: all 18 controls and 153 safeguards", sourceUrl: "https://www.cisecurity.org/controls", groups: CIS_GROUPS, requirements: CIS_REQUIREMENTS },
   { id: "cobit2019", name: "COBIT", version: "2019", authority: "ISACA", kind: "framework", granularity: "All 40 governance and management objectives (identifiers and names). Objectives outside information security have no built-in control mapping; practices and activities are licensed content and are not reproduced", sourceUrl: "https://www.isaca.org/resources/cobit", beyondSecurity: true, requirements: COBIT_REQUIREMENTS },
+  { id: "ma_0520", name: "Law 05-20 on cybersecurity (Morocco)", version: "Dahir 1-20-69 of 25 July 2020", authority: "Kingdom of Morocco", kind: "regulation", granularity: "Obligations of entities (Articles 3-12) and of infrastructures of vital importance (Articles 17-22, 24, 25). Operator duties (Articles 26-34), governance and sanctions are not included. English titles are descriptions; the French text governs", sourceUrl: "https://adala.justice.gov.ma/api/uploads/2024/03/20/La%20cybers%C3%A9curit%C3%A9-1710937403606.pdf", requirements: maLaw0520 },
+  { id: "ma_0908", name: "Law 09-08 on personal data (Morocco)", version: "Dahir 1-09-15 of 18 February 2009", authority: "Kingdom of Morocco", kind: "regulation", granularity: "Controller obligations and data-subject rights: Articles 3-5, 7-12, 14, 15, 21, 23-26, 43, 44. The law sets no breach-notification duty. The National Commission, the register and sanctions are not included. English titles are descriptions; the French text governs", sourceUrl: "https://adala.justice.gov.ma/api/uploads/2024/04/30/Protection%20des%20personnes%20physiques-1714464099884.pdf", requirements: maLaw0908 },
 ];
 
 export const FRAMEWORK_BY_ID = new Map(FRAMEWORKS.map((framework) => [framework.id, framework]));
