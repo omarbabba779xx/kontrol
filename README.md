@@ -154,7 +154,7 @@ tests/              Test suite (runs on both drivers)
 e2e/                Playwright end-to-end suite
 ```
 
-See [architecture](docs/ARCHITECTURE.md) and the [security policy](SECURITY.md).
+See [architecture](docs/ARCHITECTURE.md), the [security policy](SECURITY.md) and the [threat model](docs/THREAT_MODEL.md), which lists who could falsify the record, what stops them and what is still open.
 
 ## Compliance hub
 

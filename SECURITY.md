@@ -23,6 +23,10 @@ Kontrol handles evidence, control results and approval records. Treat deployment
 - Requests are rate limited per actor (`KONTROL_RATE_LIMIT_PER_MINUTE`).
 - OIDC-provisioned users default to `viewer` unless `OIDC_TRUST_ROLE_CLAIM=true`.
 
+## Threat model
+
+Who has an interest in falsifying the record, what stops them and what is still open: [docs/THREAT_MODEL.md](docs/THREAT_MODEL.md).
+
 ## Trust boundaries
 
 AI analysis is advisory and read-only. It cannot approve decisions, change mappings or close findings. Human approval and a signed decision record are required for material actions. External evidence is untrusted until hashed, normalized and evaluated.
