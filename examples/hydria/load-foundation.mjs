@@ -24,7 +24,7 @@ if (before.context?.length) {
 }
 
 // ---------------------------------------------------------------- people
-// The built-in administrator stands for Hydria's managing director, who approves the scope, the method and the review.
+// The administrator of the empty organisation becomes Hydria's managing director, who approves the scope, the method and the review.
 const { me } = await call("/api/users");
 await call("/api/admin", { action: "rename_user", userId: me, name: "Rachid Alaoui (Managing director)" });
 await call("/api/admin", { action: "rename_organisation", name: "Hydria", region: "MA" });
@@ -113,7 +113,7 @@ for (const [title, measure, target, owner, due] of [
 for (const [title, status, owner, competence, evidence, action, due] of [
   ["SOC analyst", "met", "soc", "Alert triage, incident handling, and the limits of the AI triage output", "Induction record and two supervised incidents per analyst", "", null],
   ["Internal auditor", "gap", "audit", "ISO/IEC 27001 internal audit method, independent of the areas audited", "No formal auditor training yet", "ISO/IEC 27001 internal auditor course before the first audit", "2027-01-31"],
-  ["Data protection officer", "met", "dpo", "Law 09-08, personal-data incident assessment and notification", "Appointment letter and training certificate", "", null],
+  ["Data protection officer", "met", "dpo", "Law 09-08: declarations to the CNDP, rights of data subjects, assessment of personal-data incidents", "Appointment letter and training certificate", "", null],
 ]) await isms({ action: "save_record", kind: "competence", title, status, ownerId: people[owner], dueAt: due ? iso(due) : null, detail: { competence, evidence, action } });
 
 for (const [title, owner, scope, audience, timing, channel] of [
@@ -126,6 +126,9 @@ for (const [title, owner, scope, audience, timing, channel] of [
 // ---------------------------------------------------------------- frameworks
 await call("/api/compliance", { action: "adopt_framework", frameworkId: "iso27001", scope: "SOC service and customer information system, as in the approved ISMS scope", targetDate: "2027-12-31" });
 await call("/api/compliance", { action: "adopt_framework", frameworkId: "iso42001", scope: "The AI-assisted triage pipeline of the SOC", targetDate: "2027-12-31" });
+// The two national laws, by article. Whether Hydria is designated an infrastructure of vital importance is not settled: it is adopted as a working assumption.
+await call("/api/compliance", { action: "adopt_framework", frameworkId: "ma_0520", scope: "Working assumption, to be confirmed with Legal: Hydria is treated as an entity and as an infrastructure of vital importance", targetDate: "2027-12-31" });
+await call("/api/compliance", { action: "adopt_framework", frameworkId: "ma_0908", scope: "Personal data of customers in the customer information system", targetDate: "2027-12-31" });
 
 const after = await isms();
 const tally = after.clauses.reduce((count, check) => ({ ...count, [check.status]: (count[check.status] ?? 0) + 1 }), {});

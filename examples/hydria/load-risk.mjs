@@ -58,10 +58,6 @@ await admin({
 });
 
 // ---------------------------------------------------------------- the inventory (CISO)
-for (const asset of (await call("/api/risk-register?view=identification")).assets ?? []) {
-  // The demonstration tenant ships with two sample assets that are not Hydria's.
-  if (asset.id.startsWith("asset_ai_") || asset.id.startsWith("asset_repo_")) await ciso({ action: "retire_asset", assetId: asset.id, reason: "Sample asset of the demonstration data, not part of Hydria" });
-}
 const assets = {};
 for (const [key, name, type, criticality, owner, description, c, i, a, rationale] of [
   ["cis", "Customer information system", "application", "critical", "itops", "Customer records, billing runs and payment interfaces", 4, 5, 4, "Bills must be right and issued on time; the application reads all customer data"],
