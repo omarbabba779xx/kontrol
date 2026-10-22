@@ -1,3 +1,5 @@
+<p align="center"><img src="docs/banner.svg" alt="Kontrol: governance you can prove" width="100%"></p>
+
 # Kontrol
 
 **Continuous decision assurance.** Kontrol turns regulatory obligations and live operational facts into executable controls, traceable findings, quantified risk and cryptographically signed decisions.
