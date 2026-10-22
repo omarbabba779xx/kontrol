@@ -14,6 +14,7 @@
     "check": "npm run lint && npm run typecheck && npm run test && npm run test:postgres && npm run build",
     "test:e2e": "playwright test",
     "test:opa": "opa test infra/opa && opa check infra/opa --strict",
+    "screenshots": "node scripts/screenshots.mjs",
     "measure": "node --conditions=react-server --import tsx scripts/measure.mts",
     "keys:signing": "node --import tsx scripts/signing-key.ts",
     "ingest:secret": "node --import tsx scripts/ingest-secret.ts",
